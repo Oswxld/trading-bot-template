@@ -50,12 +50,6 @@ const useMobileMenuConfig = (
                 // For desktop menu items, see:
                 // src/components/layout/header/header-config.tsx
 
-                {
-                    as: 'a',
-                    label: localize('Simulation Studio'),
-                    LeftComponent: () => <span aria-hidden='true'>◉</span>,
-                    href: '/simulation',
-                },
                 // Conditionally include theme toggle based on brand config
                 enableThemeToggle && {
                     as: 'button',

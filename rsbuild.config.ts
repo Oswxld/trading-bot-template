@@ -46,6 +46,7 @@ export default defineConfig({
         },
     },
     output: {
+        injectStyles: process.env.NODE_ENV === 'development',
         copy: [
             {
                 from: 'node_modules/@deriv-com/smartcharts-champion/dist/*',

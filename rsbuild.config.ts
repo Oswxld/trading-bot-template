@@ -29,6 +29,11 @@ export default defineConfig({
             // Rsbuild CLI loads .env before evaluating this configuration.
             'process.env.APP_ENV': JSON.stringify(process.env.APP_ENV ?? ''),
             'process.env.CLIENT_ID': JSON.stringify(process.env.CLIENT_ID ?? ''),
+            // Public partner tracking parameters are embedded only in Deriv's Sign Up redirect.
+            'process.env.AFFILIATE_TOKEN': JSON.stringify(process.env.AFFILIATE_TOKEN ?? ''),
+            'process.env.AFFILIATE_TOKEN_PARAM': JSON.stringify(process.env.AFFILIATE_TOKEN_PARAM ?? 't'),
+            'process.env.AFFILIATE_ID': JSON.stringify(process.env.AFFILIATE_ID ?? ''),
+            'process.env.AFFILIATE_CAMPAIGN': JSON.stringify(process.env.AFFILIATE_CAMPAIGN ?? ''),
             'process.env.APP_ID': JSON.stringify(process.env.APP_ID ?? ''),
             'process.env.GD_CLIENT_ID': JSON.stringify(process.env.GD_CLIENT_ID ?? ''),
             'process.env.GD_APP_ID': JSON.stringify(process.env.GD_APP_ID ?? ''),

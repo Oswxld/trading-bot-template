@@ -260,6 +260,41 @@ export const generateOAuthURL = async (prompt?: string) => {
                 oauthUrl += `&prompt=${encodeURIComponent(prompt)}`;
             }
 
+            // Partner attribution applies ONLY to new registration, never regular login.
+            // Configure these separately for each client's own Deriv Partner account.
+            if (prompt === 'registration') {
+                const affiliateToken = (process.env.AFFILIATE_TOKEN ?? '').trim();
+                const affiliateParam = (process.env.AFFILIATE_TOKEN_PARAM ?? 't').trim() || 't';
+                const affiliateId = (process.env.AFFILIATE_ID ?? '').trim();
+                const campaign = (process.env.AFFILIATE_CAMPAIGN ?? '').trim();
+
+                if (affiliateToken) {
+                    // Deriv documents these four equivalent aliases; send only one.
+                    if (!['t', 'affiliate_token', 'sidi', 'ca'].includes(affiliateParam)) {
+                        console.error('Invalid AFFILIATE_TOKEN_PARAM. Use t, affiliate_token, sidi, or ca.');
+                        return '';
+                    }
+
+                    const attributionParams = new URLSearchParams();
+                    attributionParams.set(affiliateParam, affiliateToken);
+                    attributionParams.set('utm_medium', 'affiliate');
+                    if (affiliateId) attributionParams.set('utm_source', affiliateId);
+                    if (campaign) attributionParams.set('utm_campaign', campaign);
+
+                    if (!affiliateId || !campaign) {
+                        console.warn(
+                            'Affiliate signup tracking is incomplete: check AFFILIATE_ID and AFFILIATE_CAMPAIGN.'
+                        );
+                    }
+
+                    oauthUrl += `&${attributionParams.toString()}`;
+                } else {
+                    console.warn(
+                        'AFFILIATE_TOKEN is not configured; new Deriv registrations may not be attributed to a partner.'
+                    );
+                }
+            }
+
             // Optional: legacy app_id for routing users on the Legacy Deriv API platform
             const appId = process.env.APP_ID;
             if (appId) {

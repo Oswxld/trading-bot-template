@@ -10,6 +10,7 @@ import { useOAuthCallback } from '@/hooks/useOAuthCallback';
 import { StoreProvider } from '@/hooks/useStore';
 import { OAuthTokenExchangeService } from '@/services/oauth-token-exchange.service';
 import { initializeI18n, localize, TranslationProvider } from '@deriv-com/translations';
+import SimulationStudio from '../pages/simulation-studio/simulation-studio';
 import CoreStoreProvider from './CoreStoreProvider';
 import './app-root.scss';
 
@@ -31,7 +32,9 @@ const LanguageHandler = ({ children }: { children: React.ReactNode }) => {
 
 const router = createBrowserRouter(
     createRoutesFromElements(
-        <Route
+        <>
+            <Route path='/simulation' element={<SimulationStudio />} />
+            <Route
             path='/'
             element={
                 <Suspense
@@ -54,7 +57,8 @@ const router = createBrowserRouter(
         >
             {/* All child routes will be passed as children to Layout */}
             <Route index element={<AppRoot />} />
-        </Route>
+            </Route>
+        </>
     )
 );
 

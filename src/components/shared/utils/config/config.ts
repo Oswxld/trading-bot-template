@@ -26,11 +26,13 @@ export const WS_SERVERS = {
 // Helper Functions
 // =============================================================================
 
-// Helper to check if we're on production domains
+// Use Deriv's production API endpoints for local development as well.
+// This controls API infrastructure, not whether the trader uses demo or real funds.
 export const isProduction = () => {
     const hostname = window.location.hostname;
     const productionDomains = Object.values(PRODUCTION_DOMAINS) as string[];
-    return productionDomains.includes(hostname);
+    const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
+    return isLocalhost || productionDomains.includes(hostname);
 };
 
 export const isLocal = () => /localhost(:\d+)?$/i.test(window.location.hostname);

@@ -25,14 +25,14 @@ export default defineConfig({
             index: './src/main.tsx',
         },
         define: {
-            'process.env': {
-                APP_ENV: JSON.stringify(process.env.APP_ENV),
-                CLIENT_ID: JSON.stringify(process.env.CLIENT_ID),
-                APP_ID: JSON.stringify(process.env.APP_ID),
-                GD_CLIENT_ID: JSON.stringify(process.env.GD_CLIENT_ID),
-                GD_APP_ID: JSON.stringify(process.env.GD_APP_ID),
-                GD_API_KEY: JSON.stringify(process.env.GD_API_KEY),
-            },
+            // Define individual variables instead of replacing all of process.env.
+            // Rsbuild CLI loads .env before evaluating this configuration.
+            'process.env.APP_ENV': JSON.stringify(process.env.APP_ENV ?? ''),
+            'process.env.CLIENT_ID': JSON.stringify(process.env.CLIENT_ID ?? ''),
+            'process.env.APP_ID': JSON.stringify(process.env.APP_ID ?? ''),
+            'process.env.GD_CLIENT_ID': JSON.stringify(process.env.GD_CLIENT_ID ?? ''),
+            'process.env.GD_APP_ID': JSON.stringify(process.env.GD_APP_ID ?? ''),
+            'process.env.GD_API_KEY': JSON.stringify(process.env.GD_API_KEY ?? ''),
         },
         alias: {
             react: path.resolve('./node_modules/react'),

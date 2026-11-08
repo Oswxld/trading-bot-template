@@ -18,6 +18,7 @@ cert.pem
 .env
 .env.*
 *.env
+!.env.example
 
 *.secret
 nx-cloud.env

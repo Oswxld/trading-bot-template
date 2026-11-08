@@ -38,10 +38,11 @@
 
 import { observer } from 'mobx-react-lite';
 
-export const MenuItems = observer(() => {
-    // No menu items by default - add your custom menu items here
-    return null;
-});
+export const MenuItems = observer(() => (
+    <a className='app-header__menu' href='/simulation' aria-label='Open virtual-funds simulation studio'>
+        Simulation Studio
+    </a>
+));
 
 export const TradershubLink = observer(() => {
     // No default Traders Hub link - add your custom navigation here if needed

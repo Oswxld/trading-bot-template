@@ -7,6 +7,21 @@ import { ToggleSwitch } from '@deriv-com/ui';
 
 export type TSubmenuSection = 'accountSettings' | 'cashier' | 'reports';
 
+// Simple in-app navigation icons — no new icon package required.
+const TradingToolIcon = ({ iconSize: _iconSize, ...props }: ComponentProps<'svg'> & { iconSize?: string }) => (
+    <svg viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='1.8' {...props}>
+        <path d='M3 18h18M5 14l4-5 4 3 6-7' strokeLinecap='round' strokeLinejoin='round' />
+    </svg>
+);
+const BulkToolIcon = ({ iconSize: _iconSize, ...props }: ComponentProps<'svg'> & { iconSize?: string }) => (
+    <svg viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='1.8' {...props}>
+        <rect x='3' y='4' width='8' height='7' rx='1.3' />
+        <rect x='13' y='4' width='8' height='7' rx='1.3' />
+        <rect x='3' y='13' width='8' height='7' rx='1.3' />
+        <rect x='13' y='13' width='8' height='7' rx='1.3' />
+    </svg>
+);
+
 //IconTypes
 type TMenuConfig = {
     LeftComponent: React.ElementType;
@@ -33,6 +48,20 @@ const useMobileMenuConfig = (
 
         return [
             [
+                {
+                    as: 'a',
+                    label: localize('Trading Bot'),
+                    LeftComponent: TradingToolIcon,
+                    href: '/',
+                    isActive: window.location.pathname === '/',
+                },
+                {
+                    as: 'a',
+                    label: localize('Bulk Trader'),
+                    LeftComponent: BulkToolIcon,
+                    href: '/bulk-trader',
+                    isActive: window.location.pathname === '/bulk-trader',
+                },
                 // ========================================
                 // CUSTOM MENU ITEMS PLACEHOLDER
                 // ========================================

@@ -27,8 +27,9 @@ The existing Deriv trading bot, Login button, OAuth PKCE and trading workflow re
 
 - Create a client branch from the stable `clients-sites` baseline **after** promoting tested changes from `develop`.
 - Set each deployment's environment variables in its own hosting project; never commit client-specific `.env` files.
-- Set `brand.config.json` hostnames to the actual production site and register the exact OAuth redirect URL with Deriv. The current `isProduction()` check only recognizes listed production domains plus localhost.
-- Review and migrate the existing browser-side OAuth **token exchange** to an appropriate backend/token-handling architecture before public launch. Deriv's official OAuth docs require the exchange server-side.
+- Register the exact production OAuth redirect URL with Deriv. The app defaults to Deriv production API on localhost, Vercel, and custom client domains; only the explicitly configured staging hostname uses staging API.
+- Production uses a same-origin Vercel OAuth code exchange function at `/api/oauth/token`. Configure `CLIENT_ID` and exact `OAUTH_REDIRECT_URI` as Vercel project environment variables; see `user-guide/12-vercel-production-deployment.md`. Local `npm start` retains the previously working direct token exchange for development only.
+- The OAuth function moves code exchange to the backend, but this template still makes authenticated Deriv calls with a token temporarily kept in browser session storage. Complete security review (including CSP, dependency audit, and token/session risk) before taking real-money users.
 - Do not claim referral attribution or API markup is active until the specific client signup test and Deriv dashboard confirm it.
 
 Official documentation: https://developers.deriv.com/docs/intro/oauth/

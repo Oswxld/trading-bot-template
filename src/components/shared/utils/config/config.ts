@@ -26,13 +26,13 @@ export const WS_SERVERS = {
 // Helper Functions
 // =============================================================================
 
-// Use Deriv's production API endpoints for local development as well.
-// This controls API infrastructure, not whether the trader uses demo or real funds.
+// Use production Deriv endpoints on localhost, Vercel, and client custom domains.
+// Only explicitly configured staging hostnames use Deriv's staging infrastructure.
+// This does NOT choose demo vs real trading funds: the active Deriv account does.
 export const isProduction = () => {
     const hostname = window.location.hostname;
-    const productionDomains = Object.values(PRODUCTION_DOMAINS) as string[];
-    const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
-    return isLocalhost || productionDomains.includes(hostname);
+    const stagingDomains = Object.values(STAGING_DOMAINS) as string[];
+    return !stagingDomains.includes(hostname);
 };
 
 export const isLocal = () => /localhost(:\d+)?$/i.test(window.location.hostname);

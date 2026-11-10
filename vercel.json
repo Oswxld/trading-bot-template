@@ -2,5 +2,11 @@
     "$schema": "https://openapi.vercel.sh/vercel.json",
     "buildCommand": "npm run build",
     "outputDirectory": "dist",
-    "framework": null
+    "framework": null,
+    "rewrites": [
+        {
+            "source": "/bulk-trader",
+            "destination": "/index.html"
+        }
+    ]
 }

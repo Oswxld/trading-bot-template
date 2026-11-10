@@ -154,14 +154,25 @@ export class OAuthTokenExchangeService {
                 code_verifier: codeVerifier, // PKCE: Include code verifier
             });
 
-            const response = await fetch(tokenEndpoint, {
-                method: 'POST',
-                credentials: 'include', // Include cookies for session-based auth
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                },
-                body: requestBody.toString(),
-            });
+            // Deriv requires production OAuth code exchange on the backend.
+            // Keep the already tested direct exchange ONLY for localhost development;
+            // all deployed hosts must call the same-origin Vercel Function.
+            const isLocalDev = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+            const response = isLocalDev
+                ? await fetch(tokenEndpoint, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                      body: requestBody.toString(),
+                  })
+                : await fetch('/api/oauth/token', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                          code,
+                          code_verifier: codeVerifier,
+                          redirect_uri: redirectUrl,
+                      }),
+                  });
 
             // Parse response
             const data: TokenExchangeResponse = await response.json();

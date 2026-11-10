@@ -19,6 +19,7 @@ import Audio from '../components/audio';
 import BlocklyLoading from '../components/blockly-loading';
 import BotStopped from '../components/bot-stopped';
 import BotBuilder from '../pages/bot-builder';
+import BulkTrader from '../pages/bulk-trader/bulk-trader';
 import Main from '../pages/main';
 import './app.scss';
 import 'react-toastify/dist/ReactToastify.css';
@@ -170,9 +171,15 @@ const AppContent = observer(() => {
                 <BlocklyLoading />
                 <div className='bot-dashboard bot' data-testid='dt_bot_dashboard'>
                     <Audio />
-                    <Main />
-                    <BotBuilder />
-                    <BotStopped />
+                    {window.location.pathname === '/bulk-trader' ? (
+                        <BulkTrader />
+                    ) : (
+                        <>
+                            <Main />
+                            <BotBuilder />
+                            <BotStopped />
+                        </>
+                    )}
                     <TransactionDetailsModal />
                     <ToastContainer limit={3} draggable={false} />
                 </div>

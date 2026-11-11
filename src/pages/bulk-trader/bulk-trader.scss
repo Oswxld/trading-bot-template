@@ -31,7 +31,8 @@
         background: var(--general-section-1, #f3f3f3);
         border: 1px solid var(--general-section-4, #999);
         border-radius: 4px;
-        font: 700 13px inherit;
+        font-family: inherit;
+        font-weight: 700;
         font-size: 13px;
         text-align: center;
         padding: 8px 10px;
@@ -181,7 +182,9 @@
         color: white;
         border-radius: 5px;
         border: none;
-        font: 700 13px inherit;
+        font-family: inherit;
+        font-weight: 700;
+        font-size: 13px;
         cursor: pointer;
     }
 

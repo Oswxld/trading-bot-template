@@ -202,6 +202,8 @@ const TradesTable = ({ records, currency, detailed = false }) => (
     </div>
 );
 
+export { TradesTable };
+
 const exportCsv = (records, currency) => {
     const columns = ['Timestamp', 'Reference', 'Market', 'Trade type', 'Entry spot', 'Exit spot', 'Buy price', 'Profit/Loss', 'Status', 'Error'];
     const rows = records.map(item => [

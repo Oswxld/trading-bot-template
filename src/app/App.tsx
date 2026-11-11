@@ -1,6 +1,6 @@
 import { lazy, Suspense } from 'react';
 import React from 'react';
-import { createBrowserRouter, createRoutesFromElements, Route, RouterProvider } from 'react-router-dom';
+import { createBrowserRouter, createRoutesFromElements, Navigate, Route, RouterProvider } from 'react-router-dom';
 import ChunkLoader from '@/components/loader/chunk-loader';
 import LocalStorageSyncWrapper from '@/components/localStorage-sync-wrapper';
 import RoutePromptDialog from '@/components/route-prompt-dialog';
@@ -54,7 +54,7 @@ const router = createBrowserRouter(
         >
             {/* All child routes will be passed as children to Layout */}
             <Route index element={<AppRoot />} />
-            <Route path='bulk-trader' element={<AppRoot />} />
+            <Route path='bulk-trader' element={<Navigate to='/#bulk_trader' replace />} />
         </Route>
     )
 );

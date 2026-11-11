@@ -2,6 +2,7 @@ import {
     isBulkRowAwaitingData,
     makePendingBulkRecord,
     upsertBulkRecord,
+    recoverInterruptedBulkRecords,
 } from '../bulk-trade-records';
 import { mergeContractSettlement } from '../bulk-contract-monitor';
 
@@ -81,6 +82,21 @@ describe('Bulk Trader live transaction row lifecycle', () => {
         expect(after).toHaveLength(1);
         expect(after[0].price).toBeNull();
         expect(isBulkRowAwaitingData(after[0])).toBe(false);
+    });
+
+    it('recovery turns stale buying shimmer into unconfirmed rather than silently retrying', () => {
+        const buying = { ...makePendingBulkRecord(details(0)), status: 'buying' };
+        const quoting = makePendingBulkRecord(details(1));
+        const open = {
+            ...makePendingBulkRecord(details(2)), status: 'open',
+            contractId: '123', price: 0.5,
+        };
+        const recovered = recoverInterruptedBulkRecords([buying, quoting, open]);
+        expect(recovered[0]).toMatchObject({ status: 'unconfirmed', contractId: null });
+        expect(recovered[1].status).toBe('failed');
+        expect(recovered[2]).toBe(open);
+        expect(recovered[0].reason).toMatch(/Deriv account statement/);
+        expect(isBulkRowAwaitingData(recovered[0])).toBe(false);
     });
 
     it('retains previous 300-row history cap and does not mutate old records', () => {

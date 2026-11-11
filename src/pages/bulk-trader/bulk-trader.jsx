@@ -586,6 +586,10 @@ const BulkTrader = observer(() => {
             setMessage('Stop your running Deriv bot before bulk trading on the same account.');
             return;
         }
+        if (recordsRef.current.some(item => item.status === 'unconfirmed')) {
+            setMessage('An earlier purchase has no confirmation. Check the Deriv account statement before starting another batch. Only reset this local report after reconciling those purchases.');
+            return;
+        }
         if (!window.confirm(
             `Buy ${numberTrades} separate ${buttonLabel} DEMO contracts on ${activeAccountId}?\n` +
             `Market: ${chosenMarket?.label || market}\n` +
@@ -594,6 +598,12 @@ const BulkTrader = observer(() => {
             `Up to ${Math.min(MAX_IN_FLIGHT_PURCHASES, numberTrades)} purchase operations can overlap.\n` +
             'Orders already sent cannot be undone after submission. Proceed?'
         )) return;
+        // Prevent overlapping batches from separate Bulk Trader mounts/tabs
+        // within the same SPA (e.g. navigation while buys are still pending).
+        if (!acquireBulkRun(activeAccountId)) {
+            setMessage('Another Bulk Trader batch is still processing on this account. Wait for its outstanding confirmations or check the Deriv statement.');
+            return;
+        }
 
         runRef.current = true;
         stopRef.current = false;
@@ -607,11 +617,13 @@ const BulkTrader = observer(() => {
         let successes = 0;
         let failures = 0;
         let skipped = 0;
-        let consecutiveErrors = 0;
+        let unconfirmed = 0;
+        let errorCount = 0;
 
-        const isSafe = () => !stopRef.current &&
-            localStorage.getItem('active_loginid') === activeAccountId &&
-            api_base.api === api && api.connection?.readyState === 1 && !api_base.is_running;
+        const isSafe = () => mountedRef.current && activeAccountRef.current === activeAccountId &&
+            !stopRef.current && localStorage.getItem('active_loginid') === activeAccountId &&
+            api_base.account_id === activeAccountId && api_base.api === api &&
+            api.connection?.readyState === 1 && !api_base.is_running;
 
         const onThrottle = waitMs => {
             if (!mountedRef.current || activeAccountRef.current !== activeAccountId ||
@@ -663,6 +675,7 @@ const BulkTrader = observer(() => {
         // unrelated workers while waiting for those confirmations.
         const executePurchase = async i => {
                 let subscriptionId = null;
+                let phase = 'proposal';
                 try {
                     const proposalRequest = {
                         proposal: 1,
@@ -692,6 +705,7 @@ const BulkTrader = observer(() => {
                     if (price <= 0 || price > stakeValue + 0.00001) {
                         throw new Error('Quoted price exceeded your stake; this purchase was skipped.');
                     }
+                    phase = 'buy';
                     const result = await request(
                         api, { buy: proposal.id, price }, 15000, isSafe, onThrottle
                     );
@@ -699,7 +713,6 @@ const BulkTrader = observer(() => {
                         throw new Error('The purchase was not confirmed. Check the Deriv account statement before trying again.');
                     }
                     successes++;
-                    consecutiveErrors = 0;
                     const contractId = String(result.buy.contract_id);
                     addRunRecord({
                         number: Date.now() + i,
@@ -721,15 +734,15 @@ const BulkTrader = observer(() => {
                     );
                 } catch (error) {
                     const reason = messageFor(error);
-                    // A queued request cancelled by Stop/account switch was
-                    // never sent; do not fabricate a failed purchase record.
-                    if (reason.includes('Bulk trading stopped before sending this request.')) {
+                    const outcome = classifyBulkFailure(error, phase);
+                    if (outcome.status === 'skipped') {
                         skipped++;
                         logRun(`Trade #${i + 1} was skipped before its request was sent.`);
                         return;
                     }
+                    errorCount++;
                     failures++;
-                    consecutiveErrors++;
+                    if (outcome.status === 'unconfirmed') unconfirmed++;
                     addRunRecord({
                         number: Date.now() + i,
                         timestamp: Date.now(),
@@ -738,14 +751,15 @@ const BulkTrader = observer(() => {
                         symbolName: chosenMarket?.label || market,
                         contractType: buttonLabel,
                         price: 0,
-                        status: /timed out|not confirmed/i.test(reason) ? 'unconfirmed' : 'failed',
-                        reason,
+                        status: outcome.status,
+                        reason: `Trade #${i + 1} (${phase}): ${reason}`,
                         payout: null, profit: null,
                     });
-                    logRun(`Purchase #${i + 1} failed or was unconfirmed: ${reason}`);
-                    if (/timed out|not confirmed/i.test(reason) || consecutiveErrors >= 2) {
-                        stopRef.current = true; // Avoid duplicate/unsupported repeated purchases.
-                    }
+                    logRun(`Trade #${i + 1} ${outcome.status.toUpperCase()} during ${phase}: ${reason}`);
+                    // A buy with a missing acknowledgement might have
+                    // executed. Stop further purchases, drain outstanding
+                    // operations, never retry this buy automatically.
+                    if (outcome.stop || errorCount >= 2) stopRef.current = true;
                 } finally {
                     if (subscriptionId && api.connection?.readyState === 1) {
                         try { api.send({ forget: subscriptionId }); } catch { /* websocket closed */ }
@@ -769,11 +783,15 @@ const BulkTrader = observer(() => {
             });
             const stopped = stopRef.current || !isSafe() || stats.completed < numberTrades;
             const elapsedSeconds = (stats.elapsedMs / 1000).toFixed(1);
+            const rejected = failures - unconfirmed;
+            const reconcileWarning = unconfirmed
+                ? ' URGENT: Some buys might have executed; reconcile against the Deriv account statement before another batch.'
+                : '';
             if (mountedRef.current && activeAccountRef.current === activeAccountId) {
                 setStatus(stopped ? 'stopped' : 'finished');
-                setMessage(`${stopped ? 'Stopped' : 'Completed'}. ${stats.completed}/${numberTrades} operations processed in ${elapsedSeconds}s; ${successes} confirmed, ${failures} failed/unconfirmed, ${skipped} skipped. Peak concurrent operations: ${stats.peakInFlight}/${workerLimit}. Check Summary/Transactions/Journal and the Deriv statement for uncertain orders.`);
+                setMessage(`${stopped ? 'Stopped' : 'Completed'}. ${stats.completed}/${numberTrades} operations processed in ${elapsedSeconds}s; ${successes} confirmed, ${rejected} failed, ${unconfirmed} UNCONFIRMED, ${skipped} skipped. Peak concurrent operations: ${stats.peakInFlight}/${workerLimit}.${reconcileWarning}`);
             }
-            logRun(`Execution ${stopped ? 'stopped' : 'completed'}: ${stats.completed}/${numberTrades} operations processed over ${elapsedSeconds}s; ${successes} confirmed, ${failures} failed/unconfirmed, ${skipped} skipped, peak concurrency ${stats.peakInFlight}/${workerLimit}.`);
+            logRun(`Execution ${stopped ? 'stopped' : 'completed'}: ${stats.completed}/${numberTrades} processed over ${elapsedSeconds}s; ${successes} confirmed, ${rejected} failed, ${unconfirmed} unconfirmed, ${skipped} skipped, peak concurrency ${stats.peakInFlight}/${workerLimit}.${reconcileWarning}`);
         } catch (error) {
             stopRef.current = true;
             if (mountedRef.current && activeAccountRef.current === activeAccountId) {
@@ -783,6 +801,7 @@ const BulkTrader = observer(() => {
             logRun(`Bulk execution stopped unexpectedly: ${messageFor(error)}.`);
         } finally {
             runRef.current = false;
+            releaseBulkRun(activeAccountId);
             if (mountedRef.current && activeAccountRef.current === activeAccountId) setInFlight(0);
         }
     };

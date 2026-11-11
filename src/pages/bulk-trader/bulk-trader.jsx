@@ -87,6 +87,7 @@ const BulkTrader = observer(() => {
     const { client } = useStore();
     const [market, setMarket] = useState('R_100');
     const [markets, setMarkets] = useState(DEFAULT_MARKETS);
+    const [availableContracts, setAvailableContracts] = useState(null);
     const [tradeType, setTradeType] = useState('MATCH_DIFF');
     const [prediction, setPrediction] = useState('5');
     const [sampleSize, setSampleSize] = useState('1000');
@@ -260,6 +261,32 @@ const BulkTrader = observer(() => {
         return () => { cancelled = true; };
     }, []);
 
+    // Contract availability varies by market: e.g. Step indices may not offer
+    // Digit Matches/Differs. Disable unsupported actions instead of pretending
+    // every trade type is available on every index.
+    useEffect(() => {
+        let cancelled = false;
+        setAvailableContracts(null);
+        const check = async () => {
+            for (let attempt = 0; attempt < 12 && !cancelled; attempt++) {
+                const api = api_base.api;
+                if (api?.connection?.readyState === 1) {
+                    try {
+                        const response = await request(api, { contracts_for: market });
+                        const offered = response?.contracts_for?.available;
+                        if (!cancelled && Array.isArray(offered)) {
+                            setAvailableContracts(new Set(offered.map(item => item.contract_type)));
+                        }
+                    } catch { /* the proposal endpoint still validates contract offers */ }
+                    return;
+                }
+                await delay(700);
+            }
+        };
+        check();
+        return () => { cancelled = true; };
+    }, [market, activeAccountId]);
+
     // Live 1,000-tick (configurable) last-digit distribution plus recent outcomes.
     // The WebSocket subscription is forgotten when the market/window changes.
     useEffect(() => {
@@ -316,7 +343,7 @@ const BulkTrader = observer(() => {
                 try { apiInUse.send({ forget: subId }); } catch { /* socket closed */ }
             }
         };
-    }, [market, sampleSize, markets]);
+    }, [market, sampleSize, markets, activeAccountId]);
 
     const stakeValue = Number(stake);
     const numberTrades = Number(quantity);
@@ -349,6 +376,10 @@ const BulkTrader = observer(() => {
         }
         if (!isDemo || !account?.currency) {
             setMessage('DEMO-ONLY test mode. Switch to an authenticated Deriv demo account.');
+            return;
+        }
+        if (availableContracts && !availableContracts.has(contractType)) {
+            setMessage('Deriv does not offer this contract type on the selected market. Choose another trade type or market.');
             return;
         }
         if (chosenMarket?.isOpen === false) {
@@ -566,7 +597,9 @@ const BulkTrader = observer(() => {
                 <div className='bulk-trader__buttons'>
                     {currentSelection.actions.map(([type, label], index) => (
                         <button key={type} type='button' className={index === 0 ? 'bulk-trader__buy-a' : 'bulk-trader__buy-b'}
-                            disabled={isRunning || !valid || !isDemo} onClick={() => begin(type, label)}>
+                            disabled={isRunning || !valid || !isDemo || (availableContracts && !availableContracts.has(type))}
+                            title={availableContracts && !availableContracts.has(type) ? 'Not offered on this market' : ''}
+                            onClick={() => begin(type, label)}>
                             {label}
                         </button>
                     ))}

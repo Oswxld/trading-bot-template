@@ -75,6 +75,15 @@ const request = (api, payload, timeout = 15000, canSend = () => true, onThrottle
     let subscription;
     let timer;
     let finished = false;
+    let rateLimitReported = false;
+    // DerivAPIBasic can report the same API rejection through both onMessage
+    // and the promise returned by send(). Count one rejection only once.
+    const noteRateLimitOnce = error => {
+        if (!rateLimitReported && isTradingRateLimitError(error)) {
+            rateLimitReported = true;
+            noteTradingRateLimit(api);
+        }
+    };
     const done = (error, data) => {
         if (finished) return;
         finished = true;
@@ -89,7 +98,7 @@ const request = (api, payload, timeout = 15000, canSend = () => true, onThrottle
             const data = event?.data || event;
             if (Number(data?.req_id) !== reqId) return;
             if (data.error) {
-                if (isTradingRateLimitError(data.error)) noteTradingRateLimit(api);
+                noteRateLimitOnce(data.error);
                 done(new Error(messageFor(data.error)));
             } else {
                 done(null, data);
@@ -106,7 +115,7 @@ const request = (api, payload, timeout = 15000, canSend = () => true, onThrottle
             // unhandled rejection without treating an immediate send ACK as
             // a confirmed purchase; onMessage remains authoritative.
             result?.catch?.(error => {
-                if (isTradingRateLimitError(error)) noteTradingRateLimit(api);
+                noteRateLimitOnce(error);
                 done(error instanceof Error ? error : new Error(messageFor(error)));
             });
             return result;

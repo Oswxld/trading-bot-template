@@ -24,8 +24,11 @@ This is NOT Deriv's REST Bulk Purchase for multiple different accounts. For each
 3. Get a streaming `proposal` with `subscribe:1`, `underlying_symbol`, a unique `req_id`, and prediction barrier when needed.
 4. Verify quoted price is no higher than the configured stake; only then submit the separate `buy`. Never automatically retry a buy whose response was lost.
 5. Record confirmed contract ID and purchase price. Listen to `proposal_open_contract` and request contract-status snapshots for confirmed buys to update settled profit/loss.
-6. Keep purchases sequential and paced; stop on ambiguous acknowledgements or repeated failures. Stop prevents *future* purchases, not already submitted orders.
-7. Don't simultaneously run the existing automated Deriv bot on the same account.
+6. Allow up to **min(5, chosen number of trades)** independent purchase operations in flight. Each operation still waits for its own streaming `proposal` before sending its `buy`, but does **not** wait for other workers' buy confirmations. Reserve each trade index only once (no duplicate attempts), replenish a free slot until the chosen quantity is processed, and stagger worker starts by at least **850 ms** across the batch to limit request bursts. This concurrency cap is an upper bound, not a guarantee five are simultaneously outstanding.
+7. The Stop button prevents new starts and prevents a not-yet-submitted buy after the quote returns. Buys already sent may still execute and confirm after Stop; never automatically retry ambiguous requests. Halt new starts on an ambiguous acknowledgement or repeated purchase errors. Track completed operations and in-flight operations independently.
+8. If an account switch happens while purchases are outstanding, do not attribute their late confirmations to the newly selected account; preserve them in the originating account's report.
+9. Deriv's documented WebSocket budget for `proposal`, `buy`, `proposal_open_contract`, and `sell` is shared (currently 360 requests/minute and 14,400/hour). The 850 ms pacing is a cautious initial setting; it does not guarantee API acceptance when other traffic shares the same session.
+10. Don't simultaneously run the existing automated Deriv bot on the same account.
 
 ## Run on your own laptop
 
@@ -37,6 +40,7 @@ Run `npm run build`, then `npm start`; open `https://localhost:8443/#bulk_trader
 2. Choose **Volatility 100 Index**, **Matches/Differs**, sample 1000, prediction 5, duration 1 tick, stake permitted by Deriv, and **one trade**.
 3. Verify tick quote and history-derived distribution, then **click the right-side chevron** to open Summary / Transactions / Journal.
 4. Switch to a confirmed demo account. Place one demo trade only; confirm it against Deriv's actual demo account statement. Check that closed P/L is reported correctly, not merely the buy acknowledgement.
+5. **Then test quantities 2, 5, 7 and 10** on a demo account, confirming the run never has more than min(5, quantity) operations in flight and never sends more than the selected total. Test Stop and account switching during the run; check every confirmed and uncertain purchase against Deriv's statement.
 5. Click Transactions → View Detail and verify the full draggable report; test CSV Download and Reset.
 6. Test invalid stake/history, unsupported Step trade type, account switching, Stop, logout, WebSocket loss, and changing away from the Bulk tab mid-run before considering public use.
 7. If you can reproduce a build or API error, provide the terminal/Console error **without API keys, OAuth codes, access tokens, or other credentials**.

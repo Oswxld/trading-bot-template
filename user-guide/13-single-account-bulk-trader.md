@@ -1,3 +1,16 @@
+> **Updated 11 November 2026 — current real-account implementation**:
+> The historical entries below document development when Bulk Trader was practice-only.
+> The latest `develop` branch now supports verified real accounts in the code path.
+> A real-money batch requires a freshly verified Deriv WebSocket balance matching
+> the selected account/currency, no more than 10% of available account funds,
+> per-trade stake of at most 10 account-currency units, batch stake at most 100,
+> at most 20 orders / 2 concurrent purchases, user confirmation plus typing
+> `REAL <account-id>`. The existing account-switch guards, stop behavior,
+> rate limits, contract settlement reporting, and no-auto-retry rule remain.
+> **Broker-authenticated real-money purchase and statement reconciliation
+> remain unverified.** This is not a claim of live-trading safety. See
+> `14-real-account-white-label-snapshot.md` before any live deployment.
+>
 # Same-account Bulk Trader: Deriv-style UI, reports and demo verification
 
 The Bulk Trader is **a new tab beside Charts** on the existing blue main navigation bar, not a separate top-header link or a second app. Open `https://localhost:8443/#bulk_trader`. The old `/bulk-trader` URL redirects to that tab.

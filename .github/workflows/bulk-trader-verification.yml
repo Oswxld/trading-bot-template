@@ -45,6 +45,7 @@ jobs:
       - name: Run all Bulk Trader safety, concurrency and monitoring tests
         run: |
           npx jest \
+            src/pages/bulk-trader/__tests__/bulk-account-safety.test.js \
             src/pages/bulk-trader/__tests__/bulk-execution.test.js \
             src/pages/bulk-trader/__tests__/bulk-contract-monitor.test.js \
             src/pages/bulk-trader/__tests__/bulk-request-safety.test.js \

@@ -1,4 +1,5 @@
 import { getSocketURL } from '@/components/shared';
+import { trackTradingSocket } from '@/services/trading-request-budget';
 import DerivAPIBasic from '@deriv/deriv-api/dist/DerivAPIBasic';
 import APIMiddleware from './api-middleware';
 
@@ -75,6 +76,14 @@ export const generateDerivApiInstance = async (forceNew = false) => {
 
             console.log('[DerivAPI] Creating new WebSocket connection to:', wsURL);
             const deriv_socket = new WebSocket(wsURL);
+            // Account for ALL trading requests on this shared connection,
+            // including those sent by the existing Bot Builder. Observation
+            // does not delay or otherwise change those existing requests.
+            try {
+                trackTradingSocket(deriv_socket);
+            } catch (error) {
+                console.warn('[DerivAPI] Request meter unavailable; Bulk Trader will fail closed.', error?.message);
+            }
             const deriv_api = new DerivAPIBasic({
                 connection: deriv_socket,
                 middleware: new APIMiddleware({}),

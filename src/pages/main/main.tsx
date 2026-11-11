@@ -44,6 +44,8 @@ import RunStrategy from '../dashboard/run-strategy';
 import './main.scss';
 
 const ChartWrapper = lazy(() => import('../chart/chart-wrapper'));
+const BulkTrader = lazy(() => import('../bulk-trader/bulk-trader'));
+
 const Tutorial = lazy(() => import('../tutorials'));
 
 const AppWrapper = observer(() => {
@@ -77,7 +79,7 @@ const AppWrapper = observer(() => {
     const { clear } = summary_card;
     const { DASHBOARD, BOT_BUILDER } = DBOT_TABS;
     const init_render = React.useRef(true);
-    const hash = ['dashboard', 'bot_builder', 'chart', 'tutorial'];
+    const hash = ['dashboard', 'bot_builder', 'chart', 'bulk_trader', 'tutorial'];
     const { isDesktop } = useDevice();
     const location = useLocation();
     const navigate = useNavigate();
@@ -122,7 +124,8 @@ const AppWrapper = observer(() => {
     const GetHashedValue = (tab: number) => {
         tab_value = location.hash?.split('#')[1];
         if (!tab_value) return tab;
-        return Number(hash.indexOf(String(tab_value)));
+        const matching = hash.indexOf(String(tab_value));
+        return matching === -1 ? tab : matching;
     };
     const active_hash_tab = GetHashedValue(active_tab);
 
@@ -422,6 +425,19 @@ const AppWrapper = observer(() => {
                                     fallback={<ChunkLoader message={localize('Please wait, loading chart...')} />}
                                 >
                                     <ChartWrapper show_digits_stats={false} />
+                                </Suspense>
+                            </div>
+                            <div
+                                label={
+                                    <>
+                                        <span aria-hidden='true' style={{ fontSize: '18px', lineHeight: 1 }}>◈</span>
+                                        <Localize i18n_default_text='Bulk Trader' />
+                                    </>
+                                }
+                                id='id-bulk-trader'
+                            >
+                                <Suspense fallback={<ChunkLoader message={localize('Loading Bulk Trader...')} />}>
+                                    <BulkTrader />
                                 </Suspense>
                             </div>
                             <div

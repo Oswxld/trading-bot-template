@@ -113,7 +113,7 @@ function BulkReports({ records, journal, accountId, currency, balance, isRunning
                     footer={
                         <div className='run-panel__footer'>
                             <button type='button' className='bulk-reports__reset' onClick={onClear}
-                                disabled={!records.length || isRunning}>Reset</button>
+                                disabled={(!records.length && !journal.length) || isRunning}>Reset</button>
                         </div>
                     }
                 >

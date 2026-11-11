@@ -36,11 +36,11 @@ export default class BulkTraderErrorBoundary extends React.Component<
             <section role='alert' style={{ background: '#fff', color: '#212121', margin: 16, padding: 24, border: '1px solid #ddd', borderRadius: 8 }}>
                 <h2 style={{ fontSize: 20, marginBottom: 8 }}>Bulk Trader couldn't display</h2>
                 <p style={{ fontSize: 14, lineHeight: 1.5 }}>
-                    The Bulk Trader encountered a display error. No bulk orders were submitted by this screen.
-                    Refresh this tab, then check the browser Console if it continues.
+                    The Bulk Trader encountered a display error. Check your Deriv account statement before
+                    attempting another order. Refresh this tab, then check the browser Console if it continues.
                 </p>
                 <p style={{ fontSize: 12, color: '#b42318', overflowWrap: 'anywhere' }}>
-                    Error: {this.state.message}
+                    Display error. Please share the first red error from the browser Console (without any tokens or credentials).
                 </p>
                 <button type='button' onClick={() => window.location.reload()}
                     style={{ marginTop: 12, padding: '10px 18px', background: '#1746dc', color: '#fff', borderRadius: 6, border: 0, cursor: 'pointer' }}>

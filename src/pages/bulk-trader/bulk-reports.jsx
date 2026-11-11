@@ -105,7 +105,7 @@ function BulkReports({ records, journal, accountId, currency, balance, isRunning
                     anchor='right'
                     className='run-panel run-panel__container bulk-reports__drawer'
                     contentClassName='run-panel__content bulk-reports__content'
-                    width={366}
+                    width={420}
                     is_open={reportsOpen}
                     toggleDrawer={onReportsToggle}
                     zIndex={6}

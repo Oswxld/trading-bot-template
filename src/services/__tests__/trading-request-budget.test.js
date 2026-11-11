@@ -163,6 +163,36 @@ describe('Deriv shared trading WebSocket request budget', () => {
         expect(limiter.tradingBudgetSnapshot().minuteUsed).toBe(241);
     });
 
+    it('does not hold the dispatch mutex while a previous buy waits for Deriv confirmation', async () => {
+        const { socket } = createSocket();
+        limiter.trackTradingSocket(socket);
+
+        let confirmFirstBuy;
+        const firstConfirmation = new Promise(resolve => { confirmFirstBuy = resolve; });
+        const firstSend = jest.fn(() => {
+            sendTrade(socket, { buy: 'first_proposal', price: 0.5 });
+            return firstConfirmation;
+        });
+        const secondSend = jest.fn(() => {
+            sendTrade(socket, { buy: 'second_proposal', price: 0.5 });
+            return Promise.resolve({ buy: { contract_id: 222 } });
+        });
+
+        // Both WebSocket sends must happen BEFORE the first confirmation.
+        const firstPermit = limiter.sendTradingRequestWithinBudget(
+            { connection: socket }, firstSend, () => true
+        );
+        const secondPermit = limiter.sendTradingRequestWithinBudget(
+            { connection: socket }, secondSend, () => true
+        );
+
+        await Promise.all([firstPermit, secondPermit]);
+        expect(firstSend).toHaveBeenCalledTimes(1);
+        expect(secondSend).toHaveBeenCalledTimes(1);
+        expect(limiter.tradingBudgetSnapshot().minuteUsed).toBe(2);
+        confirmFirstBuy({ buy: { contract_id: 111 } });
+    });
+
     it('backs off on rate-limit rejection, caps backoff, and resets escalation after a quiet minute', () => {
         const { socket } = createSocket();
         const api = { connection: socket };

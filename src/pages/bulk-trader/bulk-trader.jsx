@@ -239,7 +239,7 @@ const BulkTrader = observer(() => {
                                 value: item.underlying_symbol || item.symbol,
                                 label: item.display_name,
                                 pipSize: Number(item.pip_size ?? 2),
-                                isOpen: item.exchange_is_open !== 0 && !item.is_trading_suspended,
+                                isOpen: ![0, false, '0'].includes(item.exchange_is_open) && ![1, true, '1'].includes(item.is_trading_suspended),
                             }))
                             .sort((a, b) => marketOrder(a) - marketOrder(b) || a.label.localeCompare(b.label, undefined, { numeric: true }));
                         if (!cancelled && available.length) {

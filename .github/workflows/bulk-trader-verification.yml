@@ -50,6 +50,8 @@ jobs:
             src/pages/bulk-trader/__tests__/bulk-request-safety.test.js \
             src/pages/bulk-trader/__tests__/bulk-api-request.test.js \
             src/pages/bulk-trader/__tests__/bulk-trader-integration.test.js \
+            src/pages/bulk-trader/__tests__/bulk-trade-records.test.js \
+            src/pages/bulk-trader/__tests__/bulk-reports-live.test.jsx \
             src/services/__tests__/trading-request-budget.test.js \
             --ci --runInBand --coverage=false
 

@@ -168,6 +168,10 @@ const BulkTrader = observer(() => {
     const [records, setRecords] = useState(() => fromStorage(activeAccountId, 'records'));
     const [journal, setJournal] = useState(() => fromStorage(activeAccountId, 'journal'));
     const recordsRef = useRef(records);
+    // Use the rendered account, not just localStorage, before updating visible
+    // reports: switching accounts can leave an older batch in flight.
+    const activeAccountRef = useRef(activeAccountId);
+    activeAccountRef.current = activeAccountId;
     const runRef = useRef(false);
     const stopRef = useRef(false);
     const mountedRef = useRef(true);
@@ -191,6 +195,11 @@ const BulkTrader = observer(() => {
         // Never let a timer from account A query contract data on account B.
         clearSettlementTimers();
         stopRef.current = true;
+        if (runRef.current) {
+            setStatus('stopped');
+            setMessage('Account changed. No new bulk orders will be submitted; earlier requests may still confirm on the previous account.');
+            setInFlight(0);
+        }
         recordsRef.current = fromStorage(activeAccountId, 'records');
         setRecords(recordsRef.current);
         setJournal(fromStorage(activeAccountId, 'journal'));
@@ -260,7 +269,8 @@ const BulkTrader = observer(() => {
                 if (api?.connection?.readyState === 1 && api_base.account_id === activeAccountId) {
                     listener = api.onMessage().subscribe(event => {
                         const data = event?.data || event;
-                        if (!stopped && data.msg_type === 'proposal_open_contract' && data.proposal_open_contract) {
+                        if (!stopped && activeAccountRef.current === activeAccountId &&
+                            data.msg_type === 'proposal_open_contract' && data.proposal_open_contract) {
                             applyContractUpdate(data.proposal_open_contract);
                         }
                     });
@@ -523,6 +533,7 @@ const BulkTrader = observer(() => {
 
         let successes = 0;
         let failures = 0;
+        let skipped = 0;
         let consecutiveErrors = 0;
         let completed = 0;
         let inProgress = 0;
@@ -534,7 +545,8 @@ const BulkTrader = observer(() => {
             api_base.api === api && api.connection?.readyState === 1 && !api_base.is_running;
 
         const onThrottle = waitMs => {
-            if (!mountedRef.current || localStorage.getItem('active_loginid') !== activeAccountId) return;
+            if (!mountedRef.current || activeAccountRef.current !== activeAccountId ||
+                localStorage.getItem('active_loginid') !== activeAccountId) return;
             const usage = tradingBudgetSnapshot();
             setMessage(
                 `Rate limiter: waiting ~${Math.ceil(waitMs / 1000)}s for request capacity ` +
@@ -556,14 +568,16 @@ const BulkTrader = observer(() => {
             } catch { /* storage may be unavailable */ }
         };
         const logRun = text => {
-            if (mountedRef.current && localStorage.getItem('active_loginid') === activeAccountId) {
+            if (mountedRef.current && activeAccountRef.current === activeAccountId &&
+                localStorage.getItem('active_loginid') === activeAccountId) {
                 log(text);
             } else {
                 saveForRun('journal', { id: ++nextRequestId, timestamp: Date.now(), message: text });
             }
         };
         const addRunRecord = item => {
-            if (mountedRef.current && localStorage.getItem('active_loginid') === activeAccountId) {
+            if (mountedRef.current && activeAccountRef.current === activeAccountId &&
+                localStorage.getItem('active_loginid') === activeAccountId) {
                 addRecord(item);
             } else {
                 saveForRun('records', item);
@@ -589,7 +603,7 @@ const BulkTrader = observer(() => {
                 const i = await reserveNext();
                 if (i === null) break;
                 inProgress++;
-                if (mountedRef.current) setInFlight(inProgress);
+                if (mountedRef.current && activeAccountRef.current === activeAccountId) setInFlight(inProgress);
                 let subscriptionId = null;
                 try {
                     const proposalRequest = {
@@ -611,7 +625,11 @@ const BulkTrader = observer(() => {
                     if (!proposal?.id || !Number.isFinite(Number(proposal.ask_price))) {
                         throw new Error('Deriv did not return a valid purchase proposal.');
                     }
-                    if (!isSafe()) break;
+                    if (!isSafe()) {
+                        skipped++;
+                        logRun(`Trade #${i + 1} was skipped before purchase because the run stopped or the account changed.`);
+                        break;
+                    }
                     const price = Number(proposal.ask_price);
                     if (price <= 0 || price > stakeValue + 0.00001) {
                         throw new Error('Quoted price exceeded your stake; this purchase was skipped.');
@@ -644,9 +662,16 @@ const BulkTrader = observer(() => {
                         api, contractId, Math.max(5000, durationTicks * 2500 + 2000)
                     );
                 } catch (error) {
+                    const reason = messageFor(error);
+                    // A queued request cancelled by Stop/account switch was
+                    // never sent; do not fabricate a failed purchase record.
+                    if (reason.includes('Bulk trading stopped before sending this request.')) {
+                        skipped++;
+                        logRun(`Trade #${i + 1} was skipped before its request was sent.`);
+                        break;
+                    }
                     failures++;
                     consecutiveErrors++;
-                    const reason = messageFor(error);
                     addRunRecord({
                         number: Date.now() + i,
                         timestamp: Date.now(),
@@ -669,7 +694,7 @@ const BulkTrader = observer(() => {
                     }
                     completed++;
                     inProgress--;
-                    if (mountedRef.current) {
+                    if (mountedRef.current && activeAccountRef.current === activeAccountId) {
                         setProgress(completed);
                         setInFlight(inProgress);
                     }
@@ -682,14 +707,14 @@ const BulkTrader = observer(() => {
             // soon as a slot frees, without waiting for unrelated confirmations.
             await Promise.all(Array.from({ length: workerLimit }, () => worker()));
             const stopped = stopRef.current || !isSafe() || completed < numberTrades;
-            if (mountedRef.current) {
+            if (mountedRef.current && activeAccountRef.current === activeAccountId) {
                 setStatus(stopped ? 'stopped' : 'finished');
-                setMessage(`${stopped ? 'Stopped' : 'Completed'}. ${completed}/${numberTrades} operations processed; ${successes} purchases confirmed, ${failures} failed/unconfirmed. Check Summary/Transactions/Journal and the Deriv statement for uncertain orders.`);
-                logRun(`Execution ${stopped ? 'stopped' : 'completed'}: ${completed}/${numberTrades} operations processed, ${successes} confirmed purchases, ${failures} failed/unconfirmed.`);
+                setMessage(`${stopped ? 'Stopped' : 'Completed'}. ${completed}/${numberTrades} operations processed; ${successes} purchases confirmed, ${failures} failed/unconfirmed, ${skipped} skipped. Check Summary/Transactions/Journal and the Deriv statement for uncertain orders.`);
             }
+            logRun(`Execution ${stopped ? 'stopped' : 'completed'}: ${completed}/${numberTrades} operations processed, ${successes} confirmed purchases, ${failures} failed/unconfirmed, ${skipped} skipped.`);
         } finally {
             runRef.current = false;
-            if (mountedRef.current) setInFlight(0);
+            if (mountedRef.current && activeAccountRef.current === activeAccountId) setInFlight(0);
         }
     };
 

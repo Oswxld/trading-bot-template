@@ -1,18 +1,133 @@
 .bulk-reports {
-    // Use the same fixed Deriv Bot drawer frame and tabs as Bot Builder.
-    &__drawer {
-        background: var(--general-main-2, #fff);
+    &__panel {
+        position: sticky;
+        top: 0;
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+        height: min(660px, calc(100vh - 17.5rem));
+        min-height: 420px;
+        min-width: 0;
+        overflow: hidden;
+        border: 1px solid var(--general-section-3, #d9dce4);
+        border-radius: 8px;
+        background: var(--general-main-1, #fff);
+        color: var(--text-prominent, #182331);
+        box-shadow: 0 4px 24px #121d4122;
+        z-index: 2;
 
-        .dc-tabs__list { justify-content: space-around; }
-        .dc-tabs__item { width: 33.333%; padding: 0 8px; }
+        &--maximized {
+            position: fixed;
+            inset: 8.5rem 2rem 2rem;
+            width: auto;
+            height: auto;
+            max-height: none;
+            z-index: 60;
+            border-radius: 10px;
+            box-shadow: 0 12px 80px #0007;
+        }
     }
 
-    &__content {
-        overflow: hidden !important;
-        flex-direction: column;
+    &__header {
+        flex: 0 0 auto;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        min-height: 48px;
+        padding: 9px 14px;
+        background: #1738e9;
+        color: white;
+        font-size: 14px;
+        font-weight: 700;
+    }
 
-        > .dc-tabs { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-        .dc-tabs__content { min-height: 0; flex: 1; overflow: auto; }
+    &__header-actions {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        button {
+            min-height: 29px;
+            padding: 4px 9px;
+            border: 1px solid #ffffff55;
+            border-radius: 5px;
+            background: #fff2;
+            font-size: 12px;
+            font-weight: 700;
+            color: #fff;
+            cursor: pointer;
+            &:hover { background: #fff3; }
+            &:focus-visible { outline: 2px solid #fff; }
+        }
+    }
+
+    &__tabs {
+        flex: 0 0 auto;
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        border-bottom: 1px solid var(--general-section-3, #ddd);
+        background: var(--general-main-2, #fafafa);
+    }
+
+    &__tab {
+        padding: 12px 4px;
+        min-height: 42px;
+        border: none;
+        border-bottom: 3px solid transparent;
+        background: transparent;
+        color: var(--text-general, #4c5564);
+        cursor: pointer;
+        font: inherit;
+        font-size: 13px;
+        font-weight: 600;
+        text-align: center;
+        &:hover { background: var(--general-section-1, #f2f5fc); }
+        &:focus-visible { outline: 2px solid #2450ed; outline-offset: -2px; }
+        &--active {
+            color: #2450ed;
+            border-bottom-color: #2450ed;
+            font-weight: 800;
+            background: var(--general-main-1, #fff);
+        }
+    }
+
+    &__panel-body {
+        flex: 1 1 auto;
+        min-height: 80px;
+        overflow: auto;
+        background: var(--general-main-1, #fff);
+    }
+
+    &__stats {
+        flex: 0 0 auto;
+        border-top: 1px solid var(--general-section-2, #e5e5e5);
+        .run-panel__stat {
+            width: 100%;
+            max-width: none;
+            margin: 0;
+            height: auto;
+        }
+        .run-panel__stat--tiles { width: 100%; }
+    }
+
+    &__footer {
+        flex: 0 0 auto;
+        padding: 10px 14px;
+        border-top: 1px solid var(--general-section-2, #e5e5e5);
+        button {
+            display: block;
+            width: 100%;
+            min-height: 34px;
+            border: 1px solid var(--general-section-4, #999);
+            border-radius: 4px;
+            color: var(--text-prominent, #222);
+            background: var(--general-main-1, #fff);
+            font: inherit;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            &:disabled { opacity: .5; cursor: not-allowed; }
+        }
     }
 
     &__summary {
@@ -163,5 +278,27 @@
         button { float: right; border: 0; background: none; font-size: 22px; cursor: pointer; }
         h3 { margin-top: 0; font-size: 18px; }
         p { font-size: 13px; line-height: 1.6; }
+    }
+}
+
+
+@media (max-width: 1023px) {
+    .bulk-reports__panel {
+        position: fixed;
+        top: 9rem;
+        right: 10px;
+        left: 10px;
+        width: calc(100% - 20px);
+        height: min(70vh, 680px);
+        max-height: calc(100vh - 11rem);
+        min-height: 320px;
+        z-index: 40;
+
+        &--maximized {
+            inset: 8rem 8px 8px;
+            width: auto;
+            height: auto;
+            max-height: none;
+        }
     }
 }

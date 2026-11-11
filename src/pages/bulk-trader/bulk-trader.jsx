@@ -2,6 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { api_base } from '@/external/bot-skeleton';
 import { DerivWSAccountsService } from '@/services/derivws-accounts.service';
+import {
+    isTradingRateLimitError,
+    noteTradingRateLimit,
+    sendTradingRequestWithinBudget,
+    tradingBudgetSnapshot,
+} from '@/services/trading-request-budget';
 import { useStore } from '@/hooks/useStore';
 import BulkReports from './bulk-reports';
 import './bulk-trader.scss';
@@ -34,8 +40,9 @@ const NEEDS_DIGIT = new Set(['DIGITDIFF', 'DIGITMATCH', 'DIGITOVER', 'DIGITUNDER
 const MAX_TRADES = 50;
 // Cap concurrent, unconfirmed purchase operations; fewer trades use fewer slots.
 const MAX_IN_FLIGHT_PURCHASES = 5;
-// Stagger operation starts to preserve the existing conservative WebSocket pacing.
-const MIN_PACING_MS = 850;
+// Start up to 5 operations, staggered by 600 ms; actual trading requests
+// also pass the shared 240/min and 12,000/hour soft request-budget gate.
+const MIN_PACING_MS = 600;
 let nextRequestId = Math.floor(Math.random() * 10000000) + 50000000;
 
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -60,8 +67,10 @@ const marketOrder = item => {
     return 2000;
 };
 
-/** Match reply by req_id; never retry an ambiguous buy. */
-const request = (api, payload, timeout = 15000) => new Promise((resolve, reject) => {
+/** Match reply by req_id; never retry an ambiguous buy. Timeouts begin on SEND,
+ * not while waiting for rate-limit capacity. An unacknowledged buy is uncertain.
+ */
+const request = (api, payload, timeout = 15000, canSend = () => true, onThrottle) => new Promise((resolve, reject) => {
     const reqId = ++nextRequestId;
     let subscription;
     let timer;
@@ -74,16 +83,44 @@ const request = (api, payload, timeout = 15000) => new Promise((resolve, reject)
         if (error) reject(error);
         else resolve(data);
     };
+
     try {
         subscription = api.onMessage().subscribe(event => {
             const data = event?.data || event;
             if (Number(data?.req_id) !== reqId) return;
-            if (data.error) done(new Error(messageFor(data.error)));
-            else done(null, data);
+            if (data.error) {
+                if (isTradingRateLimitError(data.error)) noteTradingRateLimit(api);
+                done(new Error(messageFor(data.error)));
+            } else {
+                done(null, data);
+            }
         });
-        timer = setTimeout(() => done(new Error('Request timed out. Check Deriv account history before making another purchase.')), timeout);
-        api.send({ ...payload, req_id: reqId });
-    } catch (error) { done(error); }
+
+        const send = () => {
+            timer = setTimeout(
+                () => done(new Error('Request timed out. Check Deriv account history before making another purchase.')),
+                timeout
+            );
+            const result = api.send({ ...payload, req_id: reqId });
+            // DerivAPIBasic may also reject the returned promise. Avoid an
+            // unhandled rejection without treating an immediate send ACK as
+            // a confirmed purchase; onMessage remains authoritative.
+            result?.catch?.(error => done(error));
+            return result;
+        };
+
+        const tradingRequest = ['proposal', 'buy', 'sell', 'proposal_open_contract']
+            .some(key => Object.prototype.hasOwnProperty.call(payload, key));
+
+        if (tradingRequest) {
+            sendTradingRequestWithinBudget(api, send, canSend, onThrottle)
+                .catch(error => done(error));
+        } else {
+            send();
+        }
+    } catch (error) {
+        done(error);
+    }
 });
 
 const BulkTrader = observer(() => {

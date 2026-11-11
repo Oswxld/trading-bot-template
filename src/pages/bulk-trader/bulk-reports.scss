@@ -196,6 +196,22 @@
         td.bulk-reports__loss { color: #ff424f; }
     }
 
+    // Same icons, sizing and type hierarchy as the native Deriv transaction
+    // details table: small 24px SVGs, 14px bold column headings, 12px values.
+    &__contract-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        min-height: 24px;
+        vertical-align: middle;
+        svg {
+            display: block;
+            max-width: 24px;
+            max-height: 24px;
+        }
+    }
+
     &__empty {
         color: var(--text-less-prominent, #888);
         text-align: center;
@@ -229,20 +245,42 @@
 
     &__detail {
         background: var(--general-main-1, #fff);
-        color: var(--text-prominent, #222);
+        color: var(--text-general, #333);
         display: flex;
         flex-direction: column;
         height: 100%;
         min-height: 270px;
         padding: 6px;
+        font-family: inherit;
+        font-size: 12px;
+        font-weight: 400;
+
         .bulk-reports__table-scroll { flex: 1; min-height: 0; overflow: auto; }
-        .bulk-reports__table td { min-width: 55px; }
+        .bulk-reports__table {
+            font-size: 12px;
+            th {
+                background: var(--general-section-2, #f0f1f3);
+                font-size: 14px;
+                font-weight: 700;
+                color: var(--text-general, #333);
+                padding: 16px 10px;
+                line-height: 1.25;
+                white-space: normal;
+            }
+            td {
+                min-width: 55px;
+                padding: 16px 10px;
+                font-size: 12px;
+                font-weight: 400;
+                line-height: 1.4;
+            }
+        }
     }
     &__detail-stats {
         display: grid;
         grid-template-columns: repeat(8, minmax(78px, 1fr));
         gap: 8px;
-        background: var(--general-section-1, #f0f1f3);
+        background: var(--general-section-2, #f0f1f3);
         padding: 16px;
         overflow-x: auto;
         > div {
@@ -251,7 +289,17 @@
             flex-direction: column;
             min-width: 78px;
             gap: 8px;
-            b { font-weight: 700; }
+            b {
+                font-size: 14px;
+                font-weight: 700;
+                line-height: 1.25;
+                color: var(--text-general, #333);
+            }
+            span {
+                font-size: 12px;
+                font-weight: 400;
+                line-height: 1.4;
+            }
         }
     }
     &__fine-print {

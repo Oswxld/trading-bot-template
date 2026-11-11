@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import DraggableResizeWrapper from '@/components/draggable/draggable-resize-wrapper';
 import { StatisticsSummary } from '@/components/run-panel/run-panel';
+import { MarketIcon } from '@/components/market/market-icon';
+import { TradeTypeIcon } from '@/components/trade-type/trade-type-icon';
 import './bulk-reports.scss';
 
 // A bulk purchase is not a Deriv Bot run. Render the existing Deriv Drawer,
@@ -10,6 +12,45 @@ const amount = (number, currency) => `${Number(number || 0).toFixed(2)} ${curren
 const safeCsv = value => {
     const str = String(value ?? '');
     return '"' + (/^[=+@\-]/.test(str) ? "'" : '') + str.replace(/"/g, '""') + '"';
+};
+
+// Use the exact same Deriv SVG icon components as Bot Builder's
+// Transactions detailed summary. Bulk records currently save the action label
+// (e.g. "Differs") instead of Deriv's API contract_type code.
+const BULK_TRADE_TYPE_CODES = {
+    Differs: 'DIGITDIFF',
+    Matches: 'DIGITMATCH',
+    Over: 'DIGITOVER',
+    Under: 'DIGITUNDER',
+    Even: 'DIGITEVEN',
+    Odd: 'DIGITODD',
+    Rise: 'CALL',
+    Fall: 'PUT',
+};
+const resolveTradeTypeCode = value => {
+    const label = String(value || '');
+    return BULK_TRADE_TYPE_CODES[label] || Object.values(BULK_TRADE_TYPE_CODES)
+        .find(code => code === label.toUpperCase()) || null;
+};
+
+const MarketCell = ({ item }) => {
+    const symbol = item.symbol;
+    const name = item.symbolName || symbol || 'Unknown market';
+    return symbol ? (
+        <span className='bulk-reports__contract-icon' title={name} aria-label={name}>
+            <MarketIcon type={symbol} size='sm' />
+        </span>
+    ) : <span>{name}</span>;
+};
+
+const TradeTypeCell = ({ item }) => {
+    const contractCode = resolveTradeTypeCode(item.contractType);
+    const name = item.contractType || 'Unknown trade type';
+    return contractCode ? (
+        <span className='bulk-reports__contract-icon' title={name} aria-label={name}>
+            <TradeTypeIcon type={contractCode} size='sm' />
+        </span>
+    ) : <span>{name}</span>;
 };
 
 const TradesTable = ({ records, currency, detailed = false }) => (
@@ -34,8 +75,8 @@ const TradesTable = ({ records, currency, detailed = false }) => (
                         <tr key={item.contractId || item.number}>
                             {detailed && <td>{item.timestamp ? new Date(item.timestamp).toLocaleString() : '—'}</td>}
                             <td title={item.contractId || item.reason || ''}>{item.contractId || '—'}</td>
-                            <td>{item.symbolName || item.symbol || '—'}</td>
-                            <td>{item.contractType || '—'}</td>
+                            <td><MarketCell item={item} /></td>
+                            <td><TradeTypeCell item={item} /></td>
                             {detailed && <><td>{item.entrySpot ?? '—'}</td><td>{item.exitSpot ?? '—'}</td></>}
                             <td>{Number.isFinite(item.price) && item.price > 0 ? amount(item.price, currency) : '—'}</td>
                             <td className={item.status === 'won' ? 'bulk-reports__profit' : item.status === 'lost' ? 'bulk-reports__loss' : ''}>

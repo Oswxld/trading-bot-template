@@ -115,8 +115,6 @@ const BulkTrader = observer(() => {
     const runRef = useRef(false);
     const stopRef = useRef(false);
     const mountedRef = useRef(true);
-    const streamRef = useRef(null);
-    const historyRef = useRef(null);
 
     useEffect(() => {
         mountedRef.current = true;
@@ -235,7 +233,7 @@ const BulkTrader = observer(() => {
                         const cached = Array.isArray(api_base.active_symbols) ? api_base.active_symbols : [];
                         const response = cached.length ? { active_symbols: cached } : await request(api, { active_symbols: 'brief' });
                         const available = (response?.active_symbols || [])
-                            .filter(item => /volatility|step index/i.test(item.display_name || ''))
+                            .filter(item => /volatility|step.*index/i.test(item.display_name || ''))
                             .filter(item => item.underlying_symbol || item.symbol)
                             .map(item => ({
                                 value: item.underlying_symbol || item.symbol,

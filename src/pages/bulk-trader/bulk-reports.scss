@@ -196,6 +196,106 @@
         td.bulk-reports__loss { color: #ff424f; }
     }
 
+    // Mirror the native Deriv Bot transaction rows: two lines for entry and
+    // exit (radio-on / radio-off) and two lines for buy price and P/L.
+    // The shared TransactionFieldLoader supplies the SAME animated SVG shimmer
+    // used by src/components/transactions/transaction.tsx.
+    &__table--compact {
+        table-layout: fixed;
+
+        th {
+            padding: 12px 8px;
+            font-size: 12px;
+            white-space: normal;
+            vertical-align: middle;
+        }
+
+        td {
+            height: 56px;
+            padding: 8px 7px;
+            vertical-align: middle;
+            font-size: 12px;
+        }
+
+        th:first-child, td:first-child { width: 30%; }
+        th:nth-child(2), td:nth-child(2) { width: 33%; }
+        th:nth-child(3), td:nth-child(3) { width: 37%; }
+    }
+
+    &__icon-pair {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        min-width: 0;
+    }
+
+    &__spot-lines, &__price-lines {
+        vertical-align: middle;
+        > div + div { margin-top: 6px; }
+    }
+
+    &__spot-line {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-height: 12px;
+        white-space: nowrap;
+    }
+
+    &__spot-icon {
+        width: 12px;
+        height: 12px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+
+        svg { display: block; }
+    }
+
+    &__pending {
+        display: inline-flex;
+        max-width: 100%;
+        width: 80px;
+        min-height: 12px;
+        align-items: center;
+        overflow: hidden;
+
+        svg {
+            display: block;
+            width: 100%;
+            max-width: 80px;
+            height: 10px;
+        }
+    }
+
+    &__missing { color: var(--text-less-prominent, #999); }
+
+    &__outcome {
+        font-size: 11px;
+        color: var(--text-general, #555);
+        overflow-wrap: anywhere;
+    }
+
+    &__row--active {
+        background: var(--general-main-1, #fff);
+    }
+
+    &__date {
+        min-width: 115px;
+        line-height: 1.6;
+    }
+
+    &__reference {
+        min-width: 100px;
+        word-break: break-word;
+    }
+
+    &__table--detailed {
+        min-width: 780px;
+        td { vertical-align: middle; }
+    }
+
     // Same icons, sizing and type hierarchy as the native Deriv transaction
     // details table: small 24px SVGs, 14px bold column headings, 12px values.
     &__contract-icon {

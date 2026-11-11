@@ -133,6 +133,36 @@ describe('Deriv shared trading WebSocket request budget', () => {
         expect(limiter.tradingBudgetSnapshot().minuteUsed).toBe(5);
     });
 
+    it('serializes simultaneous quota checks at the 240/min boundary', async () => {
+        const { socket } = createSocket();
+        limiter.trackTradingSocket(socket);
+        for (let i = 0; i < 239; i++) sendTrade(socket);
+
+        const send = jest.fn(() => sendTrade(socket, { buy: 'proposal_id', price: 1 }));
+        const pending = Array.from({ length: 5 }, () =>
+            limiter.sendTradingRequestWithinBudget({ connection: socket }, send, () => true)
+        );
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+        expect(send).toHaveBeenCalledTimes(1);
+        expect(limiter.tradingBudgetSnapshot().minuteUsed).toBe(240);
+
+        await jest.advanceTimersByTimeAsync(61_000);
+        await Promise.all(pending);
+        expect(send).toHaveBeenCalledTimes(5);
+    });
+
+    it('observes but does not delay raw Bot Builder frames when Bulk Trader reaches its cap', () => {
+        const { socket } = createSocket();
+        limiter.trackTradingSocket(socket);
+        for (let i = 0; i < 240; i++) sendTrade(socket);
+        // The existing app is NOT modified to await Bulk Trader's limiter.
+        sendTrade(socket, { buy: 'other_component_purchase', price: 1 });
+        expect(socket.send).toHaveBeenCalledTimes(241);
+        expect(limiter.tradingBudgetSnapshot().minuteUsed).toBe(241);
+    });
+
     it('backs off on rate-limit rejection, caps backoff, and resets escalation after a quiet minute', () => {
         const { socket } = createSocket();
         const api = { connection: socket };

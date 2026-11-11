@@ -41,6 +41,16 @@ This is NOT Deriv's REST Bulk Purchase for multiple different accounts. For each
 - **Scope limitation:** Counter state is held in the browser page process. Opening other tabs, browsers, devices, or separate app deployments may produce independently tracked connections, and requests from outside this app are not observable. The limit is a **best-effort client-side safety margin**, not a Deriv-provided authoritative remaining-quota value or a guarantee against server rejection.
 - Local unit tests: `npx jest src/services/__tests__/trading-request-budget.test.js --runInBand --coverage=false`. Tests use synthetic WebSocket frames and fake clocks. They do not replace live Deriv demo-account tests.
 
+### Step 3: Bounded bulk purchase scheduler
+
+- The operation queue lives in `src/pages/bulk-trader/bulk-execution.js`. It reserves a unique **0-based trade index** before each pacing delay and never schedules more than the quantity selected.
+- Worker count is `min(5, quantity)`: selecting **2 trades starts at most 2 workers**, selecting **7 trades at most 5**, and selecting **50 trades at most 5**. Workers refill slots only after their own operation finishes; unrelated proposals/buys overlap.
+- A minimum **500 ms gap applies between operation starts**; the shared trading request budget can impose additional delays. This does **not** guarantee a purchase every 500 ms or any trading result.
+- While a batch runs, the Stop control shows the number of processed operations and currently in-flight operations. At completion, the feedback and Journal report elapsed time and **peak active operations** alongside confirmed, failed/unconfirmed and skipped counts.
+- During the 500 ms pacing wait, Stop and account switches are checked at intervals no longer than 100 ms. Unexpected scheduler errors halt new reservations and are reported only after active workers have completed.
+- Unit test command: `npx jest src/pages/bulk-trader/__tests__/bulk-execution.test.js --runInBand --coverage=false`. Test cases cover quantities **1, 2, 3, 5, 7, 10, 50**, pacing, delayed purchase confirmations, Stop, and unexpected errors.
+- **No Step 4 settlement or Step 5 error-handling redesign is included in this step.** Use the Deriv demo statement as the authoritative purchase count; mock scheduler tests cannot verify actual broker execution.
+
 Remaining stages: verify end-to-end execution behavior, correctness of settlement updates, and actual throughput before enabling real-money trading. The 500 ms setting remains demo-only.
 
 ## Run on your own laptop
@@ -58,7 +68,7 @@ Run `npm run build`, then `npm start`; open `https://localhost:8443/#bulk_trader
 7. Test invalid stake/history, unsupported Step trade type, account switching, Stop, logout, WebSocket loss, and changing away from the Bulk tab mid-run before considering public use.
 8. If you can reproduce a build or API error, provide the terminal/Console error **without API keys, OAuth codes, access tokens, or other credentials**.
 
-**Step 1 audit:** Fixed double-counted rate-limit rejections, cross-account attribution of late confirmations, and incorrectly labeled cancelled purchase requests. **Step 2:** Strengthened per-page shared WebSocket metering, rolling soft quotas and backoff, and reduced start spacing to 500 ms. The test suite has not yet been run against the app on your machine; further execution and settlement verification remains pending.
+**Step 1 audit:** Fixed double-counted rate-limit rejections, cross-account attribution of late confirmations, and incorrectly labeled cancelled purchase requests. **Step 2:** Strengthened per-page shared WebSocket metering, rolling soft quotas and backoff, and reduced start spacing to 500 ms. **Step 3:** Extracted and tested a quantity-bounded purchase operation scheduler, preserving five-slot concurrency and 500 ms start pacing while adding elapsed-time and peak-concurrency feedback. The test suite has not yet been run against the app on your machine; further execution and settlement verification remains pending.
 
 **Not yet validated:** production build on your laptop, OAuth login / API against your account, live tick/history behavior, accurate settlement stats, menu responsiveness and Deriv contract availability. This work stays on `develop` until tested. Do NOT deploy it for real-money trading as-is.
 

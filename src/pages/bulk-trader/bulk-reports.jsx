@@ -301,7 +301,7 @@ function BulkReports({ records, journal, accountId, currency, balance, isRunning
                             <small>{mostRecent.contractId
                                 ? `Contract ${mostRecent.contractId}`
                                 : 'Waiting for Deriv purchase confirmation'}</small>
-                        </> : <span>No bulk trades yet. Select a demo account and place a trade to see its summary.</span>}
+                        </> : <span>No bulk trades yet. Select an account and place a trade to see its summary.</span>}
                     </div>}
 
                     {active === 1 && <div className='bulk-reports__transactions'>

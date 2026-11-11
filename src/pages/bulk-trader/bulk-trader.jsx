@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { api_base } from '@/external/bot-skeleton';
 import { DerivWSAccountsService } from '@/services/derivws-accounts.service';
+import { checkRealExposure, identifyBulkAccount, REAL_LIMITS } from './bulk-account-safety';
 import { tradingBudgetSnapshot } from '@/services/trading-request-budget';
 import { useStore } from '@/hooks/useStore';
 import {
@@ -21,8 +22,8 @@ import BulkReports from './bulk-reports';
 import './bulk-trader.scss';
 
 /**
- * Single-account bulk trader, intentionally DEMO-ONLY until all API flows and
- * market/contract combinations are tested. Never silently switch accounts.
+ * Single-account bulk trader for the selected practice or real account.
+ * Never silently switch accounts or infer account type from login ID.
  * Unlike Deriv's REST multi-account bulk endpoint, each purchase is a separate
  * proposal+buy on the existing active-account WebSocket connection.
  */
@@ -114,7 +115,9 @@ const BulkTrader = observer(() => {
     const accounts = DerivWSAccountsService.getStoredAccounts() || [];
     const account = accounts.find(item => item.account_id === activeAccountId);
     const currency = account?.currency || client?.currency || 'USD';
-    const isDemo = Boolean(account?.account_type === 'demo' || /^VRT/i.test(activeAccountId)) && Boolean(activeAccountId);
+    const accountMode = identifyBulkAccount(account, activeAccountId);
+    const isReal = accountMode === 'real';
+    const accountLabel = isReal ? 'REAL ACCOUNT' : accountMode === 'demo' ? 'Practice account' : 'Select an account';
     const [reportAccount, setReportAccount] = useState(activeAccountId);
     const [records, setRecords] = useState(() => fromStorage(activeAccountId, 'records', true));
     const [journal, setJournal] = useState(() => fromStorage(activeAccountId, 'journal'));
@@ -124,6 +127,7 @@ const BulkTrader = observer(() => {
     const activeAccountRef = useRef(activeAccountId);
     activeAccountRef.current = activeAccountId;
     const runRef = useRef(false);
+    const preflightRef = useRef(false);
     const stopRef = useRef(false);
     const mountedRef = useRef(true);
     const settlementTimersRef = useRef(new Set());
@@ -210,7 +214,7 @@ const BulkTrader = observer(() => {
     // reconnect without activeAccountId changing; the previous listener would
     // otherwise remain attached to the dead connection.
     useEffect(() => {
-        if (!activeAccountId || !isDemo) return undefined;
+        if (!activeAccountId || accountMode === 'unavailable') return undefined;
         let stopped = false;
         let observedApi = null;
         let listener = null;
@@ -294,7 +298,7 @@ const BulkTrader = observer(() => {
             clearInterval(reconnectWatch);
             listener?.unsubscribe?.();
         };
-    }, [activeAccountId, isDemo]);
+    }, [activeAccountId, accountMode]);
 
     // A one-tick contract can settle before its first streamed update reaches
     // this tab. Only query Deriv if the shared stream has NOT closed the
@@ -467,6 +471,8 @@ const BulkTrader = observer(() => {
     const currentSelection = TRADE_TYPES.find(item => item.value === tradeType) || TRADE_TYPES[0];
     const chosenMarket = markets.find(item => item.value === market);
     const isRunning = status === 'running';
+    const maxOrders = isReal ? REAL_LIMITS.trades : MAX_TRADES;
+    const maxStake = isReal ? REAL_LIMITS.stake : 100;
 
     const stop = () => {
         stopRef.current = true;
@@ -474,13 +480,13 @@ const BulkTrader = observer(() => {
     };
 
     const begin = async (contractType, buttonLabel) => {
-        if (runRef.current) return;
+        if (runRef.current || preflightRef.current) return;
         if (!valid) {
-            setMessage('Enter valid stake (0–100), trades (1–50), duration (1–10 ticks) and history ticks (10–5,000).');
+            setMessage('Enter valid stake, trades (1–50), duration (1–10 ticks) and history ticks (10–5,000).');
             return;
         }
-        if (!isDemo || !account?.currency) {
-            setMessage('DEMO-ONLY test mode. Switch to an authenticated Deriv demo account.');
+        if (accountMode === 'unavailable') {
+            setMessage('Select a verified authenticated Deriv account before trading.');
             return;
         }
         if (availableContracts && !availableContracts.has(contractType)) {
@@ -493,7 +499,7 @@ const BulkTrader = observer(() => {
         }
         const api = api_base.api;
         if (!api || api.connection?.readyState !== 1 || api_base.account_id !== activeAccountId) {
-            setMessage('Wait for your demo account WebSocket to connect.');
+            setMessage('Wait for the selected account WebSocket to connect.');
             return;
         }
         if (api_base.is_running) {
@@ -504,14 +510,68 @@ const BulkTrader = observer(() => {
             setMessage('An earlier purchase has no confirmation. Check the Deriv account statement before starting another batch. Only reset this local report after reconciling those purchases.');
             return;
         }
-        if (!window.confirm(
-            `Buy ${numberTrades} separate ${buttonLabel} DEMO contracts on ${activeAccountId}?\n` +
-            `Market: ${chosenMarket?.label || market}\n` +
-            `Stake each: ${stakeValue.toFixed(2)} ${currency}\n` +
-            `Maximum intended stake: ${exposure.toFixed(2)} ${currency}\n\n` +
-            `Up to ${Math.min(MAX_IN_FLIGHT_PURCHASES, numberTrades)} purchase operations can overlap.\n` +
-            'Orders already sent cannot be undone after submission. Proceed?'
-        )) return;
+        // Verify balance with Deriv's authenticated socket, not a cached UI number.
+        preflightRef.current = true;
+        try {
+            if (isReal) {
+                if (numberTrades > REAL_LIMITS.trades || stakeValue > REAL_LIMITS.stake ||
+                    exposure > REAL_LIMITS.batch) {
+                    setMessage('Real-account limits exceeded. Reduce stake, trade count or total exposure.');
+                    return;
+                }
+                setMessage('Verifying real-account balance and exposure…');
+                let balanceData;
+                try {
+                    const response = await request(api, { balance: 1 }, 12000);
+                    balanceData = response?.balance;
+                } catch (error) {
+                    setMessage(`Could not verify the account balance: ${messageFor(error)}`);
+                    return;
+                }
+                const check = checkRealExposure({
+                    stake: stakeValue, quantity: numberTrades,
+                    balance: balanceData?.balance,
+                    receivedCurrency: balanceData?.currency,
+                    receivedAccount: balanceData?.loginid || balanceData?.account_id,
+                    accountId: activeAccountId, currency: account.currency,
+                });
+                if (!check.allowed) {
+                    setMessage(check.message);
+                    return;
+                }
+            }
+            if (!mountedRef.current || activeAccountRef.current !== activeAccountId ||
+                api_base.account_id !== activeAccountId || api_base.api !== api ||
+                api.connection?.readyState !== 1 || api_base.is_running ||
+                localStorage.getItem('active_loginid') !== activeAccountId) {
+                setMessage('Account or connection changed during verification. No batch started.');
+                return;
+            }
+            if (!window.confirm(
+                `Purchase ${numberTrades} separate ${buttonLabel} contracts on ${accountLabel} (${activeAccountId})?\n` +
+                `Market: ${chosenMarket?.label || market}\n` +
+                `Stake each: ${stakeValue.toFixed(2)} ${currency}\n` +
+                `Maximum intended stake: ${exposure.toFixed(2)} ${currency}\n\n` +
+                `Up to ${Math.min(isReal ? REAL_LIMITS.concurrent : MAX_IN_FLIGHT_PURCHASES, numberTrades)} purchase operations may overlap.\n` +
+                'Submitted orders cannot be undone. Proceed?'
+            )) return;
+            if (isReal) {
+                const expected = `REAL ${activeAccountId}`;
+                if (window.prompt(`REAL MONEY: orders debit actual funds. Type "${expected}" to authorize.`) !== expected) {
+                    setMessage('Real-money batch not authorized. No purchases sent.');
+                    return;
+                }
+            }
+        } finally {
+            preflightRef.current = false;
+        }
+        if (!mountedRef.current || activeAccountRef.current !== activeAccountId ||
+            api_base.account_id !== activeAccountId || api_base.api !== api ||
+            api.connection?.readyState !== 1 || api_base.is_running ||
+            localStorage.getItem('active_loginid') !== activeAccountId) {
+            setMessage('Account or connection changed before submission. No batch started.');
+            return;
+        }
         // Prevent overlapping batches across Bulk Trader component remounts
         // within THIS browser page (other tabs/devices remain independent).
         if (!acquireBulkRun(activeAccountId)) {
@@ -524,9 +584,9 @@ const BulkTrader = observer(() => {
         setStatus('running');
         setProgress(0);
         setInFlight(0);
-        const workerLimit = Math.min(MAX_IN_FLIGHT_PURCHASES, numberTrades);
-        setMessage(`Sending up to ${workerLimit} demo purchase operations concurrently (staggered to respect API limits)…`);
-        log(`Started ${numberTrades} ${buttonLabel} demo purchases on ${chosenMarket?.label || market}; max ${workerLimit} pending, intended stake ${exposure.toFixed(2)} ${currency}.`);
+        const workerLimit = Math.min(isReal ? REAL_LIMITS.concurrent : MAX_IN_FLIGHT_PURCHASES, numberTrades);
+        setMessage(`Sending up to ${workerLimit} purchase operations on ${accountLabel} concurrently (staggered to respect API limits)…`);
+        log(`Started ${numberTrades} ${buttonLabel} orders on ${accountLabel} for ${chosenMarket?.label || market}; max ${workerLimit} pending, intended stake ${exposure.toFixed(2)} ${currency}.`);
 
         let successes = 0;
         let failures = 0;
@@ -698,7 +758,7 @@ const BulkTrader = observer(() => {
         try {
             const stats = await runBoundedBulkOperations({
                 quantity: numberTrades,
-                maxConcurrent: MAX_IN_FLIGHT_PURCHASES,
+                maxConcurrent: workerLimit,
                 spacingMs: MIN_PACING_MS,
                 shouldContinue: isSafe,
                 execute: executePurchase,
@@ -751,7 +811,7 @@ const BulkTrader = observer(() => {
                 <div className='bulk-trader__report-toolbar'>
                     <div className='bulk-trader__report-title'>
                         <strong>Bulk Trader</strong>
-                        <span>Independent from Bot Builder · Demo testing</span>
+                        <span>Independent from Bot Builder · {accountLabel}</span>
                     </div>
                     <button
                         type='button'
@@ -822,11 +882,11 @@ const BulkTrader = observer(() => {
                             onChange={e => setDuration(e.target.value)} />
                     </label>
                     <label>STAKE
-                        <input type='number' min='0.01' max='100' step='0.01' disabled={isRunning} value={stake}
+                        <input type='number' min='0.01' max={maxStake} step='0.01' disabled={isRunning} value={stake}
                             onChange={e => setStake(e.target.value)} />
                     </label>
                     <label>NO OF TRADES
-                        <input type='number' min='1' max='50' step='1' disabled={isRunning} value={quantity}
+                        <input type='number' min='1' max={maxOrders} step='1' disabled={isRunning} value={quantity}
                             onChange={e => setQuantity(e.target.value)} />
                     </label>
                 </div>
@@ -839,7 +899,10 @@ const BulkTrader = observer(() => {
                 <div className='bulk-trader__buttons'>
                     {currentSelection.actions.map(([type, label], index) => (
                         <button key={type} type='button' className={index === 0 ? 'bulk-trader__buy-a' : 'bulk-trader__buy-b'}
-                            disabled={isRunning || !valid || !isDemo || (availableContracts && !availableContracts.has(type))}
+                            disabled={isRunning || preflightRef.current || !valid || accountMode === 'unavailable' ||
+                                numberTrades > maxOrders || stakeValue > maxStake ||
+                                (isReal && exposure > REAL_LIMITS.batch) ||
+                                (availableContracts && !availableContracts.has(type))}
                             title={availableContracts && !availableContracts.has(type) ? 'Not offered on this market' : ''}
                             onClick={() => begin(type, label)}>
                             {label}
@@ -849,7 +912,12 @@ const BulkTrader = observer(() => {
                 {isRunning && <button className='bulk-trader__stop' type='button' onClick={stop}>
                     Stop bulk orders ({progress}/{quantity} processed; {inFlight} in flight)
                 </button>}
-                {!isDemo && <p className='bulk-trader__notice'>Demo account required for bulk trading tests. Your regular Deriv bot remains unaffected.</p>}
+                {isReal && <p className='bulk-trader__notice' role='alert'>
+                    REAL MONEY: orders debit the selected account. Limits: {REAL_LIMITS.trades} trades,
+                    {REAL_LIMITS.stake} {currency} per trade, {REAL_LIMITS.batch} {currency} per batch,
+                    at most {REAL_LIMITS.percent * 100}% of freshly verified balance. Orders already sent cannot be recalled.
+                </p>}
+                {accountMode === 'unavailable' && <p className='bulk-trader__notice'>Select an authenticated Deriv account to enable orders.</p>}
                 {message && <p className='bulk-trader__feedback' role='status'>{message}</p>}
             </div>
 

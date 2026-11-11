@@ -20,7 +20,7 @@
     // instead of letting it cover the market fields, digit circles and buttons.
     @media (min-width: 1024px) {
         &--reports-open &__top {
-            width: calc(100% - 386px);
+            width: calc(100% - 440px);
             margin-inline-start: 0;
             margin-inline-end: auto;
         }
@@ -285,6 +285,8 @@
 .bulk-trader .bulk-reports__drawer {
     top: 10.4rem !important;
     height: calc(100vh - 14rem) !important;
+    width: 420px !important;
+    .run-panel__stat { width: 100%; }
     .dc-drawer__toggle {
         background: #e7eeff;
         border-color: #8ca8fa;
@@ -305,5 +307,6 @@
     .bulk-trader .bulk-reports__drawer {
         top: calc(100% - 9.8rem) !important;
         height: calc(100% - 10.1rem) !important;
+        width: 100vw !important;
     }
 }

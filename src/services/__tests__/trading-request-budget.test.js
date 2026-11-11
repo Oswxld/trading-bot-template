@@ -154,12 +154,12 @@ describe('Deriv shared trading WebSocket request budget', () => {
     });
 
     it('observes but does not delay raw Bot Builder frames when Bulk Trader reaches its cap', () => {
-        const { socket } = createSocket();
+        const { socket, sent } = createSocket();
         limiter.trackTradingSocket(socket);
         for (let i = 0; i < 240; i++) sendTrade(socket);
         // The existing app is NOT modified to await Bulk Trader's limiter.
         sendTrade(socket, { buy: 'other_component_purchase', price: 1 });
-        expect(socket.send).toHaveBeenCalledTimes(241);
+        expect(sent).toHaveLength(241);
         expect(limiter.tradingBudgetSnapshot().minuteUsed).toBe(241);
     });
 

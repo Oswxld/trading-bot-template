@@ -49,6 +49,7 @@ jobs:
             src/pages/bulk-trader/__tests__/bulk-contract-monitor.test.js \
             src/pages/bulk-trader/__tests__/bulk-request-safety.test.js \
             src/pages/bulk-trader/__tests__/bulk-api-request.test.js \
+            src/pages/bulk-trader/__tests__/bulk-trader-integration.test.js \
             src/services/__tests__/trading-request-budget.test.js \
             --ci --runInBand --coverage=false
 

@@ -261,60 +261,96 @@ const BulkTrader = observer(() => {
         }
     };
 
-    // Deriv's APIBase already subscribes to proposal_open_contract on the
-    // authenticated socket in authorizeAndSubscribe(). Listen to that shared
-    // stream instead of opening another stream or requesting a status snapshot
-    // immediately after EVERY buy. Track only our own recorded contract IDs.
+    // APIBase owns the authenticated proposal_open_contract stream with
+    // subscribe: 1 (without contract_id: this streams all open contracts).
+    // Reuse it; do not open another stream for each bulk purchase.
     //
-    // On tab return, reconcile any saved contracts that are still marked open.
+    // Rebind our listener on WebSocket replacement. The trading socket can
+    // reconnect without activeAccountId changing; the previous listener would
+    // otherwise remain attached to the dead connection.
     useEffect(() => {
         if (!activeAccountId || !isDemo) return undefined;
         let stopped = false;
-        let listener;
-        const initialise = async () => {
-            for (let attempt = 0; attempt < 15 && !stopped; attempt++) {
-                const api = api_base.api;
-                if (api?.connection?.readyState === 1 && api_base.account_id === activeAccountId) {
-                    listener = api.onMessage().subscribe(event => {
-                        const data = event?.data || event;
-                        if (!stopped && activeAccountRef.current === activeAccountId &&
-                            data.msg_type === 'proposal_open_contract' && data.proposal_open_contract) {
-                            applyContractUpdate(data.proposal_open_contract);
-                        }
-                    });
+        let observedApi = null;
+        let listener = null;
+        let socketGeneration = 0;
 
-                    // No new per-contract subscription is created here. These
-                    // snapshots are recovery-only for trades from a prior visit.
-                    const pending = recordsRef.current
-                        .filter(item => item.contractId && item.status === 'open')
-                        .slice(0, 50);
-                    for (const record of pending) {
-                        const canObserve = () => !stopped && mountedRef.current &&
-                            activeAccountRef.current === activeAccountId &&
-                            api_base.api === api && api_base.account_id === activeAccountId &&
-                            api.connection?.readyState === 1;
-                        if (!canObserve()) break;
-                        try {
-                            const data = await request(
-                                api,
-                                { proposal_open_contract: 1, contract_id: Number(record.contractId) },
-                                12000,
-                                canObserve
-                            );
-                            if (canObserve()) applyContractUpdate(data.proposal_open_contract);
-                        } catch {
-                            // A future stream event or later visit can recover it.
-                        }
-                        if (canObserve()) await delay(120);
-                    }
-                    return;
+        const validSocket = api => !stopped && mountedRef.current &&
+            activeAccountRef.current === activeAccountId &&
+            api_base.api === api && api_base.account_id === activeAccountId &&
+            api?.connection?.readyState === 1;
+
+        // When returning to this tab or reconnecting, reconcile saved records
+        // that still appear open. Skip anything settled by the live stream
+        // before its recovery request starts; never guess an outcome.
+        const recoverUnsettled = async (api, generation) => {
+            const canObserve = () => validSocket(api) && observedApi === api &&
+                socketGeneration === generation;
+            const pendingIds = recordsRef.current
+                .filter(item => item.contractId && item.status === 'open')
+                .slice(0, 50)
+                .map(item => String(item.contractId));
+
+            for (const contractId of pendingIds) {
+                if (!canObserve()) return;
+                if (!recordsRef.current.some(item =>
+                    item.contractId === contractId && item.status === 'open'
+                )) continue;
+                try {
+                    const data = await request(
+                        api,
+                        { proposal_open_contract: 1, contract_id: Number(contractId) },
+                        12000,
+                        canObserve
+                    );
+                    if (canObserve()) applyContractUpdate(data.proposal_open_contract);
+                } catch {
+                    // Keep it open, not fabricated as lost. The live stream
+                    // or a later session may still deliver a final status.
                 }
-                await delay(700);
+                if (canObserve()) await delay(120);
             }
         };
-        initialise();
+
+        const watchSocket = () => {
+            const api = api_base.api;
+            if (!validSocket(api)) {
+                if (observedApi) {
+                    listener?.unsubscribe?.();
+                    listener = null;
+                    observedApi = null;
+                    socketGeneration++;
+                }
+                return;
+            }
+            if (observedApi === api) return;
+            listener?.unsubscribe?.();
+            listener = null;
+            observedApi = api;
+            const generation = ++socketGeneration;
+            try {
+                listener = api.onMessage().subscribe(event => {
+                    if (!validSocket(api) || observedApi !== api ||
+                        socketGeneration !== generation) return;
+                    const data = event?.data || event;
+                    if (data.msg_type === 'proposal_open_contract' && data.proposal_open_contract) {
+                        applyContractUpdate(data.proposal_open_contract);
+                    }
+                });
+                void recoverUnsettled(api, generation);
+            } catch {
+                observedApi = null;
+                listener?.unsubscribe?.();
+                listener = null;
+            }
+        };
+
+        watchSocket();
+        const reconnectWatch = setInterval(watchSocket, 1500);
         return () => {
             stopped = true;
+            socketGeneration++;
+            clearInterval(reconnectWatch);
             listener?.unsubscribe?.();
         };
     }, [activeAccountId, isDemo]);

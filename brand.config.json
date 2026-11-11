@@ -1,11 +1,11 @@
 {
-    "brand_name": "YourBrand",
+    "brand_name": "Yolo Traders",
     "brand_domain": "yourbrand.com",
     "brand_hostname": {
         "staging": "staging.yourbrand.com/dashboard",
         "production": "yourbrand.com/dashboard"
     },
-    "domain_name": "YourBrand.com",
+    "domain_name": "Yolo Traders",
     "colors": {
         "primary": "#3b82f6",
         "secondary": "#64748b",
@@ -48,9 +48,30 @@
         }
     },
     "color_variants": {
-        "light_variants": [100, 200, 300, 400, 500],
-        "dark_variants": [600, 700, 800, 900],
-        "opacity_variants": [10, 20, 30, 40, 50, 60, 70, 80, 90]
+        "light_variants": [
+            100,
+            200,
+            300,
+            400,
+            500
+        ],
+        "dark_variants": [
+            600,
+            700,
+            800,
+            900
+        ],
+        "opacity_variants": [
+            10,
+            20,
+            30,
+            40,
+            50,
+            60,
+            70,
+            80,
+            90
+        ]
     },
     "theme_config": {
         "enable_dynamic_themes": true,
@@ -58,14 +79,14 @@
         "css_variable_prefix": "--brand"
     },
     "platform": {
-        "name": "Trading Bot",
+        "name": "Yolo Traders",
         "logo": {
             "type": "component",
             "component_name": "BrandLogo",
-            "alt_text": "Trading Bot",
+            "alt_text": "Yolo Traders",
             "link_url": "/",
             "show_text": false,
-            "text": "Trading Bot"
+            "text": "Yolo Traders"
         },
         "footer": {
             "enable_language_settings": false,

@@ -1,13 +1,53 @@
 .app-header {
     &__logo {
-        padding-inline-start: 3.2rem;
-        padding-inline-end: 2rem;
-        height: 32px;
+        padding-inline-start: 2.4rem;
+        padding-inline-end: 1.6rem;
+        min-height: 40px;
         display: flex;
         align-items: center;
+        text-decoration: none;
 
         &-text {
             margin-left: 8px;
         }
+    }
+}
+
+.yolo-brand-logo {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.8rem;
+    max-width: 100%;
+    min-width: 0;
+    vertical-align: middle;
+    white-space: nowrap;
+
+    &__mark {
+        display: block;
+        width: auto;
+        height: 100%;
+        aspect-ratio: 1;
+        flex: none;
+        object-fit: contain;
+        background: #000;
+        border-radius: 3px;
+    }
+
+    &__text {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+        font-size: 1.45rem;
+        line-height: 1.15;
+        font-weight: 800;
+        letter-spacing: 0.015em;
+        color: var(--text-general, #222);
+        text-transform: uppercase;
+    }
+}
+
+.mobile-menu__header .yolo-brand-logo {
+    gap: 0.6rem;
+
+    &__text {
+        font-size: 1.2rem;
     }
 }

@@ -19,7 +19,7 @@ const MenuHeader = ({ hideLanguageSetting, openLanguageSetting }: TMenuHeader) =
     return (
         <div className='mobile-menu__header'>
             {/* [AI] Show brand logo instead of "Menu" text */}
-            <BrandLogo width={100} height={28} fill='var(--text-general)' />
+            <BrandLogo width={160} height={32} />
             {/* [/AI] */}
 
             {!hideLanguageSetting && (

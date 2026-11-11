@@ -19,7 +19,7 @@ export const AppLogo = () => {
     return (
         <a href={logoUrl} className='app-header__logo' aria-label={localize('Home')}>
             {/* [AI] Use configurable brand logo from brand.config.json */}
-            <BrandLogo width={120} height={32} fill='var(--text-general)' />
+            <BrandLogo width={180} height={36} />
             {/* [/AI] */}
         </a>
     );

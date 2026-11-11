@@ -89,6 +89,15 @@ This is NOT Deriv's REST Bulk Purchase for multiple different accounts. For each
 
 The `Bulk Trader verification` GitHub Actions workflow automatically reruns the targeted tests and build after relevant commits to `develop`; no manual test execution is needed for those code paths.
 
+### Bulk Trader transaction animations and detailed summary (11 November 2026)
+
+- The compact Transactions tab now mirrors Deriv Bot's **three-column layout**: Type, Entry/Exit spot (with the same radio-on/radio-off markers), and Buy price and P/L (two lines). Market/contract icons are reused from the native Deriv components.
+- Deriv Bot's original `react-content-loader` **animated SVG transaction skeletons** were extracted into `src/components/transactions/transaction-loaders.tsx` and reused by **both** the native bot and Bulk Trader. When a new operation begins, its transaction row is added immediately with **quoting** / **buying** placeholders. Once Deriv confirms the purchase, the reference and actual buy price fill in; while the contract is still open, missing entry/exit spots and P/L continue shimmering.
+- The **View Detail** table displays the real transaction timestamp in GMT, Deriv's contract reference, market icon, trade-type icon, **entry spot, exit spot, confirmed buy price and settled profit/loss**. Unresolved values retain native shimmer until Deriv reports them; settled outcomes replace the shimmer with the actual numbers (green for wins, red for losses).
+- Each attempt has a **stable local row ID** so out-of-order acknowledgements update the existing row instead of creating duplicate transactions. The early one-tick settlement buffer and Deriv's authoritative `proposal_open_contract` values continue to drive final outcomes; no predicted spots or simulated wins/losses are displayed as real values.
+- A cancelled or failed attempt removes the shimmer and shows its status. An **unconfirmed** buy is explicitly labeled and requires checking the Deriv statement. After reloading during a pending buy, the stored `buying` row is recovered as **unconfirmed**, rather than animating indefinitely or allowing a blind retry.
+- Added rendering tests for detailed and compact rows, shimmering before settlement, and real-data transitions, plus lifecycle tests for pending/confirmed/closed/error records. The feature is still **demo-only** and must not be represented as verified against authenticated Deriv trade execution.
+
 ## Run on your own laptop
 
 If you have local work, first `git stash push -u -m "before bulk trader layout"`; then `git switch develop`, `git pull origin develop`, and `git stash pop` (resolve any conflicts).

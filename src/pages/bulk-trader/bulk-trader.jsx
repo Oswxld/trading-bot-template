@@ -14,6 +14,12 @@ import {
     isVerifiedSettlement,
     mergeContractSettlement,
 } from './bulk-contract-monitor';
+import {
+    acquireBulkRun,
+    classifyBulkFailure,
+    makeBulkRequestError,
+    releaseBulkRun,
+} from './bulk-request-safety';
 import { runBoundedBulkOperations } from './bulk-execution';
 import BulkReports from './bulk-reports';
 import './bulk-trader.scss';
@@ -73,71 +79,92 @@ const marketOrder = item => {
     return 2000;
 };
 
-/** Match reply by req_id; never retry an ambiguous buy. Timeouts begin on SEND,
- * not while waiting for rate-limit capacity. An unacknowledged buy is uncertain.
+/** Match replies by req_id. The timeout starts only after dispatch.
+ * Buy requests that lose their acknowledgement must NEVER be blindly retried.
  */
 const request = (api, payload, timeout = 15000, canSend = () => true, onThrottle) => new Promise((resolve, reject) => {
     const reqId = ++nextRequestId;
+    const requestType = Object.prototype.hasOwnProperty.call(payload, 'buy') ? 'buy' :
+        Object.prototype.hasOwnProperty.call(payload, 'proposal') ? 'proposal' : 'status';
     let subscription;
     let timer;
     let finished = false;
+    let dispatched = false;
     let rateLimitReported = false;
-    // DerivAPIBasic can report the same API rejection through both onMessage
-    // and the promise returned by send(). Count one rejection only once.
+
+    const failure = (kind, message, code) => makeBulkRequestError(message, {
+        kind,
+        dispatched,
+        requestType,
+        apiCode: code,
+    });
+    // DerivAPIBasic may surface the same error through onMessage and its
+    // rejected send promise; only apply rate-limit backoff once.
     const noteRateLimitOnce = error => {
         if (!rateLimitReported && isTradingRateLimitError(error)) {
             rateLimitReported = true;
             noteTradingRateLimit(api);
         }
     };
+    const onSocketClose = () => done(failure(
+        'connection_lost',
+        'Deriv WebSocket disconnected before confirming the request. Check the account statement for any outstanding purchase.'
+    ));
     const done = (error, data) => {
         if (finished) return;
         finished = true;
         clearTimeout(timer);
         subscription?.unsubscribe?.();
+        api.connection?.removeEventListener?.('close', onSocketClose);
         if (error) reject(error);
         else resolve(data);
     };
 
     try {
+        api.connection?.addEventListener?.('close', onSocketClose);
         subscription = api.onMessage().subscribe(event => {
             const data = event?.data || event;
             if (Number(data?.req_id) !== reqId) return;
             if (data.error) {
                 noteRateLimitOnce(data.error);
-                done(new Error(messageFor(data.error)));
+                done(failure('api_rejected', messageFor(data.error), data.error.code));
             } else {
                 done(null, data);
             }
         });
 
         const send = () => {
-            timer = setTimeout(
-                () => done(new Error('Request timed out. Check Deriv account history before making another purchase.')),
-                timeout
-            );
+            // The budget can be holding this request when Stop or socket-close
+            // occurs. Do not send anything after it has already settled.
+            if (finished) return;
+            dispatched = true; // Conservatively uncertain if api.send throws.
+            timer = setTimeout(() => done(failure(
+                'timeout',
+                'Deriv did not confirm this request within the timeout. Check the account statement before buying again.'
+            )), timeout);
             const result = api.send({ ...payload, req_id: reqId });
-            // DerivAPIBasic may also reject the returned promise. Avoid an
-            // unhandled rejection without treating an immediate send ACK as
-            // a confirmed purchase; onMessage remains authoritative.
+            // Do not use the return value to infer a successful purchase.
+            // onMessage/req_id is the authoritative confirmation path.
             result?.catch?.(error => {
                 noteRateLimitOnce(error);
-                done(error instanceof Error ? error : new Error(messageFor(error)));
+                done(failure('send_rejected', messageFor(error), error?.code));
             });
-            return result;
         };
 
         const tradingRequest = ['proposal', 'buy', 'sell', 'proposal_open_contract']
             .some(key => Object.prototype.hasOwnProperty.call(payload, key));
 
         if (tradingRequest) {
-            sendTradingRequestWithinBudget(api, send, canSend, onThrottle)
-                .catch(error => done(error));
+            sendTradingRequestWithinBudget(api, send, canSend, onThrottle).catch(error => {
+                const cancelled = !dispatched &&
+                    String(error?.message || '').includes('Bulk trading stopped before sending this request.');
+                done(failure(cancelled ? 'cancelled' : 'dispatch_error', messageFor(error)));
+            });
         } else {
             send();
         }
     } catch (error) {
-        done(error);
+        done(failure('dispatch_error', messageFor(error)));
     }
 });
 

@@ -51,7 +51,17 @@ This is NOT Deriv's REST Bulk Purchase for multiple different accounts. For each
 - Unit test command: `npx jest src/pages/bulk-trader/__tests__/bulk-execution.test.js --runInBand --coverage=false`. Test cases cover quantities **1, 2, 3, 5, 7, 10, 50**, pacing, delayed purchase confirmations, Stop, and unexpected errors.
 - **No Step 4 settlement or Step 5 error-handling redesign is included in this step.** Use the Deriv demo statement as the authoritative purchase count; mock scheduler tests cannot verify actual broker execution.
 
-Remaining stages: verify end-to-end execution behavior, correctness of settlement updates, and actual throughput before enabling real-money trading. The 500 ms setting remains demo-only.
+### Step 4: Contract status and settlement verification
+
+- Deriv's official `proposal_open_contract` documentation states that `subscribe: 1` **without** `contract_id` returns updates for all open contracts. `APIBase.authorizeAndSubscribe()` already creates that stream; Bulk Trader listens to it and filters results to its recorded contract IDs instead of issuing another subscription per new purchase.
+- A one-tick contract may **settle before its `buy` response is recorded**. Completed contract events received during an active batch are buffered by contract ID for up to 60 seconds (maximum 100 entries). When the matching buy confirmation is recorded, its buffered final status is immediately merged.
+- A contract becomes **won/lost only if Deriv reports closure AND a finite profit value**. String-valued profits/payouts are parsed as numbers, invalid or absent profit is never treated as zero, and a stale `open` event cannot undo a verified settlement. No predictions or historical tick percentages are used to calculate fabricated wins/losses.
+- Live updates normally require **zero extra per-contract status requests**. For a newly confirmed contract that remains open locally after the configured grace period, the app requests a targeted `proposal_open_contract` snapshot, then one delayed retry only if still open. These recovery requests pass the Step 2 API budget and are never additional `buy` requests.
+- **Connection recovery:** every 1.5 seconds the monitoring effect checks whether the authenticated WebSocket has changed, reattaches its listener after reconnection, and checks **only up to 50 saved contracts still marked open**. Completed records are not polled. Old-account or disconnected-socket replies cannot update current-account settlement.
+- Local unit test: `npx jest src/pages/bulk-trader/__tests__/bulk-contract-monitor.test.js --runInBand --coverage=false`. It covers early settlement, stale/out-of-order events, incomplete profits, cross-contract ID protection, and event buffer expiry.
+- Scope: This is **code-complete but not verified with live Deriv demo contracts**. When statuses cannot be confirmed, the app intentionally leaves them open/unresolved; Deriv's transaction statement is authoritative.
+
+Remaining stages: **Step 5 error handling** and **Step 6 integrated performance/demo-account verification**. The 500 ms pacing and five-slot concurrency remain unchanged and demo-only.
 
 ## Run on your own laptop
 
@@ -68,7 +78,7 @@ Run `npm run build`, then `npm start`; open `https://localhost:8443/#bulk_trader
 7. Test invalid stake/history, unsupported Step trade type, account switching, Stop, logout, WebSocket loss, and changing away from the Bulk tab mid-run before considering public use.
 8. If you can reproduce a build or API error, provide the terminal/Console error **without API keys, OAuth codes, access tokens, or other credentials**.
 
-**Step 1 audit:** Fixed double-counted rate-limit rejections, cross-account attribution of late confirmations, and incorrectly labeled cancelled purchase requests. **Step 2:** Strengthened per-page shared WebSocket metering, rolling soft quotas and backoff, and reduced start spacing to 500 ms. **Step 3:** Extracted and tested a quantity-bounded purchase operation scheduler, preserving five-slot concurrency and 500 ms start pacing while adding elapsed-time and peak-concurrency feedback. The test suite has not yet been run against the app on your machine; further execution and settlement verification remains pending.
+**Step 1 audit:** Fixed double-counted rate-limit rejections, cross-account attribution of late confirmations, and incorrectly labeled cancelled purchase requests. **Step 2:** Strengthened per-page shared WebSocket metering, rolling soft quotas and backoff, and reduced start spacing to 500 ms. **Step 3:** Extracted and tested a quantity-bounded purchase operation scheduler, preserving five-slot concurrency and 500 ms start pacing while adding elapsed-time and peak-concurrency feedback. **Step 4:** Reused the app's existing settlement stream, buffered verified early close events, and reattached monitoring after WebSocket changes with targeted fallback checks. The test suite has not yet been run against the app on your machine; further execution and settlement verification remains pending.
 
 **Not yet validated:** production build on your laptop, OAuth login / API against your account, live tick/history behavior, accurate settlement stats, menu responsiveness and Deriv contract availability. This work stays on `develop` until tested. Do NOT deploy it for real-money trading as-is.
 

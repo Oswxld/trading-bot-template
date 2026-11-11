@@ -159,13 +159,25 @@ const BulkTrader = observer(() => {
     const runRef = useRef(false);
     const stopRef = useRef(false);
     const mountedRef = useRef(true);
+    const settlementTimersRef = useRef(new Set());
+
+    const clearSettlementTimers = () => {
+        settlementTimersRef.current.forEach(timer => clearTimeout(timer));
+        settlementTimersRef.current.clear();
+    };
 
     useEffect(() => {
         mountedRef.current = true;
-        return () => { mountedRef.current = false; stopRef.current = true; };
+        return () => {
+            mountedRef.current = false;
+            stopRef.current = true;
+            clearSettlementTimers();
+        };
     }, []);
 
     useEffect(() => {
+        // Never let a timer from account A query contract data on account B.
+        clearSettlementTimers();
         stopRef.current = true;
         recordsRef.current = fromStorage(activeAccountId, 'records');
         setRecords(recordsRef.current);
@@ -220,36 +232,50 @@ const BulkTrader = observer(() => {
         }
     };
 
-    // Monitor only our own submitted contract IDs using Deriv's authenticated
-    // proposal_open_contract subscription, and refresh saved open trades on return.
+    // Deriv's APIBase already subscribes to proposal_open_contract on the
+    // authenticated socket in authorizeAndSubscribe(). Listen to that shared
+    // stream instead of opening another stream or requesting a status snapshot
+    // immediately after EVERY buy. Track only our own recorded contract IDs.
+    //
+    // On tab return, reconcile any saved contracts that are still marked open.
     useEffect(() => {
         if (!activeAccountId || !isDemo) return undefined;
         let stopped = false;
-        let socket;
-        let localSubscription;
-        let subscriptionId = null;
+        let listener;
         const initialise = async () => {
             for (let attempt = 0; attempt < 15 && !stopped; attempt++) {
                 const api = api_base.api;
                 if (api?.connection?.readyState === 1 && api_base.account_id === activeAccountId) {
-                    socket = api;
-                    const requestId = ++nextRequestId;
-                    localSubscription = api.onMessage().subscribe(event => {
+                    listener = api.onMessage().subscribe(event => {
                         const data = event?.data || event;
-                        if (data.msg_type !== 'proposal_open_contract') return;
-                        if (Number(data.req_id) === requestId && data.subscription?.id) {
-                            subscriptionId = data.subscription.id;
+                        if (!stopped && data.msg_type === 'proposal_open_contract' && data.proposal_open_contract) {
+                            applyContractUpdate(data.proposal_open_contract);
                         }
-                        if (data.proposal_open_contract) applyContractUpdate(data.proposal_open_contract);
                     });
-                    try {
-                        api.send({ proposal_open_contract: 1, subscribe: 1, req_id: requestId });
-                        for (const record of recordsRef.current.filter(item => item.contractId && item.status === 'open').slice(0, 40)) {
-                            request(api, { proposal_open_contract: 1, contract_id: Number(record.contractId) })
-                                .then(data => { if (!stopped) applyContractUpdate(data.proposal_open_contract); })
-                                .catch(() => {}); // Pending trade status may not yet be available.
+
+                    // No new per-contract subscription is created here. These
+                    // snapshots are recovery-only for trades from a prior visit.
+                    const pending = recordsRef.current
+                        .filter(item => item.contractId && item.status === 'open')
+                        .slice(0, 50);
+                    for (const record of pending) {
+                        const canObserve = () => !stopped && mountedRef.current &&
+                            api_base.api === api && api_base.account_id === activeAccountId &&
+                            api.connection?.readyState === 1;
+                        if (!canObserve()) break;
+                        try {
+                            const data = await request(
+                                api,
+                                { proposal_open_contract: 1, contract_id: Number(record.contractId) },
+                                12000,
+                                canObserve
+                            );
+                            if (canObserve()) applyContractUpdate(data.proposal_open_contract);
+                        } catch {
+                            // A future stream event or later visit can recover it.
                         }
-                    } catch (error) { if (!stopped) setMarketError(messageFor(error)); }
+                        if (canObserve()) await delay(120);
+                    }
                     return;
                 }
                 await delay(700);
@@ -258,12 +284,40 @@ const BulkTrader = observer(() => {
         initialise();
         return () => {
             stopped = true;
-            localSubscription?.unsubscribe?.();
-            if (socket?.connection?.readyState === 1 && subscriptionId) {
-                try { socket.send({ forget: subscriptionId }); } catch { /* websocket closed */ }
-            }
+            listener?.unsubscribe?.();
         };
     }, [activeAccountId, isDemo]);
+
+    // A one-tick contract can settle before its first streamed update reaches
+    // this tab. Only query Deriv if the shared stream has NOT closed the
+    // contract after a grace period. A second delayed check is a safety net.
+    // This avoids the previous unconditional status request after each buy.
+    const scheduleSettlementCheck = (api, contractId, initialDelayMs, remainingChecks = 1) => {
+        const timer = setTimeout(async () => {
+            settlementTimersRef.current.delete(timer);
+            const canObserve = () => mountedRef.current && api_base.api === api &&
+                api_base.account_id === activeAccountId && api.connection?.readyState === 1;
+            const isStillOpen = () => recordsRef.current.some(record =>
+                record.contractId === contractId && record.status === 'open'
+            );
+
+            if (!canObserve() || !isStillOpen()) return;
+            try {
+                const data = await request(
+                    api, { proposal_open_contract: 1, contract_id: Number(contractId) },
+                    12000, canObserve
+                );
+                if (canObserve()) applyContractUpdate(data.proposal_open_contract);
+            } catch {
+                // No automatic buy retry and no invented settlement result.
+            }
+
+            if (remainingChecks > 0 && canObserve() && isStillOpen()) {
+                scheduleSettlementCheck(api, contractId, 8000, remainingChecks - 1);
+            }
+        }, initialDelayMs);
+        settlementTimersRef.current.add(timer);
+    };
 
     // Fetch all currently available synthetic Volatility and Step indices from
     // Deriv. The built-in list is a short fallback, not a fabricated Step symbol.
@@ -560,11 +614,11 @@ const BulkTrader = observer(() => {
                         payout: null, profit: null, entrySpot: null, exitSpot: null,
                     });
                     logRun(`Purchased ${buttonLabel} #${i + 1}, contract ${contractId}, stake ${price.toFixed(2)} ${currency}.`);
-                    // Immediate snapshot complements live contract-status stream on
-                    // markets where a one-tick contract can settle very quickly.
-                    request(api, { proposal_open_contract: 1, contract_id: Number(contractId) })
-                        .then(response => applyContractUpdate(response.proposal_open_contract))
-                        .catch(() => {});
+                    // Shared live contract-status stream is the primary source
+                    // for settlement. Query only if no settlement arrives.
+                    scheduleSettlementCheck(
+                        api, contractId, Math.max(5000, durationTicks * 2500 + 2000)
+                    );
                 } catch (error) {
                     failures++;
                     consecutiveErrors++;

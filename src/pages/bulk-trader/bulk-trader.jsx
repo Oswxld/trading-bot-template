@@ -430,6 +430,33 @@ const BulkTrader = observer(() => {
             localStorage.getItem('active_loginid') === activeAccountId &&
             api_base.api === api && api.connection?.readyState === 1 && !api_base.is_running;
 
+        // An outstanding buy can confirm AFTER a user switches accounts or
+        // navigates away. Preserve its record under the account that submitted
+        // it, never insert it into the newly selected account's report.
+        const saveForRun = (type, entry) => {
+            try {
+                const previous = fromStorage(activeAccountId, type);
+                sessionStorage.setItem(
+                    `bulk-trader:${type}:${activeAccountId}`,
+                    JSON.stringify([entry, ...previous].slice(0, 300))
+                );
+            } catch { /* storage may be unavailable */ }
+        };
+        const logRun = text => {
+            if (mountedRef.current && localStorage.getItem('active_loginid') === activeAccountId) {
+                log(text);
+            } else {
+                saveForRun('journal', { id: ++nextRequestId, timestamp: Date.now(), message: text });
+            }
+        };
+        const addRunRecord = item => {
+            if (mountedRef.current && localStorage.getItem('active_loginid') === activeAccountId) {
+                addRecord(item);
+            } else {
+                saveForRun('records', item);
+            }
+        };
+
         // All workers share this synchronous reservation counter. At most the
         // selected quantity is reserved, and at most workerLimit operations are
         // in flight. A reserved slot is dropped if Stop/account switch occurs
@@ -483,7 +510,7 @@ const BulkTrader = observer(() => {
                     successes++;
                     consecutiveErrors = 0;
                     const contractId = String(result.buy.contract_id);
-                    addRecord({
+                    addRunRecord({
                         number: Date.now() + i,
                         timestamp: Date.now(),
                         contractId,
@@ -495,7 +522,7 @@ const BulkTrader = observer(() => {
                         status: 'open',
                         payout: null, profit: null, entrySpot: null, exitSpot: null,
                     });
-                    log(`Purchased ${buttonLabel} #${i + 1}, contract ${contractId}, stake ${price.toFixed(2)} ${currency}.`);
+                    logRun(`Purchased ${buttonLabel} #${i + 1}, contract ${contractId}, stake ${price.toFixed(2)} ${currency}.`);
                     // Immediate snapshot complements live contract-status stream on
                     // markets where a one-tick contract can settle very quickly.
                     request(api, { proposal_open_contract: 1, contract_id: Number(contractId) })
@@ -517,7 +544,7 @@ const BulkTrader = observer(() => {
                         reason,
                         payout: null, profit: null,
                     });
-                    log(`Purchase #${i + 1} failed or was unconfirmed: ${reason}`);
+                    logRun(`Purchase #${i + 1} failed or was unconfirmed: ${reason}`);
                     if (/timed out|not confirmed/i.test(reason) || consecutiveErrors >= 2) {
                         stopRef.current = true; // Avoid duplicate/unsupported repeated purchases.
                     }
@@ -543,7 +570,7 @@ const BulkTrader = observer(() => {
             if (mountedRef.current) {
                 setStatus(stopped ? 'stopped' : 'finished');
                 setMessage(`${stopped ? 'Stopped' : 'Completed'}. ${completed}/${numberTrades} operations processed; ${successes} purchases confirmed, ${failures} failed/unconfirmed. Check Summary/Transactions/Journal and the Deriv statement for uncertain orders.`);
-                log(`Execution ${stopped ? 'stopped' : 'completed'}: ${completed}/${numberTrades} operations processed, ${successes} confirmed purchases, ${failures} failed/unconfirmed.`);
+                logRun(`Execution ${stopped ? 'stopped' : 'completed'}: ${completed}/${numberTrades} operations processed, ${successes} confirmed purchases, ${failures} failed/unconfirmed.`);
             }
         } finally {
             runRef.current = false;

@@ -282,6 +282,7 @@ const BulkTrader = observer(() => {
                         .slice(0, 50);
                     for (const record of pending) {
                         const canObserve = () => !stopped && mountedRef.current &&
+                            activeAccountRef.current === activeAccountId &&
                             api_base.api === api && api_base.account_id === activeAccountId &&
                             api.connection?.readyState === 1;
                         if (!canObserve()) break;
@@ -317,8 +318,9 @@ const BulkTrader = observer(() => {
     const scheduleSettlementCheck = (api, contractId, initialDelayMs, remainingChecks = 1) => {
         const timer = setTimeout(async () => {
             settlementTimersRef.current.delete(timer);
-            const canObserve = () => mountedRef.current && api_base.api === api &&
-                api_base.account_id === activeAccountId && api.connection?.readyState === 1;
+            const canObserve = () => mountedRef.current && activeAccountRef.current === activeAccountId &&
+                api_base.api === api && api_base.account_id === activeAccountId &&
+                api.connection?.readyState === 1;
             const isStillOpen = () => recordsRef.current.some(record =>
                 record.contractId === contractId && record.status === 'open'
             );

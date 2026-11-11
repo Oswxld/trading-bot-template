@@ -2,6 +2,7 @@ import {
     createEarlySettlementBuffer,
     isVerifiedSettlement,
     mergeContractSettlement,
+    realizedPayoutForRecord,
 } from '../bulk-contract-monitor';
 
 const openRecord = id => ({
@@ -115,6 +116,34 @@ describe('Bulk Trader settlement monitoring (Deriv-reported results only)', () =
         currentTime += 1001;
         expect(buffer.take(2)).toBeNull();
         expect(buffer.take(3)).toBeNull();
+    });
+
+    it('does not count a potential winning payout as realized money on a lost contract', () => {
+        const lost = mergeContractSettlement(openRecord(123), {
+            contract_id: 123,
+            status: 'lost',
+            profit: '-0.50',
+            payout: '1.85', // Potential payout displayed by Deriv before settlement.
+        });
+        expect(lost.status).toBe('lost');
+        expect(lost.profit).toBe(-0.5);
+        expect(lost.payout).toBe(0);
+        expect(realizedPayoutForRecord(lost)).toBe(0);
+    });
+
+    it('computes realized payout for a settled win and corrects older cached rows', () => {
+        const winner = mergeContractSettlement(openRecord(123), {
+            contract_id: 123, status: 'won', profit: '0.45', payout: '0.95',
+        });
+        expect(realizedPayoutForRecord(winner)).toBe(0.95);
+        const outdatedCachedLoss = {
+            ...openRecord(124),
+            status: 'lost',
+            profit: -0.5,
+            payout: 1.85,
+        };
+        expect(realizedPayoutForRecord(outdatedCachedLoss)).toBe(0);
+        expect(realizedPayoutForRecord(openRecord(125))).toBeNull();
     });
 
     it('drops any buffered prior-account settlements on account switch', () => {

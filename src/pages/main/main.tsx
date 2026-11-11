@@ -37,6 +37,7 @@ import {
 import { LegacyGuide1pxIcon } from '@deriv/quill-icons/Legacy';
 import { Localize, localize } from '@deriv-com/translations';
 import { useDevice } from '@deriv-com/ui';
+import BulkTraderErrorBoundary from '../bulk-trader/bulk-trader-error-boundary';
 import RunPanel from '../../components/run-panel';
 import ChartModal from '../chart/chart-modal';
 import Dashboard from '../dashboard';
@@ -436,9 +437,11 @@ const AppWrapper = observer(() => {
                                 }
                                 id='id-bulk-trader'
                             >
-                                <Suspense fallback={<ChunkLoader message={localize('Loading Bulk Trader...')} />}>
-                                    <BulkTrader />
-                                </Suspense>
+                                <BulkTraderErrorBoundary>
+                                    <Suspense fallback={<ChunkLoader message={localize('Loading Bulk Trader...')} />}>
+                                        <BulkTrader />
+                                    </Suspense>
+                                </BulkTraderErrorBoundary>
                             </div>
                             <div
                                 label={

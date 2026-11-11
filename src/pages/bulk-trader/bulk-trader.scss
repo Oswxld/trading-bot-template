@@ -7,23 +7,28 @@
     padding: 14px 12px 32px;
     font-family: inherit;
     box-sizing: border-box;
+    height: calc(100vh - 16rem);
+    max-height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+
+    // The report is now part of the page layout, not a fixed element that
+    // competes with the Bot Builder drawer and can obscure the contents.
+    @media (min-width: 1024px) {
+        &--reports-open {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(330px, 420px);
+            align-items: start;
+            gap: 14px;
+        }
+    }
 
     &__top {
+        min-width: 0;
         width: 100%;
         max-width: 1520px;
         margin: 0 auto;
         padding-inline-end: 4px;
-        transition: width 180ms ease;
-    }
-
-    // When the Deriv-style report drawer is visible, reserve space for it
-    // instead of letting it cover the market fields, digit circles and buttons.
-    @media (min-width: 1024px) {
-        &--reports-open &__top {
-            width: calc(100% - 440px);
-            margin-inline-start: 0;
-            margin-inline-end: auto;
-        }
     }
 
     &__report-toolbar {
@@ -280,33 +285,6 @@
     }
 }
 
-// Keep Deriv's original collapse/expand drawer behavior and make the grab
-// handle discoverable even if the user does not use the visible reports button.
-.bulk-trader .bulk-reports__drawer {
-    top: 10.4rem !important;
-    height: calc(100vh - 14rem) !important;
-    width: 420px !important;
-    .run-panel__stat { width: 100%; }
-    .dc-drawer__toggle {
-        background: #e7eeff;
-        border-color: #8ca8fa;
-        &:hover { background: #d5e2ff; }
-    }
-    .dc-tabs__item {
-        height: 40px !important;
-        border-radius: 0 !important;
-        padding: 0 6px !important;
-        background: var(--general-main-1, #fff);
-        color: var(--text-general, #505050);
-        &.dc-tabs__active { color: #2450ed; font-weight: 800; }
-    }
-    .dc-tabs__active-line { background-color: #2450ed; }
-}
 
-@media (max-width: 750px) {
-    .bulk-trader .bulk-reports__drawer {
-        top: calc(100% - 9.8rem) !important;
-        height: calc(100% - 10.1rem) !important;
-        width: 100vw !important;
-    }
-}
+// The responsive report layout is styled in bulk-reports.scss. No fixed
+// Deriv drawer positioning is used on the Bulk Trader tab.

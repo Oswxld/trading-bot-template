@@ -77,8 +77,7 @@ const exportCsv = (records, currency) => {
     URL.revokeObjectURL(url);
 };
 
-function BulkReports({ records, journal, accountId, currency, balance, isRunning, onReset }) {
-    const [open, setOpen] = useState(false);
+function BulkReports({ records, journal, accountId, currency, balance, isRunning, onReset, reportsOpen, onReportsToggle }) {
     const [active, setActive] = useState(0);
     const [detail, setDetail] = useState(false);
     const [showInfo, setShowInfo] = useState(false);
@@ -101,14 +100,14 @@ function BulkReports({ records, journal, accountId, currency, balance, isRunning
 
     return (
         <>
-            <div className='run-panel bulk-reports'>
+            <div className='run-panel bulk-reports' id='bulk-reports-panel'>
                 <Drawer
                     anchor='right'
                     className='run-panel run-panel__container bulk-reports__drawer'
                     contentClassName='run-panel__content bulk-reports__content'
                     width={366}
-                    is_open={open}
-                    toggleDrawer={setOpen}
+                    is_open={reportsOpen}
+                    toggleDrawer={onReportsToggle}
                     zIndex={6}
                     footer={
                         <div className='run-panel__footer'>
@@ -155,7 +154,7 @@ function BulkReports({ records, journal, accountId, currency, balance, isRunning
                             </div>
                         </div>
                     </Tabs>
-                    {open && active !== 2 && <StatisticsSummary
+                    {reportsOpen && active !== 2 && <StatisticsSummary
                         currency={currency}
                         is_mobile={!isDesktop}
                         lost_contracts={lost}

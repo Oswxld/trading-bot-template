@@ -98,6 +98,9 @@ const BulkTrader = observer(() => {
     const [currentPrice, setCurrentPrice] = useState('—');
     const [marketError, setMarketError] = useState('');
     const [status, setStatus] = useState('idle');
+    // Show reports by default on larger screens; keep the entire trade form
+    // visible initially on phones. The visible button toggles either way.
+    const [reportsOpen, setReportsOpen] = useState(() => window.innerWidth >= 1024);
     const [message, setMessage] = useState('');
     const [progress, setProgress] = useState(0);
 
@@ -520,8 +523,25 @@ const BulkTrader = observer(() => {
     };
 
     return (
-        <section className='bulk-trader' aria-label='Bulk Trader'>
+        <section className={`bulk-trader${reportsOpen ? ' bulk-trader--reports-open' : ''}`} aria-label='Bulk Trader'>
             <div className='bulk-trader__top'>
+                <div className='bulk-trader__report-toolbar'>
+                    <div className='bulk-trader__report-title'>
+                        <strong>Bulk Trader</strong>
+                        <span>Independent from Bot Builder · Demo testing</span>
+                    </div>
+                    <button
+                        type='button'
+                        className='bulk-trader__report-toggle'
+                        onClick={() => setReportsOpen(previous => !previous)}
+                        aria-controls='bulk-reports-panel'
+                        aria-expanded={reportsOpen}
+                    >
+                        <span aria-hidden='true'>▤</span>
+                        {reportsOpen ? 'Hide reports' : 'View Summary / Transactions / Journal'}
+                        <span aria-hidden='true'>{reportsOpen ? '›' : '‹'}</span>
+                    </button>
+                </div>
                 <div className='bulk-trader__form-grid'>
                     <label>MARKET
                         <select value={market} disabled={isRunning} onChange={e => setMarket(e.target.value)}>
@@ -592,6 +612,7 @@ const BulkTrader = observer(() => {
                     <strong>{valid ? exposure.toFixed(2) : '—'} {currency}</strong>
                     <small>Intended maximum across {valid ? numberTrades : '—'} separate orders</small>
                 </div>
+                <p className='bulk-trader__trade-label'>Run bulk trades — these buttons only submit the selected Bulk Trader orders.</p>
                 <div className='bulk-trader__buttons'>
                     {currentSelection.actions.map(([type, label], index) => (
                         <button key={type} type='button' className={index === 0 ? 'bulk-trader__buy-a' : 'bulk-trader__buy-b'}
@@ -609,7 +630,7 @@ const BulkTrader = observer(() => {
 
             <BulkReports records={records} journal={journal} accountId={activeAccountId}
                 currency={currency} balance={client?.balance} isRunning={isRunning}
-                onReset={resetReport} />
+                onReset={resetReport} reportsOpen={reportsOpen} onReportsToggle={setReportsOpen} />
         </section>
     );
 });

@@ -12,11 +12,13 @@ multi-account bulk purchase API.
   WebSocket connection. They are sent only after the user's confirmation.
 - Before every real-money batch, request the fresh `balance: 1` broker value
   on the active WebSocket and verify its currency and any returned login ID.
-- Real account caps: maximum 20 contracts, 2 concurrent operations, stake
+- Real account caps: maximum 50 contracts, 2 concurrent operations, stake
   10 account-currency units per contract, 100 units per batch and 10% of
   the freshly checked account balance (whichever is stricter).
-- The user confirms the exact count/stake/account, then must explicitly
-  type `REAL <account-id>`. Simply selecting a real account does not trade.
+- The user explicitly confirms the trade count, account type and intended
+  exposure. OAuth account selection and server-side account checks establish
+  the account identity; no manual account-ID entry is required.
+  Simply selecting a real account does not trade.
 
 ## Existing protections
 - Pacing of bulk proposal/buy operations, shared soft request budgets,

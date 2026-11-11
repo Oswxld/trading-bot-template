@@ -548,20 +548,13 @@ const BulkTrader = observer(() => {
                 return;
             }
             if (!window.confirm(
-                `Purchase ${numberTrades} separate ${buttonLabel} contracts on ${accountLabel} (${activeAccountId})?\n` +
+                `Purchase ${numberTrades} separate ${buttonLabel} contracts using your ${accountLabel.toLowerCase()}?\n` +
                 `Market: ${chosenMarket?.label || market}\n` +
                 `Stake each: ${stakeValue.toFixed(2)} ${currency}\n` +
                 `Maximum intended stake: ${exposure.toFixed(2)} ${currency}\n\n` +
                 `Up to ${Math.min(isReal ? REAL_LIMITS.concurrent : MAX_IN_FLIGHT_PURCHASES, numberTrades)} purchase operations may overlap.\n` +
                 'Submitted orders cannot be undone. Proceed?'
             )) return;
-            if (isReal) {
-                const expected = `REAL ${activeAccountId}`;
-                if (window.prompt(`REAL MONEY: orders debit actual funds. Type "${expected}" to authorize.`) !== expected) {
-                    setMessage('Real-money batch not authorized. No purchases sent.');
-                    return;
-                }
-            }
         } finally {
             preflightRef.current = false;
         }

@@ -22,7 +22,8 @@ describe('real-account bulk safety', () => {
     });
     it('restricts stake, quantity and aggregate exposure', () => {
         expect(assess({stake:11}).allowed).toBe(false);
-        expect(assess({quantity:21}).allowed).toBe(false);
+        expect(assess({quantity:51}).allowed).toBe(false);
+        expect(assess({stake:0.5,quantity:50,balance:500}).allowed).toBe(true);
         expect(assess({stake:10,quantity:20,balance:5000}).allowed).toBe(false);
         expect(assess({stake:1,quantity:6,balance:50}).allowed).toBe(false);
         expect(assess({stake:1,quantity:5,balance:50}).allowed).toBe(true);

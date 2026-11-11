@@ -1,6 +1,6 @@
 /** Fail closed on missing account type or currency; never guess mode from ID prefix. */
 export const REAL_LIMITS = Object.freeze({
-    trades: 20,
+    trades: 50,
     concurrent: 2,
     stake: 10,
     batch: 100,

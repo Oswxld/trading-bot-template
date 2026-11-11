@@ -556,7 +556,7 @@ const BulkTrader = observer(() => {
 
     const stop = () => {
         stopRef.current = true;
-        setMessage('Stopping after the request in progress. An already submitted purchase cannot be cancelled.');
+        setMessage('Stopping new operations. Already submitted buys may still confirm; check the Deriv statement if any confirmation is missing.');
     };
 
     const begin = async (contractType, buttonLabel) => {
@@ -598,8 +598,8 @@ const BulkTrader = observer(() => {
             `Up to ${Math.min(MAX_IN_FLIGHT_PURCHASES, numberTrades)} purchase operations can overlap.\n` +
             'Orders already sent cannot be undone after submission. Proceed?'
         )) return;
-        // Prevent overlapping batches from separate Bulk Trader mounts/tabs
-        // within the same SPA (e.g. navigation while buys are still pending).
+        // Prevent overlapping batches across Bulk Trader component remounts
+        // within THIS browser page (other tabs/devices remain independent).
         if (!acquireBulkRun(activeAccountId)) {
             setMessage('Another Bulk Trader batch is still processing on this account. Wait for its outstanding confirmations or check the Deriv statement.');
             return;

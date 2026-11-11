@@ -105,7 +105,10 @@ const request = (api, payload, timeout = 15000, canSend = () => true, onThrottle
             // DerivAPIBasic may also reject the returned promise. Avoid an
             // unhandled rejection without treating an immediate send ACK as
             // a confirmed purchase; onMessage remains authoritative.
-            result?.catch?.(error => done(error));
+            result?.catch?.(error => {
+                if (isTradingRateLimitError(error)) noteTradingRateLimit(api);
+                done(error instanceof Error ? error : new Error(messageFor(error)));
+            });
             return result;
         };
 
@@ -521,6 +524,16 @@ const BulkTrader = observer(() => {
             localStorage.getItem('active_loginid') === activeAccountId &&
             api_base.api === api && api.connection?.readyState === 1 && !api_base.is_running;
 
+        const onThrottle = waitMs => {
+            if (!mountedRef.current || localStorage.getItem('active_loginid') !== activeAccountId) return;
+            const usage = tradingBudgetSnapshot();
+            setMessage(
+                `Rate limiter: waiting ~${Math.ceil(waitMs / 1000)}s for request capacity ` +
+                `(last minute ${usage.minuteUsed}/${usage.minuteLimit}, ` +
+                `last hour ${usage.hourUsed}/${usage.hourLimit}). You can press Stop.`
+            );
+        };
+
         // An outstanding buy can confirm AFTER a user switches accounts or
         // navigates away. Preserve its record under the account that submitted
         // it, never insert it into the newly selected account's report.
@@ -583,7 +596,7 @@ const BulkTrader = observer(() => {
                     };
                     if (NEEDS_DIGIT.has(contractType)) proposalRequest.barrier = prediction;
 
-                    const quote = await request(api, proposalRequest);
+                    const quote = await request(api, proposalRequest, 15000, isSafe, onThrottle);
                     const proposal = quote?.proposal;
                     subscriptionId = quote?.subscription?.id || null;
                     if (!proposal?.id || !Number.isFinite(Number(proposal.ask_price))) {
@@ -594,7 +607,9 @@ const BulkTrader = observer(() => {
                     if (price <= 0 || price > stakeValue + 0.00001) {
                         throw new Error('Quoted price exceeded your stake; this purchase was skipped.');
                     }
-                    const result = await request(api, { buy: proposal.id, price });
+                    const result = await request(
+                        api, { buy: proposal.id, price }, 15000, isSafe, onThrottle
+                    );
                     if (!result?.buy?.contract_id) {
                         throw new Error('The purchase was not confirmed. Check the Deriv account statement before trying again.');
                     }
@@ -623,7 +638,7 @@ const BulkTrader = observer(() => {
                     failures++;
                     consecutiveErrors++;
                     const reason = messageFor(error);
-                    addRecord({
+                    addRunRecord({
                         number: Date.now() + i,
                         timestamp: Date.now(),
                         contractId: null,

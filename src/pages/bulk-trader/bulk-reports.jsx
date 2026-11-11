@@ -3,6 +3,7 @@ import DraggableResizeWrapper from '@/components/draggable/draggable-resize-wrap
 import { StatisticsSummary } from '@/components/run-panel/run-panel';
 import { MarketIcon } from '@/components/market/market-icon';
 import { TradeTypeIcon } from '@/components/trade-type/trade-type-icon';
+import { realizedPayoutForRecord } from './bulk-contract-monitor';
 import './bulk-reports.scss';
 
 // A bulk purchase is not a Deriv Bot run. Render the existing Deriv Drawer,
@@ -124,7 +125,9 @@ function BulkReports({ records, journal, accountId, currency, balance, isRunning
     const confirmed = records.filter(r => r.contractId && ['open', 'won', 'lost'].includes(r.status));
     const settled = records.filter(r => r.contractId && ['won', 'lost'].includes(r.status));
     const totalStake = confirmed.reduce((sum, r) => sum + Number(r.price || 0), 0);
-    const totalPayout = settled.reduce((sum, r) => sum + Number(r.payout || 0), 0);
+    // Use realized returns, not a possibly still-potential Deriv payout quote.
+    // Also corrects historical locally cached rows written before this fix.
+    const totalPayout = settled.reduce((sum, r) => sum + (realizedPayoutForRecord(r) ?? 0), 0);
     const profit = settled.reduce((sum, r) => sum + Number(r.profit || 0), 0);
     const won = settled.filter(r => r.status === 'won').length;
     const lost = settled.filter(r => r.status === 'lost').length;
@@ -248,7 +251,7 @@ function BulkReports({ records, journal, accountId, currency, balance, isRunning
                 <div className='bulk-reports__info-dialog' role='dialog' aria-modal='true' aria-label='Statistics information' onClick={e => e.stopPropagation()}>
                     <button type='button' onClick={() => setShowInfo(false)} aria-label='Close'>×</button>
                     <h3>About these statistics</h3>
-                    <p>These statistics are for purchases placed with this Bulk Trader only. Total stake is the cost of confirmed contracts. Total payout and profit/loss count settled contracts only; Deriv's account statement remains the authoritative record.</p>
+                    <p>These statistics are for purchases placed with this Bulk Trader only. Total stake is the cost of confirmed contracts. Total payout is the realized return calculated from the confirmed buy price plus Deriv's settled profit, not the potential payout quoted before settlement. Profit/loss counts verified settled contracts only; Deriv's account statement remains authoritative.</p>
                 </div>
             </div>}
         </>

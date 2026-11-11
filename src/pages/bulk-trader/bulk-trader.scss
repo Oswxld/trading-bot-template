@@ -13,6 +13,68 @@
         max-width: 1520px;
         margin: 0 auto;
         padding-inline-end: 4px;
+        transition: width 180ms ease;
+    }
+
+    // When the Deriv-style report drawer is visible, reserve space for it
+    // instead of letting it cover the market fields, digit circles and buttons.
+    @media (min-width: 1024px) {
+        &--reports-open &__top {
+            width: calc(100% - 386px);
+            margin-inline-start: 0;
+            margin-inline-end: auto;
+        }
+    }
+
+    &__report-toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 12px;
+        border: 1px solid var(--general-section-2, #e8ebf0);
+        background: var(--general-section-1, #f8fafc);
+        border-radius: 8px;
+        padding: 10px 14px;
+        margin-bottom: 14px;
+    }
+
+    &__report-title {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+
+        strong { font-size: 15px; color: var(--text-prominent, #182331); }
+        span { font-size: 12px; color: var(--text-general, #586473); }
+    }
+
+    &__report-toggle {
+        display: inline-flex;
+        justify-content: center;
+        align-items: center;
+        gap: 10px;
+        max-width: 100%;
+        min-height: 42px;
+        padding: 9px 14px;
+        color: #fff;
+        border: 0;
+        border-radius: 7px;
+        background: #1746dc;
+        cursor: pointer;
+        font-family: inherit;
+        font-size: 13px;
+        font-weight: 700;
+        line-height: 1.4;
+        &:hover { background: #1039be; }
+        &:focus-visible { outline: 3px solid #f59f00; outline-offset: 2px; }
+    }
+
+    &__trade-label {
+        margin: -4px 0 10px;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text-general, #586473);
+        text-align: center;
     }
 
     label {
@@ -200,6 +262,9 @@
 
     @media (max-width: 750px) {
         padding: 12px 10px 60px;
+        &__report-toolbar { align-items: stretch; }
+        &__report-toggle { width: 100%; }
+        &__report-title { width: 100%; }
         &__digits { gap: 2px; }
         &__digit { width: clamp(29px, 8vw, 43px); height: clamp(29px, 8vw, 43px); border-width: 1px;
             b { font-size: 12px; } small { font-size: 8px; }
@@ -215,10 +280,16 @@
     }
 }
 
-// Keep the original Deriv Bot run-panel positioning and arrow behavior.
+// Keep Deriv's original collapse/expand drawer behavior and make the grab
+// handle discoverable even if the user does not use the visible reports button.
 .bulk-trader .bulk-reports__drawer {
     top: 10.4rem !important;
     height: calc(100vh - 14rem) !important;
+    .dc-drawer__toggle {
+        background: #e7eeff;
+        border-color: #8ca8fa;
+        &:hover { background: #d5e2ff; }
+    }
     .dc-tabs__item {
         height: 40px !important;
         border-radius: 0 !important;

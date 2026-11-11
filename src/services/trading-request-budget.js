@@ -19,7 +19,9 @@ export const TRADING_SOFT_LIMITS = Object.freeze({
 
 const MINUTE_MS = 60_000;
 const HOUR_MS = 3_600_000;
-const trackedSockets = new WeakSet();
+// Remember the exact wrapper so a later overwrite cannot silently bypass
+// the meter. A bypass must make Bulk Trader fail closed instead of undercount.
+const trackedSockets = new WeakMap();
 
 // Intentionally shared across socket replacements in the same browser page;
 // reconnecting does not reset the locally observed hourly budget.
@@ -29,6 +31,7 @@ const meter = {
     gate: Promise.resolve(),
     backoffUntil: 0,
     consecutiveRateLimits: 0,
+    lastRateLimitAt: 0,
 };
 
 const isTradingPayload = payload => Boolean(
@@ -48,14 +51,21 @@ const prune = now => {
 };
 
 const observeFrame = frame => {
-    if (typeof frame !== 'string') return;
-    let payload;
-    try {
-        payload = JSON.parse(frame);
-    } catch {
-        return;
+    let tradingFrame = false;
+    if (typeof frame !== 'string') {
+        // DerivAPIBasic normally sends JSON text. Count unexpected binary
+        // frames conservatively to avoid understating usage, never block
+        // unrelated Bot Builder requests or inspect account credentials.
+        tradingFrame = true;
+    } else {
+        try {
+            tradingFrame = isTradingPayload(JSON.parse(frame));
+        } catch {
+            // Invalid/unrecognized frames must not create an unmetered hole.
+            tradingFrame = true;
+        }
     }
-    if (!isTradingPayload(payload)) return;
+    if (!tradingFrame) return;
     const now = Date.now();
     prune(now);
     meter.minute.push(now);
@@ -67,7 +77,12 @@ export const trackTradingSocket = socket => {
     if (!socket || typeof socket.send !== 'function') {
         throw new Error('Trading rate limiter needs an active WebSocket.');
     }
-    if (trackedSockets.has(socket)) return;
+    if (trackedSockets.has(socket)) {
+        if (socket.send !== trackedSockets.get(socket)) {
+            throw new Error('WebSocket send was replaced after installing the trading request meter.');
+        }
+        return;
+    }
 
     const original = socket.send;
     const wrapped = function (frame) {
@@ -81,7 +96,7 @@ export const trackTradingSocket = socket => {
     if (socket.send !== wrapped) {
         throw new Error('Cannot observe the shared WebSocket request budget.');
     }
-    trackedSockets.add(socket);
+    trackedSockets.set(socket, wrapped);
 };
 
 const waitNeeded = now => {
@@ -134,9 +149,14 @@ export const sendTradingRequestWithinBudget = async (api, send, canSend, onThrot
 /** Back off future bulk sends after Deriv reports a rate-limit rejection. */
 export const noteTradingRateLimit = api => {
     if (!api?.connection) return;
+    const now = Date.now();
+    // Treat rate-limit errors separated by more than a minute as a fresh
+    // burst. Without this reset, intermittent errors escalate forever.
+    if (now - meter.lastRateLimitAt >= MINUTE_MS) meter.consecutiveRateLimits = 0;
     meter.consecutiveRateLimits += 1;
+    meter.lastRateLimitAt = now;
     const backoffMs = Math.min(30_000, 1000 * 2 ** Math.min(5, meter.consecutiveRateLimits - 1));
-    meter.backoffUntil = Math.max(meter.backoffUntil, Date.now() + backoffMs);
+    meter.backoffUntil = Math.max(meter.backoffUntil, now + backoffMs);
 };
 
 export const tradingBudgetSnapshot = () => {
@@ -146,5 +166,6 @@ export const tradingBudgetSnapshot = () => {
         minuteLimit: TRADING_SOFT_LIMITS.minute,
         hourUsed: meter.hour.length,
         hourLimit: TRADING_SOFT_LIMITS.hour,
+        backoffRemainingMs: Math.max(0, meter.backoffUntil - Date.now()),
     };
 };

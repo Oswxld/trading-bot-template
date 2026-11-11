@@ -32,6 +32,9 @@ const TRADE_TYPES = [
 ];
 const NEEDS_DIGIT = new Set(['DIGITDIFF', 'DIGITMATCH', 'DIGITOVER', 'DIGITUNDER']);
 const MAX_TRADES = 50;
+// Cap concurrent, unconfirmed purchase operations; fewer trades use fewer slots.
+const MAX_IN_FLIGHT_PURCHASES = 5;
+// Stagger operation starts to preserve the existing conservative WebSocket pacing.
 const MIN_PACING_MS = 850;
 let nextRequestId = Math.floor(Math.random() * 10000000) + 50000000;
 

@@ -9,6 +9,11 @@ import {
     tradingBudgetSnapshot,
 } from '@/services/trading-request-budget';
 import { useStore } from '@/hooks/useStore';
+import {
+    createEarlySettlementBuffer,
+    isVerifiedSettlement,
+    mergeContractSettlement,
+} from './bulk-contract-monitor';
 import { runBoundedBulkOperations } from './bulk-execution';
 import BulkReports from './bulk-reports';
 import './bulk-trader.scss';
@@ -177,6 +182,8 @@ const BulkTrader = observer(() => {
     const stopRef = useRef(false);
     const mountedRef = useRef(true);
     const settlementTimersRef = useRef(new Set());
+    const earlySettlementsRef = useRef(null);
+    if (!earlySettlementsRef.current) earlySettlementsRef.current = createEarlySettlementBuffer();
 
     const clearSettlementTimers = () => {
         settlementTimersRef.current.forEach(timer => clearTimeout(timer));
@@ -189,12 +196,14 @@ const BulkTrader = observer(() => {
             mountedRef.current = false;
             stopRef.current = true;
             clearSettlementTimers();
+            earlySettlementsRef.current.clear();
         };
     }, []);
 
     useEffect(() => {
-        // Never let a timer from account A query contract data on account B.
+        // Never let a timer or buffered event from account A update account B.
         clearSettlementTimers();
+        earlySettlementsRef.current.clear();
         stopRef.current = true;
         if (runRef.current) {
             setStatus('stopped');
@@ -231,26 +240,24 @@ const BulkTrader = observer(() => {
         if (!contract?.contract_id || !mountedRef.current) return;
         const contractId = String(contract.contract_id);
         const old = recordsRef.current.find(item => item.contractId === contractId);
-        if (!old) return;
-        const isClosed = ['won', 'lost', 'sold'].includes(String(contract.status || '').toLowerCase()) ||
-            contract.is_sold === 1 || contract.is_sold === true;
-        const reportedProfit = Number(contract.profit);
-        const hasProfit = contract.profit !== undefined && contract.profit !== null && Number.isFinite(reportedProfit);
-        const newStatus = isClosed && hasProfit ? (reportedProfit >= 0 ? 'won' : 'lost') : old.status;
-        const update = {
-            ...old,
-            status: newStatus,
-            profit: isClosed && hasProfit ? reportedProfit : old.profit,
-            payout: isClosed && Number.isFinite(Number(contract.payout))
-                ? Number(contract.payout) : old.payout,
-            entrySpot: contract.entry_spot ?? old.entrySpot,
-            exitSpot: contract.exit_spot ?? old.exitSpot,
-        };
+        if (!old) {
+            // One-tick contracts can settle on the shared stream before the
+            // buy response yields its contract_id. Cache only actual closed
+            // results while a bulk run is active; never infer a win or loss.
+            if (runRef.current && isVerifiedSettlement(contract)) {
+                earlySettlementsRef.current.remember(contract);
+            }
+            return;
+        }
+
+        const update = mergeContractSettlement(old, contract);
         if (JSON.stringify(update) === JSON.stringify(old)) return;
-        recordsRef.current = recordsRef.current.map(item => item.contractId === contractId ? update : item);
+        recordsRef.current = recordsRef.current.map(item =>
+            item.contractId === contractId ? update : item
+        );
         setRecords(recordsRef.current);
-        if (newStatus !== old.status && ['won', 'lost'].includes(newStatus)) {
-            log(`Contract ${contractId} settled ${newStatus.toUpperCase()}: ${reportedProfit >= 0 ? '+' : ''}${reportedProfit.toFixed(2)} ${currency}.`);
+        if (update.status !== old.status && ['won', 'lost'].includes(update.status)) {
+            log(`Contract ${contractId} settled ${update.status.toUpperCase()}: ${update.profit >= 0 ? '+' : ''}${update.profit.toFixed(2)} ${currency}.`);
         }
     };
 
@@ -578,6 +585,10 @@ const BulkTrader = observer(() => {
             if (mountedRef.current && activeAccountRef.current === activeAccountId &&
                 localStorage.getItem('active_loginid') === activeAccountId) {
                 addRecord(item);
+                if (item.contractId) {
+                    const early = earlySettlementsRef.current.take(item.contractId);
+                    if (early) applyContractUpdate(early);
+                }
             } else {
                 saveForRun('records', item);
             }

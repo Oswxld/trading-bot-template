@@ -35,6 +35,8 @@ export const runBoundedBulkOperations = async ({
     let active = 0;
     let peakInFlight = 0;
     let nextStartAt = now();
+    let aborted = false;
+    const canProceed = () => !aborted && shouldContinue();
     const startedAt = nextStartAt;
 
     const progress = () => onProgress({
@@ -49,21 +51,21 @@ export const runBoundedBulkOperations = async ({
     // Synchronous reservations prevent two workers claiming the same index
     // and prevent extra attempts when the user's requested quantity is small.
     const reserve = async () => {
-        if (!shouldContinue() || reserved >= quantity) return null;
+        if (!canProceed() || reserved >= quantity) return null;
         const index = reserved++;
         const scheduledAt = Math.max(now(), nextStartAt);
         nextStartAt = scheduledAt + spacingMs;
 
         // Small sleeps allow Stop and account-switch cancellation while waiting
         // for the next pacing slot, without starting a new proposal.
-        while (shouldContinue() && now() < scheduledAt) {
+        while (canProceed() && now() < scheduledAt) {
             await wait(Math.min(100, scheduledAt - now()));
         }
-        return shouldContinue() ? index : null;
+        return canProceed() ? index : null;
     };
 
     const worker = async () => {
-        while (shouldContinue()) {
+        while (canProceed()) {
             const index = await reserve();
             if (index === null) return;
 
@@ -73,6 +75,11 @@ export const runBoundedBulkOperations = async ({
             progress();
             try {
                 await execute(index);
+            } catch (error) {
+                // Unexpected errors should prevent new work; the remaining
+                // already-started workers still finish before we reject.
+                aborted = true;
+                throw error;
             } finally {
                 active--;
                 completed++;

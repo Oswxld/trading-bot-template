@@ -6,30 +6,3 @@
         background-color: transparent;
     }
 }
-
-.white-label-nav {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    margin-inline-start: 12px;
-
-    a {
-        text-decoration: none;
-        color: var(--text-general, #555);
-        font-size: 14px;
-        font-weight: 600;
-        border-radius: 8px;
-        padding: 10px 12px;
-        transition: background 150ms ease;
-
-        &:hover,
-        &:focus-visible {
-            background: var(--general-section-1, #f1f3f5);
-        }
-
-        &.white-label-nav__active {
-            background: var(--general-section-1, #f1f3f5);
-            color: var(--text-prominent, #1a2733);
-        }
-    }
-}

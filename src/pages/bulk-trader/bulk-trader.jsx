@@ -106,6 +106,7 @@ const BulkTrader = observer(() => {
     const [reportsOpen, setReportsOpen] = useState(() => window.innerWidth >= 1024);
     const [message, setMessage] = useState('');
     const [progress, setProgress] = useState(0);
+    const [inFlight, setInFlight] = useState(0);
 
     // The session contains bulk records per *account* so tab navigation never
     // mixes contract history between users and does not wipe completed results.
@@ -404,26 +405,51 @@ const BulkTrader = observer(() => {
             `Market: ${chosenMarket?.label || market}\n` +
             `Stake each: ${stakeValue.toFixed(2)} ${currency}\n` +
             `Maximum intended stake: ${exposure.toFixed(2)} ${currency}\n\n` +
-            'Orders are sequential and cannot be undone after submission. Proceed?'
+            `Up to ${Math.min(MAX_IN_FLIGHT_PURCHASES, numberTrades)} purchase operations can overlap.\n` +
+            'Orders already sent cannot be undone after submission. Proceed?'
         )) return;
 
         runRef.current = true;
         stopRef.current = false;
         setStatus('running');
         setProgress(0);
-        setMessage('Sending demo trades one at a time…');
-        log(`Started ${numberTrades} ${buttonLabel} demo purchases on ${chosenMarket?.label || market}; maximum intended stake ${exposure.toFixed(2)} ${currency}.`);
+        setInFlight(0);
+        const workerLimit = Math.min(MAX_IN_FLIGHT_PURCHASES, numberTrades);
+        setMessage(`Sending up to ${workerLimit} demo purchase operations concurrently (staggered to respect API limits)…`);
+        log(`Started ${numberTrades} ${buttonLabel} demo purchases on ${chosenMarket?.label || market}; max ${workerLimit} pending, intended stake ${exposure.toFixed(2)} ${currency}.`);
 
         let successes = 0;
         let failures = 0;
         let consecutiveErrors = 0;
+        let completed = 0;
+        let inProgress = 0;
+        let nextTradeIndex = 0;
+        let nextStartAt = Date.now();
+
         const isSafe = () => !stopRef.current &&
             localStorage.getItem('active_loginid') === activeAccountId &&
             api_base.api === api && api.connection?.readyState === 1 && !api_base.is_running;
-        try {
-            for (let i = 0; i < numberTrades; i++) {
-                if (!isSafe()) break;
-                const began = Date.now();
+
+        // All workers share this synchronous reservation counter. At most the
+        // selected quantity is reserved, and at most workerLimit operations are
+        // in flight. A reserved slot is dropped if Stop/account switch occurs
+        // during the pacing wait; it is never retried automatically.
+        const reserveNext = async () => {
+            if (!isSafe() || nextTradeIndex >= numberTrades) return null;
+            const index = nextTradeIndex++;
+            const startAt = Math.max(Date.now(), nextStartAt);
+            nextStartAt = startAt + MIN_PACING_MS;
+            const waitMs = startAt - Date.now();
+            if (waitMs > 0) await delay(waitMs);
+            return isSafe() ? index : null;
+        };
+
+        const worker = async () => {
+            while (isSafe()) {
+                const i = await reserveNext();
+                if (i === null) break;
+                inProgress++;
+                if (mountedRef.current) setInFlight(inProgress);
                 let subscriptionId = null;
                 try {
                     const proposalRequest = {
@@ -499,19 +525,29 @@ const BulkTrader = observer(() => {
                     if (subscriptionId && api.connection?.readyState === 1) {
                         try { api.send({ forget: subscriptionId }); } catch { /* websocket closed */ }
                     }
-                    if (mountedRef.current) setProgress(i + 1);
-                    const elapsed = Date.now() - began;
-                    if (!stopRef.current && i < numberTrades - 1) await delay(Math.max(0, MIN_PACING_MS - elapsed));
+                    completed++;
+                    inProgress--;
+                    if (mountedRef.current) {
+                        setProgress(completed);
+                        setInFlight(inProgress);
+                    }
                 }
             }
-            const stopped = stopRef.current || !isSafe();
+        };
+
+        try {
+            // Workers complete independently: the next trade can start as
+            // soon as a slot frees, without waiting for unrelated confirmations.
+            await Promise.all(Array.from({ length: workerLimit }, () => worker()));
+            const stopped = stopRef.current || !isSafe() || completed < numberTrades;
             if (mountedRef.current) {
                 setStatus(stopped ? 'stopped' : 'finished');
-                setMessage(`${stopped ? 'Stopped' : 'Completed'}. ${successes} purchases confirmed; ${failures} failed/unconfirmed. Check the Summary/Transactions/Journal panel for settlement reports.`);
-                log(`Execution ${stopped ? 'stopped' : 'completed'}: ${successes} confirmed purchases, ${failures} failed/unconfirmed.`);
+                setMessage(`${stopped ? 'Stopped' : 'Completed'}. ${completed}/${numberTrades} operations processed; ${successes} purchases confirmed, ${failures} failed/unconfirmed. Check Summary/Transactions/Journal and the Deriv statement for uncertain orders.`);
+                log(`Execution ${stopped ? 'stopped' : 'completed'}: ${completed}/${numberTrades} operations processed, ${successes} confirmed purchases, ${failures} failed/unconfirmed.`);
             }
         } finally {
             runRef.current = false;
+            if (mountedRef.current) setInFlight(0);
         }
     };
 
@@ -521,6 +557,7 @@ const BulkTrader = observer(() => {
         setRecords([]);
         setJournal([]);
         setProgress(0);
+        setInFlight(0);
         setMessage('');
         setStatus('idle');
     };
@@ -626,7 +663,9 @@ const BulkTrader = observer(() => {
                         </button>
                     ))}
                 </div>
-                {isRunning && <button className='bulk-trader__stop' type='button' onClick={stop}>Stop bulk orders ({progress}/{quantity})</button>}
+                {isRunning && <button className='bulk-trader__stop' type='button' onClick={stop}>
+                    Stop bulk orders ({progress}/{quantity} processed; {inFlight} in flight)
+                </button>}
                 {!isDemo && <p className='bulk-trader__notice'>Demo account required for bulk trading tests. Your regular Deriv bot remains unaffected.</p>}
                 {message && <p className='bulk-trader__feedback' role='status'>{message}</p>}
             </div>

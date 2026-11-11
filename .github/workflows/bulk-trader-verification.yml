@@ -1,0 +1,61 @@
+name: Bulk Trader verification
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - 'src/pages/bulk-trader/**'
+      - 'src/services/trading-request-budget.js'
+      - 'src/services/__tests__/trading-request-budget.test.js'
+      - 'src/external/bot-skeleton/services/api/appId.js'
+      - 'src/external/bot-skeleton/services/api/api-base.ts'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/bulk-trader-verification.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bulk-verification-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verification:
+    name: Unit tests and production build (Node 22)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out develop
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Run all Bulk Trader safety, concurrency and monitoring tests
+        run: |
+          npx jest \
+            src/pages/bulk-trader/__tests__/bulk-execution.test.js \
+            src/pages/bulk-trader/__tests__/bulk-contract-monitor.test.js \
+            src/pages/bulk-trader/__tests__/bulk-request-safety.test.js \
+            src/pages/bulk-trader/__tests__/bulk-api-request.test.js \
+            src/services/__tests__/trading-request-budget.test.js \
+            --ci --runInBand --coverage=false
+
+      - name: Build production site
+        run: npm run build
+
+      - name: Upload build if successful
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bulk-trader-develop-build
+          path: dist/
+          retention-days: 3

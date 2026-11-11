@@ -24,11 +24,24 @@ This is NOT Deriv's REST Bulk Purchase for multiple different accounts. For each
 3. Get a streaming `proposal` with `subscribe:1`, `underlying_symbol`, a unique `req_id`, and prediction barrier when needed.
 4. Verify quoted price is no higher than the configured stake; only then submit the separate `buy`. Never automatically retry a buy whose response was lost.
 5. Record confirmed contract ID and purchase price. Listen to the app's existing `proposal_open_contract` stream for settlement; query status only if a contract still appears open after the grace period, and reconcile old open records on returning to the tab.
-6. Allow up to **min(5, chosen number of trades)** independent purchase operations in flight. Each operation still waits for its own streaming `proposal` before sending its `buy`, but does **not** wait for other workers' buy confirmations. Reserve each trade index only once (no duplicate attempts), replenish a free slot until the chosen quantity is processed, and stagger worker starts by at least **600 ms** across the batch to limit request bursts. This concurrency cap is an upper bound, not a guarantee five are simultaneously outstanding.
+6. Allow up to **min(5, chosen number of trades)** independent purchase operations in flight. Each operation still waits for its own streaming `proposal` before sending its `buy`, but does **not** wait for other workers' buy confirmations. Reserve each trade index only once (no duplicate attempts), replenish a free slot until the chosen quantity is processed, and stagger worker starts by at least **500 ms** across the batch to limit request bursts. This concurrency cap is an upper bound, not a guarantee five are simultaneously outstanding.
 7. The Stop button prevents new starts and prevents a not-yet-submitted buy after the quote returns. Buys already sent may still execute and confirm after Stop; never automatically retry ambiguous requests. Halt new starts on an ambiguous acknowledgement or repeated purchase errors. Track completed operations and in-flight operations independently.
 8. If an account switch happens while purchases are outstanding, do not attribute their late confirmations to the newly selected account; preserve them in the originating account's report.
-9. Deriv's documented WebSocket budget for `proposal`, `buy`, `proposal_open_contract`, and `sell` is shared (currently 360 requests/minute and 14,400/hour). The 600 ms pacing is a proposed initial setting with an independent shared soft request budget (240/min, 12,000/hour); it does not guarantee API acceptance when other traffic shares the same session.
+9. Deriv's documented WebSocket budget for `proposal`, `buy`, `proposal_open_contract`, and `sell` is shared (currently 360 requests/minute and 14,400/hour). The 500 ms pacing is a proposed initial setting with an independent shared soft request budget (240/min, 12,000/hour); it does not guarantee API acceptance when other traffic shares the same session.
 10. Don't simultaneously run the existing automated Deriv bot on the same account.
+
+
+### Step 2: Request-budget protection (500 ms start spacing)
+
+- **500 ms is the requested minimum gap between the starts of separate trade operations**, not an API-mandated delay, a guarantee of completed purchase speed, or an increase to the Deriv trading limits. At most `min(5, chosen quantity)` workers overlap.
+- Official published shared trading-group ceilings: **360/minute and 14,400/hour** across `proposal`, `buy`, `sell`, and `proposal_open_contract`.
+- This app voluntarily gates **Bulk Trader trading sends** at **240/minute and 12,000/hour**, with rolling windows. The counters observe all trading request frames emitted on the application's **shared WebSocket**, including Bot Builder requests. Other features are *measured only*, not delayed by this change.
+- A rejected trading request indicating a rate limit triggers a bounded exponential cooldown (1, 2, 4, 8, 16, up to 30 seconds), with escalation reset after a minute without another rate-limit error. Waiting bulk requests remain cancellable with Stop/account switch, and their 15-second response timeout starts **only after they are sent**.
+- An unexpected raw WebSocket frame is counted conservatively instead of silently undercounting. If the shared socket's `send` meter is replaced, Bulk Trader fails closed instead of trading without visibility.
+- **Scope limitation:** Counter state is held in the browser page process. Opening other tabs, browsers, devices, or separate app deployments may produce independently tracked connections, and requests from outside this app are not observable. The limit is a **best-effort client-side safety margin**, not a Deriv-provided authoritative remaining-quota value or a guarantee against server rejection.
+- Local unit tests: `npx jest src/services/__tests__/trading-request-budget.test.js --runInBand --coverage=false`. Tests use synthetic WebSocket frames and fake clocks. They do not replace live Deriv demo-account tests.
+
+Remaining stages: verify end-to-end execution behavior, correctness of settlement updates, and actual throughput before enabling real-money trading. The 500 ms setting remains demo-only.
 
 ## Run on your own laptop
 
@@ -45,7 +58,7 @@ Run `npm run build`, then `npm start`; open `https://localhost:8443/#bulk_trader
 7. Test invalid stake/history, unsupported Step trade type, account switching, Stop, logout, WebSocket loss, and changing away from the Bulk tab mid-run before considering public use.
 8. If you can reproduce a build or API error, provide the terminal/Console error **without API keys, OAuth codes, access tokens, or other credentials**.
 
-**Step 1 audit note:** The 600 ms target and request meter were already introduced before the audit. The audit corrects double-counted rate-limit errors, the attribution of late confirmations after account switches, and misleading failed-purchase rows for queued requests that were cancelled before sending. Stages for rate-limit robustness, performance tuning, settlement reliability and end-to-end trading verification remain pending. A 600 ms start spacing is not a guarantee of 600 ms completed purchases.
+**Step 1 audit note:** The 500 ms target and request meter were already introduced before the audit. The audit corrects double-counted rate-limit errors, the attribution of late confirmations after account switches, and misleading failed-purchase rows for queued requests that were cancelled before sending. Stages for rate-limit robustness, performance tuning, settlement reliability and end-to-end trading verification remain pending. A 500 ms start spacing is not a guarantee of 600 ms completed purchases.
 
 **Not yet validated:** production build on your laptop, OAuth login / API against your account, live tick/history behavior, accurate settlement stats, menu responsiveness and Deriv contract availability. This work stays on `develop` until tested. Do NOT deploy it for real-money trading as-is.
 

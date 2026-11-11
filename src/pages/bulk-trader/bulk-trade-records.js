@@ -39,3 +39,30 @@ export const upsertBulkRecord = (records, item, limit = 300) => {
 
 export const isBulkRowAwaitingData = item =>
     ['quoting', 'buying', 'open'].includes(item?.status);
+
+/**
+ * The browser may close or navigate away while a purchase is waiting for a
+ * Deriv response. Never resume a shimmer or assume the buy didn't execute
+ * after reload. A buying request is ambiguous and blocks further batches
+ * until the account statement is reconciled.
+ *
+ * Recovery is ONLY for records loaded into a freshly mounted/account-switched
+ * report, never for the still-active worker's storage upserts.
+ */
+export const recoverInterruptedBulkRecords = records => records.map(record => {
+    if (record.status === 'buying') {
+        return {
+            ...record,
+            status: 'unconfirmed',
+            reason: 'The page was left before Deriv confirmed this buy. Check the Deriv account statement before trading again.',
+        };
+    }
+    if (record.status === 'quoting') {
+        return {
+            ...record,
+            status: 'failed',
+            reason: 'The page was left before the proposal completed. No purchase was confirmed.',
+        };
+    }
+    return record;
+});

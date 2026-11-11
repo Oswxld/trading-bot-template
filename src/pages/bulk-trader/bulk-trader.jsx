@@ -15,6 +15,7 @@ import {
     releaseBulkRun,
 } from './bulk-request-safety';
 import { requestBulkApi } from './bulk-api-request';
+import { makePendingBulkRecord, upsertBulkRecord } from './bulk-trade-records';
 import { runBoundedBulkOperations } from './bulk-execution';
 import BulkReports from './bulk-reports';
 import './bulk-trader.scss';
@@ -172,10 +173,6 @@ const BulkTrader = observer(() => {
     const log = text => {
         if (!mountedRef.current) return;
         setJournal(previous => [{ id: ++nextRequestId, timestamp: Date.now(), message: text }, ...previous].slice(0, 300));
-    };
-    const addRecord = item => {
-        recordsRef.current = [item, ...recordsRef.current].slice(0, 300);
-        if (mountedRef.current) setRecords(recordsRef.current);
     };
     const applyContractUpdate = contract => {
         if (!contract?.contract_id || !mountedRef.current) return;
@@ -570,24 +567,40 @@ const BulkTrader = observer(() => {
                 saveForRun('journal', { id: ++nextRequestId, timestamp: Date.now(), message: text });
             }
         };
-        const addRunRecord = item => {
-            if (mountedRef.current && activeAccountRef.current === activeAccountId &&
-                localStorage.getItem('active_loginid') === activeAccountId) {
-                addRecord(item);
-                if (item.contractId) {
-                    const early = earlySettlementsRef.current.take(item.contractId);
-                    if (early) applyContractUpdate(early);
-                }
-            } else {
-                saveForRun('records', item);
+        // Each operation has ONE stable local row, including while Deriv
+        // hasn't responded yet. Update it in place rather than inserting
+        // another transaction when the buy confirms or settles.
+        const upsertRunRecord = item => {
+            const sameAccount = mountedRef.current && activeAccountRef.current === activeAccountId &&
+                localStorage.getItem('active_loginid') === activeAccountId;
+            const previous = sameAccount ? recordsRef.current : fromStorage(activeAccountId, 'records');
+            const next = upsertBulkRecord(previous, item);
+            if (sameAccount) {
+                recordsRef.current = next;
+                setRecords(next);
             }
+            // Persist immediately so late confirmations survive navigation,
+            // account switching, and component unmounting.
+            try {
+                sessionStorage.setItem(`bulk-trader:records:${activeAccountId}`, JSON.stringify(next));
+            } catch { /* session storage unavailable */ }
         };
+        const batchLocalId = `${Date.now()}-${++nextRequestId}`;
 
         // Reservation, 500 ms start spacing and the five-slot limit are
         // centralised in a separately testable scheduler. Individual workers
         // still wait for their OWN proposal and buy reply, but never block
         // unrelated workers while waiting for those confirmations.
         const executePurchase = async i => {
+                const pendingRecord = makePendingBulkRecord({
+                    localId: `${batchLocalId}:${i}`,
+                    number: i + 1,
+                    symbol: market,
+                    symbolName: chosenMarket?.label || market,
+                    contractType: buttonLabel,
+                    prediction: NEEDS_DIGIT.has(contractType) ? prediction : null,
+                });
+                upsertRunRecord(pendingRecord);
                 let subscriptionId = null;
                 let phase = 'proposal';
                 try {
@@ -612,6 +625,7 @@ const BulkTrader = observer(() => {
                     }
                     if (!isSafe()) {
                         skipped++;
+                        upsertRunRecord({ ...pendingRecord, status: 'skipped', reason: 'Stopped before purchase.' });
                         logRun(`Trade #${i + 1} was skipped before purchase because the run stopped or the account changed.`);
                         return;
                     }
@@ -620,6 +634,7 @@ const BulkTrader = observer(() => {
                         throw new Error('Quoted price exceeded your stake; this purchase was skipped.');
                     }
                     phase = 'buy';
+                    upsertRunRecord({ ...pendingRecord, status: 'buying' });
                     const result = await request(
                         api, { buy: proposal.id, price }, 15000, isSafe, onThrottle
                     );
@@ -628,18 +643,20 @@ const BulkTrader = observer(() => {
                     }
                     successes++;
                     const contractId = String(result.buy.contract_id);
-                    addRunRecord({
-                        number: Date.now() + i,
-                        timestamp: Date.now(),
+                    const boughtRecord = {
+                        ...pendingRecord,
                         contractId,
-                        symbol: market,
-                        symbolName: chosenMarket?.label || market,
-                        contractType: buttonLabel,
                         price: Number(result.buy.buy_price ?? price),
-                        prediction: NEEDS_DIGIT.has(contractType) ? prediction : null,
                         status: 'open',
-                        payout: null, profit: null, entrySpot: null, exitSpot: null,
-                    });
+                    };
+                    // With 1-tick contracts the final result can arrive
+                    // before buy's req_id acknowledgement. Apply the genuine
+                    // Deriv close event to this same stable transaction row.
+                    const early = earlySettlementsRef.current.take(contractId);
+                    const finalRecord = early && activeAccountRef.current === activeAccountId
+                        ? mergeContractSettlement(boughtRecord, early)
+                        : boughtRecord;
+                    upsertRunRecord(finalRecord);
                     logRun(`Purchased ${buttonLabel} #${i + 1}, contract ${contractId}, stake ${price.toFixed(2)} ${currency}.`);
                     // Shared live contract-status stream is the primary source
                     // for settlement. Query only if no settlement arrives.
@@ -651,23 +668,17 @@ const BulkTrader = observer(() => {
                     const outcome = classifyBulkFailure(error, phase);
                     if (outcome.status === 'skipped') {
                         skipped++;
+                        upsertRunRecord({ ...pendingRecord, status: 'skipped', reason });
                         logRun(`Trade #${i + 1} was skipped before its request was sent.`);
                         return;
                     }
                     errorCount++;
                     failures++;
                     if (outcome.status === 'unconfirmed') unconfirmed++;
-                    addRunRecord({
-                        number: Date.now() + i,
-                        timestamp: Date.now(),
-                        contractId: null,
-                        symbol: market,
-                        symbolName: chosenMarket?.label || market,
-                        contractType: buttonLabel,
-                        price: 0,
+                    upsertRunRecord({
+                        ...pendingRecord,
                         status: outcome.status,
                         reason: `Trade #${i + 1} (${phase}): ${reason}`,
-                        payout: null, profit: null,
                     });
                     logRun(`Trade #${i + 1} ${outcome.status.toUpperCase()} during ${phase}: ${reason}`);
                     // A buy with a missing acknowledgement might have

@@ -2,12 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { api_base } from '@/external/bot-skeleton';
 import { DerivWSAccountsService } from '@/services/derivws-accounts.service';
-import {
-    isTradingRateLimitError,
-    noteTradingRateLimit,
-    sendTradingRequestWithinBudget,
-    tradingBudgetSnapshot,
-} from '@/services/trading-request-budget';
+import { tradingBudgetSnapshot } from '@/services/trading-request-budget';
 import { useStore } from '@/hooks/useStore';
 import {
     createEarlySettlementBuffer,
@@ -17,9 +12,9 @@ import {
 import {
     acquireBulkRun,
     classifyBulkFailure,
-    makeBulkRequestError,
     releaseBulkRun,
 } from './bulk-request-safety';
+import { requestBulkApi } from './bulk-api-request';
 import { runBoundedBulkOperations } from './bulk-execution';
 import BulkReports from './bulk-reports';
 import './bulk-trader.scss';
@@ -79,94 +74,13 @@ const marketOrder = item => {
     return 2000;
 };
 
-/** Match replies by req_id. The timeout starts only after dispatch.
- * Buy requests that lose their acknowledgement must NEVER be blindly retried.
- */
-const request = (api, payload, timeout = 15000, canSend = () => true, onThrottle) => new Promise((resolve, reject) => {
-    const reqId = ++nextRequestId;
-    const requestType = Object.prototype.hasOwnProperty.call(payload, 'buy') ? 'buy' :
-        Object.prototype.hasOwnProperty.call(payload, 'proposal') ? 'proposal' : 'status';
-    let subscription;
-    let timer;
-    let finished = false;
-    let dispatched = false;
-    let rateLimitReported = false;
-
-    const failure = (kind, message, code) => makeBulkRequestError(message, {
-        kind,
-        dispatched,
-        requestType,
-        apiCode: code,
+// Keep a single, monotonically increasing req_id sequence shared with other
+// subscriptions in this tab. The request helper is independently testable.
+const request = (api, payload, timeout = 15000, canSend = () => true, onThrottle) =>
+    requestBulkApi({
+        api, payload, timeout, canSend, onThrottle,
+        reqId: ++nextRequestId,
     });
-    // DerivAPIBasic may surface the same error through onMessage and its
-    // rejected send promise; only apply rate-limit backoff once.
-    const noteRateLimitOnce = error => {
-        if (!rateLimitReported && isTradingRateLimitError(error)) {
-            rateLimitReported = true;
-            noteTradingRateLimit(api);
-        }
-    };
-    const onSocketClose = () => done(failure(
-        'connection_lost',
-        'Deriv WebSocket disconnected before confirming the request. Check the account statement for any outstanding purchase.'
-    ));
-    const done = (error, data) => {
-        if (finished) return;
-        finished = true;
-        clearTimeout(timer);
-        subscription?.unsubscribe?.();
-        api.connection?.removeEventListener?.('close', onSocketClose);
-        if (error) reject(error);
-        else resolve(data);
-    };
-
-    try {
-        api.connection?.addEventListener?.('close', onSocketClose);
-        subscription = api.onMessage().subscribe(event => {
-            const data = event?.data || event;
-            if (Number(data?.req_id) !== reqId) return;
-            if (data.error) {
-                noteRateLimitOnce(data.error);
-                done(failure('api_rejected', messageFor(data.error), data.error.code));
-            } else {
-                done(null, data);
-            }
-        });
-
-        const send = () => {
-            // The budget can be holding this request when Stop or socket-close
-            // occurs. Do not send anything after it has already settled.
-            if (finished) return;
-            dispatched = true; // Conservatively uncertain if api.send throws.
-            timer = setTimeout(() => done(failure(
-                'timeout',
-                'Deriv did not confirm this request within the timeout. Check the account statement before buying again.'
-            )), timeout);
-            const result = api.send({ ...payload, req_id: reqId });
-            // Do not use the return value to infer a successful purchase.
-            // onMessage/req_id is the authoritative confirmation path.
-            result?.catch?.(error => {
-                noteRateLimitOnce(error);
-                done(failure('send_rejected', messageFor(error), error?.code));
-            });
-        };
-
-        const tradingRequest = ['proposal', 'buy', 'sell', 'proposal_open_contract']
-            .some(key => Object.prototype.hasOwnProperty.call(payload, key));
-
-        if (tradingRequest) {
-            sendTradingRequestWithinBudget(api, send, canSend, onThrottle).catch(error => {
-                const cancelled = !dispatched &&
-                    String(error?.message || '').includes('Bulk trading stopped before sending this request.');
-                done(failure(cancelled ? 'cancelled' : 'dispatch_error', messageFor(error)));
-            });
-        } else {
-            send();
-        }
-    } catch (error) {
-        done(failure('dispatch_error', messageFor(error)));
-    }
-});
 
 const BulkTrader = observer(() => {
     const { client } = useStore();

@@ -15,7 +15,7 @@ import {
     releaseBulkRun,
 } from './bulk-request-safety';
 import { requestBulkApi } from './bulk-api-request';
-import { makePendingBulkRecord, upsertBulkRecord } from './bulk-trade-records';
+import { makePendingBulkRecord, recoverInterruptedBulkRecords, upsertBulkRecord } from './bulk-trade-records';
 import { runBoundedBulkOperations } from './bulk-execution';
 import BulkReports from './bulk-reports';
 import './bulk-trader.scss';
@@ -61,11 +61,14 @@ const digitsFrom = (price, pipSize = 2) => {
     const decimals = Number.isInteger(Number(pipSize)) ? Math.max(0, Math.min(8, Number(pipSize))) : 2;
     return Number(number.toFixed(decimals).slice(-1));
 };
-const fromStorage = (accountId, type) => {
+const fromStorage = (accountId, type, recoverInterrupted = false) => {
     if (!accountId) return [];
     try {
         const result = JSON.parse(sessionStorage.getItem(`bulk-trader:${type}:${accountId}`) || '[]');
-        return Array.isArray(result) ? result.slice(0, 300) : [];
+        const rows = Array.isArray(result) ? result.slice(0, 300) : [];
+        return recoverInterrupted && type === 'records'
+            ? recoverInterruptedBulkRecords(rows)
+            : rows;
     } catch { return []; }
 };
 const marketOrder = item => {
@@ -113,7 +116,7 @@ const BulkTrader = observer(() => {
     const currency = account?.currency || client?.currency || 'USD';
     const isDemo = Boolean(account?.account_type === 'demo' || /^VRT/i.test(activeAccountId)) && Boolean(activeAccountId);
     const [reportAccount, setReportAccount] = useState(activeAccountId);
-    const [records, setRecords] = useState(() => fromStorage(activeAccountId, 'records'));
+    const [records, setRecords] = useState(() => fromStorage(activeAccountId, 'records', true));
     const [journal, setJournal] = useState(() => fromStorage(activeAccountId, 'journal'));
     const recordsRef = useRef(records);
     // Use the rendered account, not just localStorage, before updating visible
@@ -152,7 +155,7 @@ const BulkTrader = observer(() => {
             setMessage('Account changed. No new bulk orders will be submitted; earlier requests may still confirm on the previous account.');
             setInFlight(0);
         }
-        recordsRef.current = fromStorage(activeAccountId, 'records');
+        recordsRef.current = fromStorage(activeAccountId, 'records', true);
         setRecords(recordsRef.current);
         setJournal(fromStorage(activeAccountId, 'journal'));
         setReportAccount(activeAccountId);

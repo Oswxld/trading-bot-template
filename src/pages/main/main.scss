@@ -754,3 +754,53 @@
     align-items: center;
     justify-content: center;
 }
+
+
+// Client trading tools share one blue navigation strip directly below the
+// existing Deriv account header. Bulk Trader appears beside Charts.
+.main__container .dc-tabs__list--main__tabs {
+    background: #1738e9;
+    border-bottom: 0;
+    min-height: 52px;
+    justify-content: flex-start;
+    color: #fff;
+    overflow-x: auto;
+    scrollbar-width: none;
+    &::-webkit-scrollbar { display: none; }
+
+    .dc-tabs__item--main__tabs {
+        display: flex;
+        flex: 0 0 auto;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        min-height: 52px;
+        height: 52px;
+        width: auto;
+        padding: 0 18px;
+        color: #fff;
+        font-size: 14px;
+        font-weight: 600;
+        border-radius: 0;
+        &:hover, &.dc-tabs__active--main__tabs {
+            color: #fff;
+            background: #0e2ecb;
+            font-weight: 800;
+        }
+        svg, svg path, svg g {
+            fill: #fff !important;
+            stroke: #fff;
+        }
+    }
+
+    .dc-tabs__active-line--main__tabs { display: none; }
+}
+
+@media (max-width: 750px) {
+    .main__container .dc-tabs__list--main__tabs .dc-tabs__item--main__tabs {
+        min-height: 48px;
+        height: 48px;
+        padding: 0 13px;
+        font-size: 12px;
+    }
+}

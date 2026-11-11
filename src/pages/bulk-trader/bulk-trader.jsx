@@ -40,9 +40,9 @@ const NEEDS_DIGIT = new Set(['DIGITDIFF', 'DIGITMATCH', 'DIGITOVER', 'DIGITUNDER
 const MAX_TRADES = 50;
 // Cap concurrent, unconfirmed purchase operations; fewer trades use fewer slots.
 const MAX_IN_FLIGHT_PURCHASES = 5;
-// Start up to 5 operations, staggered by 600 ms; actual trading requests
+// Start up to 5 operations, staggered by 500 ms; actual trading requests
 // also pass the shared 240/min and 12,000/hour soft request-budget gate.
-const MIN_PACING_MS = 600;
+const MIN_PACING_MS = 500;
 let nextRequestId = Math.floor(Math.random() * 10000000) + 50000000;
 
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));

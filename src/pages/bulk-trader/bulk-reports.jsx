@@ -3,7 +3,10 @@ import DraggableResizeWrapper from '@/components/draggable/draggable-resize-wrap
 import { StatisticsSummary } from '@/components/run-panel/run-panel';
 import { MarketIcon } from '@/components/market/market-icon';
 import { TradeTypeIcon } from '@/components/trade-type/trade-type-icon';
+import { TransactionFieldLoader } from '@/components/transactions/transaction-loaders';
+import { LegacyRadioOffIcon, LegacyRadioOnIcon } from '@deriv/quill-icons';
 import { realizedPayoutForRecord } from './bulk-contract-monitor';
+import { isBulkRowAwaitingData } from './bulk-trade-records';
 import './bulk-reports.scss';
 
 // A bulk purchase is not a Deriv Bot run. Render the existing Deriv Drawer,
@@ -54,43 +57,146 @@ const TradeTypeCell = ({ item }) => {
     ) : <span>{name}</span>;
 };
 
+// Deriv Bot uses the same SVG shimmer for missing entry/exit ticks and an
+// unresolved profit. Only animate data that Deriv has NOT actually reported.
+// An explicit failure/unconfirmed buy shows a status, never fabricated values.
+const hasValue = value => value !== null && value !== undefined && value !== '';
+const confirmedPrice = item => hasValue(item.price) &&
+    Number.isFinite(Number(item.price)) && Number(item.price) > 0;
+const isSettled = item => ['won', 'lost'].includes(item.status);
+
+const formatGMT = timestamp => {
+    if (!timestamp) return '—';
+    const parsed = new Date(timestamp);
+    return Number.isFinite(parsed.getTime())
+        ? `${parsed.toISOString().slice(0, 19).replace('T', ' ')} GMT`
+        : '—';
+};
+
+const Field = ({ value, loading, label, className = '' }) => (
+    hasValue(value)
+        ? <span className={className}>{value}</span>
+        : loading
+            ? <span className='bulk-reports__pending' aria-label={label || 'Waiting for Deriv'}>
+                <TransactionFieldLoader />
+            </span>
+            : <span className='bulk-reports__missing'>—</span>
+);
+
+const ProfitField = ({ item, currency, detailed = false }) => {
+    if (isSettled(item)) {
+        const result = Number(item.profit);
+        if (!Number.isFinite(result)) return '—';
+        return (
+            <span className={item.status === 'won' ? 'bulk-reports__profit' : 'bulk-reports__loss'}>
+                {result > 0 ? '+' : ''}{result.toFixed(2)}{detailed ? '' : ` ${currency}`}
+            </span>
+        );
+    }
+    if (isBulkRowAwaitingData(item)) {
+        return <Field loading label='Waiting for Deriv to settle the contract' />;
+    }
+    return <span className='bulk-reports__outcome' title={item.reason || item.status}>
+        {item.status === 'unconfirmed' ? 'Unconfirmed'
+            : item.status === 'failed' ? 'Failed'
+            : item.status === 'skipped' ? 'Skipped'
+            : '—'}
+    </span>;
+};
+
+const PriceField = ({ item, currency, detailed = false }) => confirmedPrice(item)
+    ? <span>{Number(item.price).toFixed(2)}{detailed ? '' : ` ${currency}`}</span>
+    : <Field loading={isBulkRowAwaitingData(item)}
+        label='Waiting for Deriv buy price confirmation' />;
+
+const IconPair = ({ item }) => (
+    <div className='bulk-reports__icon-pair'>
+        <MarketCell item={item} />
+        <TradeTypeCell item={item} />
+    </div>
+);
+
+const SpotLine = ({ value, entry, loading }) => (
+    <div className='bulk-reports__spot-line'>
+        <span className='bulk-reports__spot-icon'
+            title={entry ? 'Entry spot' : 'Exit spot'}
+            aria-label={entry ? 'Entry spot' : 'Exit spot'}>
+            {entry ? <LegacyRadioOnIcon width={10} height={10} />
+                : <LegacyRadioOffIcon width={10} height={10} />}
+        </span>
+        <Field value={value} loading={loading}
+            label={entry ? 'Waiting for entry spot' : 'Waiting for exit spot'} />
+    </div>
+);
+
 const TradesTable = ({ records, currency, detailed = false }) => (
     <div className='bulk-reports__table-scroll'>
-        <table className='bulk-reports__table'>
+        <table className={`bulk-reports__table${detailed
+            ? ' bulk-reports__table--detailed'
+            : ' bulk-reports__table--compact'}`}>
             <thead>
-                <tr>
-                    {detailed && <th>Timestamp</th>}
-                    <th>Reference</th>
-                    <th>Market</th>
-                    <th>Trade type</th>
-                    {detailed && <><th>Entry spot</th><th>Exit spot</th></>}
-                    <th>Buy price</th>
-                    <th>Profit/Loss</th>
-                </tr>
+                {detailed ? (
+                    <tr>
+                        <th scope='col'>Timestamp</th>
+                        <th scope='col'>Reference</th>
+                        <th scope='col'>Market</th>
+                        <th scope='col'>Trade type</th>
+                        <th scope='col'>Entry spot</th>
+                        <th scope='col'>Exit spot</th>
+                        <th scope='col'>Buy price</th>
+                        <th scope='col'>Profit/Loss</th>
+                    </tr>
+                ) : (
+                    <tr>
+                        <th scope='col'>Type</th>
+                        <th scope='col'>Entry/Exit spot</th>
+                        <th scope='col'>Buy price and P/L</th>
+                    </tr>
+                )}
             </thead>
             <tbody>
                 {records.length === 0 ? (
-                    <tr><td colSpan={detailed ? 8 : 5} className='bulk-reports__empty'>No bulk trade transactions yet.</td></tr>
-                ) : (
-                    records.map(item => (
-                        <tr key={item.contractId || item.number}>
-                            {detailed && <td>{item.timestamp ? new Date(item.timestamp).toLocaleString() : '—'}</td>}
-                            <td title={item.contractId || item.reason || ''}>{item.contractId || '—'}</td>
-                            <td><MarketCell item={item} /></td>
-                            <td><TradeTypeCell item={item} /></td>
-                            {detailed && <><td>{item.entrySpot ?? '—'}</td><td>{item.exitSpot ?? '—'}</td></>}
-                            <td>{Number.isFinite(item.price) && item.price > 0 ? amount(item.price, currency) : '—'}</td>
-                            <td className={item.status === 'won' ? 'bulk-reports__profit' : item.status === 'lost' ? 'bulk-reports__loss' : ''}>
-                                {item.status === 'won' || item.status === 'lost'
-                                    ? (Number(item.profit || 0) > 0 ? '+' : '') + amount(item.profit, currency)
-                                    : item.status === 'open' ? 'Open'
-                                    : item.status === 'unconfirmed' ? 'Unconfirmed'
-                                    : item.status === 'failed' ? 'Failed'
-                                    : 'Pending'}
-                            </td>
-                        </tr>
-                    ))
-                )}
+                    <tr><td colSpan={detailed ? 8 : 3} className='bulk-reports__empty'>
+                        No bulk trade transactions yet.
+                    </td></tr>
+                ) : records.map(item => (
+                    <tr key={item.localId || item.contractId || item.number}
+                        className={isBulkRowAwaitingData(item) ? 'bulk-reports__row--active' : ''}
+                        title={item.reason || (item.contractId ? `Contract ${item.contractId}` : item.status)}>
+                        {detailed ? (
+                            <>
+                                <td className='bulk-reports__date'>{formatGMT(item.timestamp)}</td>
+                                <td className='bulk-reports__reference'>
+                                    <Field value={item.contractId}
+                                        loading={item.status === 'quoting' || item.status === 'buying'}
+                                        label='Waiting for contract reference' />
+                                </td>
+                                <td><MarketCell item={item} /></td>
+                                <td><TradeTypeCell item={item} /></td>
+                                <td><Field value={item.entrySpot}
+                                    loading={isBulkRowAwaitingData(item)} label='Waiting for entry spot' /></td>
+                                <td><Field value={item.exitSpot}
+                                    loading={isBulkRowAwaitingData(item)} label='Waiting for exit spot' /></td>
+                                <td><PriceField item={item} currency={currency} detailed /></td>
+                                <td><ProfitField item={item} currency={currency} detailed /></td>
+                            </>
+                        ) : (
+                            <>
+                                <td><IconPair item={item} /></td>
+                                <td className='bulk-reports__spot-lines'>
+                                    <SpotLine entry value={item.entrySpot}
+                                        loading={isBulkRowAwaitingData(item)} />
+                                    <SpotLine value={item.exitSpot}
+                                        loading={isBulkRowAwaitingData(item)} />
+                                </td>
+                                <td className='bulk-reports__price-lines'>
+                                    <div><PriceField item={item} currency={currency} /></div>
+                                    <div><ProfitField item={item} currency={currency} /></div>
+                                </td>
+                            </>
+                        )}
+                    </tr>
+                ))}
             </tbody>
         </table>
     </div>
@@ -131,7 +237,9 @@ function BulkReports({ records, journal, accountId, currency, balance, isRunning
     const profit = settled.reduce((sum, r) => sum + Number(r.profit || 0), 0);
     const won = settled.filter(r => r.status === 'won').length;
     const lost = settled.filter(r => r.status === 'lost').length;
-    const mostRecent = settled[0] || confirmed[0];
+    // Newly started operations must be visible before Deriv confirms buy.
+    const mostRecent = records.find(item => isBulkRowAwaitingData(item) ||
+        isSettled(item)) || confirmed[0];
     const sections = ['Summary', 'Transactions', 'Journal'];
 
     const onClear = () => {
@@ -178,14 +286,19 @@ function BulkReports({ records, journal, accountId, currency, balance, isRunning
                     {active === 0 && <div className='bulk-reports__summary'>
                         {mostRecent ? <>
                             <span className={mostRecent.status === 'won' ? 'bulk-reports__profit' : mostRecent.status === 'lost' ? 'bulk-reports__loss' : ''}>
-                                {mostRecent.status === 'won' || mostRecent.status === 'lost' ? '⚑ Closed' : '◷ Open'}
+                                {isSettled(mostRecent) ? '⚑ Closed' :
+                                    mostRecent.status === 'quoting' ? '◷ Getting proposal' :
+                                    mostRecent.status === 'buying' ? '◷ Purchasing' : '◷ Awaiting outcome'}
                             </span>
                             <strong className={mostRecent.status === 'won' ? 'bulk-reports__profit' : mostRecent.status === 'lost' ? 'bulk-reports__loss' : ''}>
-                                {['won', 'lost'].includes(mostRecent.status) ?
+                                {isSettled(mostRecent) ?
                                     (Number(mostRecent.profit) > 0 ? '+' : '') + amount(mostRecent.profit, currency) :
-                                    amount(mostRecent.price, currency) + ' stake'}
+                                    confirmedPrice(mostRecent) ? amount(mostRecent.price, currency) + ' stake' :
+                                        <TransactionFieldLoader />}
                             </strong>
-                            <small>Contract {mostRecent.contractId}</small>
+                            <small>{mostRecent.contractId
+                                ? `Contract ${mostRecent.contractId}`
+                                : 'Waiting for Deriv purchase confirmation'}</small>
                         </> : <span>No bulk trades yet. Select a demo account and place a trade to see its summary.</span>}
                     </div>}
 

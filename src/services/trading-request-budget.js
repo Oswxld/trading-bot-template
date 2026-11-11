@@ -135,12 +135,17 @@ export const sendTradingRequestWithinBudget = async (api, send, canSend, onThrot
             }
             // Check Stop/account switch frequently instead of sleeping for an
             // entire minute (or hour) while holding a purchase request.
-            await new Promise(resolve => setTimeout(resolve, Math.min(2000, remaining)));
+            await new Promise(resolve => setTimeout(resolve, Math.min(200, remaining)));
         }
 
         if (!canSend()) throw new Error('Bulk trading stopped before sending this request.');
         // The tracking socket counts the frame only if it really gets sent.
-        return send();
+        // IMPORTANT: do NOT return the api.send() promise from this async
+        // function: that would keep the mutex locked until its response
+        // resolves and silently serialize the five concurrent workers.
+        // request() separately awaits the matching req_id via onMessage and
+        // attaches a rejection handler to api.send().
+        send();
     } finally {
         release();
     }

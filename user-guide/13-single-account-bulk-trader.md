@@ -58,7 +58,7 @@ Run `npm run build`, then `npm start`; open `https://localhost:8443/#bulk_trader
 7. Test invalid stake/history, unsupported Step trade type, account switching, Stop, logout, WebSocket loss, and changing away from the Bulk tab mid-run before considering public use.
 8. If you can reproduce a build or API error, provide the terminal/Console error **without API keys, OAuth codes, access tokens, or other credentials**.
 
-**Step 1 audit note:** The 500 ms target and request meter were already introduced before the audit. The audit corrects double-counted rate-limit errors, the attribution of late confirmations after account switches, and misleading failed-purchase rows for queued requests that were cancelled before sending. Stages for rate-limit robustness, performance tuning, settlement reliability and end-to-end trading verification remain pending. A 500 ms start spacing is not a guarantee of 600 ms completed purchases.
+**Step 1 audit:** Fixed double-counted rate-limit rejections, cross-account attribution of late confirmations, and incorrectly labeled cancelled purchase requests. **Step 2:** Strengthened per-page shared WebSocket metering, rolling soft quotas and backoff, and reduced start spacing to 500 ms. The test suite has not yet been run against the app on your machine; further execution and settlement verification remains pending.
 
 **Not yet validated:** production build on your laptop, OAuth login / API against your account, live tick/history behavior, accurate settlement stats, menu responsiveness and Deriv contract availability. This work stays on `develop` until tested. Do NOT deploy it for real-money trading as-is.
 

@@ -2,7 +2,7 @@ name: Bulk Trader verification
 
 on:
   push:
-    branches: [develop]
+    branches: [develop, 'clients/kevin-forex-trader/develop']
     paths:
       - 'src/pages/bulk-trader/**'
       - 'src/services/trading-request-budget.js'
@@ -46,6 +46,7 @@ jobs:
         run: |
           npx jest \
             src/pages/bulk-trader/__tests__/bulk-account-safety.test.js \
+            src/pages/bulk-trader/__tests__/bulk-trader-buttons.test.jsx \
             src/pages/bulk-trader/__tests__/bulk-execution.test.js \
             src/pages/bulk-trader/__tests__/bulk-contract-monitor.test.js \
             src/pages/bulk-trader/__tests__/bulk-request-safety.test.js \

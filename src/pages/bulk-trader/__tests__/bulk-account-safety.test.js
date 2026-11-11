@@ -12,6 +12,40 @@ describe('real-account bulk safety', () => {
         expect(identifyBulkAccount({account_id:'CR123', account_type:'real', currency:'USD'},'CR999')).toBe('unavailable');
         expect(identifyBulkAccount({account_id:'CR123', currency:'USD'},'CR123')).toBe('unavailable');
     });
+    it('restores a VRTC demo account from a matching authenticated socket if the cache is empty', () => {
+        const live = { loginid: 'VRTC1001', currency: 'USD' };
+        expect(identifyBulkAccount(undefined, 'VRTC1001', {
+            liveAccount: live, socketAuthorized: true,
+        })).toBe('demo');
+        expect(identifyBulkAccount({ account_id: 'VRTC1001' }, 'VRTC1001', {
+            liveAccount: live, socketAuthorized: true,
+        })).toBe('demo');
+    });
+
+    it('rejects a spoofed or disconnected demo login ID', () => {
+        const liveAccount = { loginid: 'VRTC1001', currency: 'USD' };
+        expect(identifyBulkAccount(null, 'VRTC1001', { liveAccount })).toBe('unavailable');
+        expect(identifyBulkAccount(null, 'VRTC9999', {
+            liveAccount, socketAuthorized: true,
+        })).toBe('unavailable');
+        expect(identifyBulkAccount(null, 'VRTC1001', {
+            liveAccount: { loginid: 'VRTC1001' }, socketAuthorized: true,
+        })).toBe('unavailable');
+        expect(identifyBulkAccount(null, 'VRTC1001', {
+            liveAccount, socketAuthorized: true, clientAccount: { loginid: 'VRTC9999', is_virtual: 1 },
+        })).toBe('unavailable');
+    });
+
+    it('does not enable real trading from an ID prefix or from the socket alone', () => {
+        expect(identifyBulkAccount(null, 'CR123', {
+            liveAccount: { loginid: 'CR123', currency: 'USD' }, socketAuthorized: true,
+            clientAccount: { loginid: 'CR123', is_virtual: 0 },
+        })).toBe('unavailable');
+        expect(identifyBulkAccount({ account_id: 'CR123', account_type: 'real' }, 'CR123', {
+            liveAccount: { loginid: 'CR123', currency: 'USD' }, socketAuthorized: true,
+        })).toBe('unavailable');
+    });
+
     it('requires a positive finite broker balance', () => {
         [null, undefined, '', 0, -10, 'foo'].forEach(balance => expect(assess({balance}).allowed).toBe(false));
     });

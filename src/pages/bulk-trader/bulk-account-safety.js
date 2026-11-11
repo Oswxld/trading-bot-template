@@ -7,11 +7,40 @@ export const REAL_LIMITS = Object.freeze({
     percent: 0.1,
 });
 
-export const identifyBulkAccount = (account, id) =>
-    id && account?.account_id === id && account?.currency &&
-    (account.account_type === 'demo' || account.account_type === 'real')
-        ? account.account_type
+/**
+ * Prefer explicit OAuth account classification. Restore practice trading when
+ * sessionStorage is missing an account but the *authenticated, matching* Deriv
+ * WebSocket confirms the active login. A prefix never grants real-account access.
+ */
+export const identifyBulkAccount = (account, id, {
+    liveAccount = null,
+    socketAuthorized = false,
+    clientAccount = null,
+} = {}) => {
+    if (!id) return 'unavailable';
+    if (account?.account_id === id && account.currency &&
+        (account.account_type === 'demo' || account.account_type === 'real')) {
+        return account.account_type;
+    }
+
+    // Never turn a known real account into demo based on a stale prefix.
+    if (account?.account_id === id && account.account_type === 'real') return 'unavailable';
+
+    if (!socketAuthorized || liveAccount?.loginid !== id || !liveAccount?.currency ||
+        (clientAccount?.loginid && clientAccount.loginid !== id)) {
+        return 'unavailable';
+    }
+    if (clientAccount?.is_virtual === 0 || clientAccount?.is_virtual === false) {
+        return 'unavailable';
+    }
+
+    // Keep backward compatibility with known Deriv virtual account prefixes,
+    // but only after the server-authenticated socket identity has been checked.
+    const isDemoId = /^(VRT|VRW|DEM|DOT)/i.test(id);
+    return clientAccount?.is_virtual === 1 || clientAccount?.is_virtual === true || isDemoId
+        ? 'demo'
         : 'unavailable';
+};
 
 /**
  * Real orders require a fresh balance response on the selected authenticated

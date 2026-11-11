@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { api_base } from '@/external/bot-skeleton';
 import { DerivWSAccountsService } from '@/services/derivws-accounts.service';
+import { OAuthTokenExchangeService } from '@/services/oauth-token-exchange.service';
 import { checkRealExposure, identifyBulkAccount, REAL_LIMITS } from './bulk-account-safety';
 import { tradingBudgetSnapshot } from '@/services/trading-request-budget';
 import { useStore } from '@/hooks/useStore';
@@ -106,16 +107,32 @@ const BulkTrader = observer(() => {
     // visible initially on phones. The visible button toggles either way.
     const [reportsOpen, setReportsOpen] = useState(() => window.innerWidth >= 1024);
     const [message, setMessage] = useState('');
+    const [isPreflighting, setIsPreflighting] = useState(false);
+    const [refreshedAccounts, setRefreshedAccounts] = useState(null);
     const [progress, setProgress] = useState(0);
     const [inFlight, setInFlight] = useState(0);
 
     // The session contains bulk records per *account* so tab navigation never
     // mixes contract history between users and does not wipe completed results.
     const activeAccountId = client?.loginid || localStorage.getItem('active_loginid') || '';
-    const accounts = DerivWSAccountsService.getStoredAccounts() || [];
+    // Prefer the OAuth account list, but recover from incomplete sessionStorage.
+    // The authenticated WebSocket is the source of truth for demo fallback;
+    // a login-ID prefix alone must never authorize a purchase.
+    const accounts = refreshedAccounts || DerivWSAccountsService.getStoredAccounts() || [];
     const account = accounts.find(item => item.account_id === activeAccountId);
-    const currency = account?.currency || client?.currency || 'USD';
-    const accountMode = identifyBulkAccount(account, activeAccountId);
+    const liveAccount = api_base.account_info;
+    const socketMatches = Boolean(
+        api_base.is_authorized &&
+        api_base.account_id === activeAccountId &&
+        liveAccount?.loginid === activeAccountId &&
+        api_base.api?.connection?.readyState === 1
+    );
+    const currency = account?.currency ||
+        (socketMatches ? liveAccount?.currency : null) || client?.currency || 'USD';
+    const accountMode = identifyBulkAccount(account, activeAccountId, {
+        liveAccount, socketAuthorized: socketMatches,
+        clientAccount: client?.accounts?.[activeAccountId],
+    });
     const isReal = accountMode === 'real';
     const accountLabel = isReal ? 'REAL ACCOUNT' : accountMode === 'demo' ? 'Practice account' : 'Select an account';
     const [reportAccount, setReportAccount] = useState(activeAccountId);
@@ -133,6 +150,20 @@ const BulkTrader = observer(() => {
     const settlementTimersRef = useRef(new Set());
     const earlySettlementsRef = useRef(null);
     if (!earlySettlementsRef.current) earlySettlementsRef.current = createEarlySettlementBuffer();
+
+    // If OAuth completed but the stored list was lost/stale, re-fetch it.
+    // This is especially important for real accounts: never guess real-money
+    // permissions from an account ID or a locally cached display balance.
+    useEffect(() => {
+        if (!activeAccountId || accountMode !== 'unavailable' || !client?.is_logged_in) return;
+        const accessToken = OAuthTokenExchangeService.getAccessToken();
+        if (!accessToken) return;
+        let cancelled = false;
+        DerivWSAccountsService.fetchAccountsList(accessToken)
+            .then(rows => { if (!cancelled && Array.isArray(rows)) setRefreshedAccounts(rows); })
+            .catch(() => { /* The button will explain that verification is unavailable. */ });
+        return () => { cancelled = true; };
+    }, [activeAccountId, accountMode, client?.is_logged_in]);
 
     const clearSettlementTimers = () => {
         settlementTimersRef.current.forEach(timer => clearTimeout(timer));
@@ -512,6 +543,7 @@ const BulkTrader = observer(() => {
         }
         // Verify balance with Deriv's authenticated socket, not a cached UI number.
         preflightRef.current = true;
+        setIsPreflighting(true);
         try {
             if (isReal) {
                 if (numberTrades > REAL_LIMITS.trades || stakeValue > REAL_LIMITS.stake ||
@@ -557,6 +589,7 @@ const BulkTrader = observer(() => {
             )) return;
         } finally {
             preflightRef.current = false;
+            if (mountedRef.current) setIsPreflighting(false);
         }
         if (!mountedRef.current || activeAccountRef.current !== activeAccountId ||
             api_base.account_id !== activeAccountId || api_base.api !== api ||
@@ -892,7 +925,7 @@ const BulkTrader = observer(() => {
                 <div className='bulk-trader__buttons'>
                     {currentSelection.actions.map(([type, label], index) => (
                         <button key={type} type='button' className={index === 0 ? 'bulk-trader__buy-a' : 'bulk-trader__buy-b'}
-                            disabled={isRunning || preflightRef.current || !valid || accountMode === 'unavailable' ||
+                            disabled={isRunning || isPreflighting || !valid ||
                                 numberTrades > maxOrders || stakeValue > maxStake ||
                                 (isReal && exposure > REAL_LIMITS.batch) ||
                                 (availableContracts && !availableContracts.has(type))}
@@ -910,7 +943,18 @@ const BulkTrader = observer(() => {
                     {REAL_LIMITS.stake} {currency} per trade, {REAL_LIMITS.batch} {currency} per batch,
                     at most {REAL_LIMITS.percent * 100}% of freshly verified balance. Orders already sent cannot be recalled.
                 </p>}
-                {accountMode === 'unavailable' && <p className='bulk-trader__notice'>Select an authenticated Deriv account to enable orders.</p>}
+                {accountMode === 'unavailable' && <p className='bulk-trader__notice' role='status'>
+                    Account verification is unavailable. Press a trade button to see the reason;
+                    reconnect your Deriv account if necessary. No purchase is sent until the
+                    account and WebSocket are verified.
+                </p>}
+                {!valid && <p className='bulk-trader__notice' role='status'>
+                    Check stake, number of trades, duration, history ticks and prediction.
+                </p>}
+                {availableContracts && currentSelection.actions.every(([type]) => !availableContracts.has(type)) &&
+                    <p className='bulk-trader__notice' role='status'>
+                        Neither contract is offered on the selected market. Choose another market or trade type.
+                    </p>}
                 {message && <p className='bulk-trader__feedback' role='status'>{message}</p>}
             </div>
 

@@ -22,6 +22,23 @@ export const isVerifiedSettlement = contract =>
     Boolean(contract?.contract_id && closedStatus(contract) && finiteNumber(contract.profit) !== null);
 
 /**
+ * proposal_open_contract.payout can be the contract's potential payout, which
+ * is not necessarily the money actually returned after a LOSS.
+ *
+ * For purchased options, realized net profit = realized return - buy price.
+ * Derive realized return only for a VERIFIED closed trade that has both its
+ * actual buy price and a finite Deriv-reported profit; never use an open
+ * contract's potential payout as money already received.
+ */
+export const realizedPayoutForRecord = record => {
+    if (!record || !['won', 'lost'].includes(record.status)) return null;
+    const paid = finiteNumber(record.price);
+    const profit = finiteNumber(record.profit);
+    if (paid === null || paid < 0 || profit === null) return null;
+    return Math.max(0, Number((paid + profit).toFixed(8)));
+};
+
+/**
  * A repeated or out-of-order OPEN event may never undo a settled record.
  * Only closed events with a finite confirmed profit can transition a record to
  * 'won'/'lost'. The actual reported profit/payout are Deriv's own values.
@@ -42,14 +59,19 @@ export const mergeContractSettlement = (record, contract) => {
             : profit >= 0 ? 'won' : 'lost')
         : record.status;
 
-    const payout = verified ? finiteNumber(contract.payout) : null;
-    return {
+    const updated = {
         ...record,
         status,
         profit: verified ? profit : record.profit,
-        payout: verified && payout !== null ? payout : record.payout,
         entrySpot: contract.entry_spot ?? record.entrySpot,
         exitSpot: contract.exit_spot ?? record.exitSpot,
+    };
+    // The API 'payout' field may remain a potential win amount even if the
+    // contract lost. Do not misreport it as a realized credit on the Summary.
+    const realizedPayout = verified ? realizedPayoutForRecord(updated) : null;
+    return {
+        ...updated,
+        payout: realizedPayout ?? record.payout,
     };
 };
 

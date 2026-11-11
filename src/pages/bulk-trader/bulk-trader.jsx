@@ -9,6 +9,7 @@ import {
     tradingBudgetSnapshot,
 } from '@/services/trading-request-budget';
 import { useStore } from '@/hooks/useStore';
+import { runBoundedBulkOperations } from './bulk-execution';
 import BulkReports from './bulk-reports';
 import './bulk-trader.scss';
 
@@ -537,10 +538,6 @@ const BulkTrader = observer(() => {
         let failures = 0;
         let skipped = 0;
         let consecutiveErrors = 0;
-        let completed = 0;
-        let inProgress = 0;
-        let nextTradeIndex = 0;
-        let nextStartAt = Date.now();
 
         const isSafe = () => !stopRef.current &&
             localStorage.getItem('active_loginid') === activeAccountId &&
@@ -586,26 +583,11 @@ const BulkTrader = observer(() => {
             }
         };
 
-        // All workers share this synchronous reservation counter. At most the
-        // selected quantity is reserved, and at most workerLimit operations are
-        // in flight. A reserved slot is dropped if Stop/account switch occurs
-        // during the pacing wait; it is never retried automatically.
-        const reserveNext = async () => {
-            if (!isSafe() || nextTradeIndex >= numberTrades) return null;
-            const index = nextTradeIndex++;
-            const startAt = Math.max(Date.now(), nextStartAt);
-            nextStartAt = startAt + MIN_PACING_MS;
-            const waitMs = startAt - Date.now();
-            if (waitMs > 0) await delay(waitMs);
-            return isSafe() ? index : null;
-        };
-
-        const worker = async () => {
-            while (isSafe()) {
-                const i = await reserveNext();
-                if (i === null) break;
-                inProgress++;
-                if (mountedRef.current && activeAccountRef.current === activeAccountId) setInFlight(inProgress);
+        // Reservation, 500 ms start spacing and the five-slot limit are
+        // centralised in a separately testable scheduler. Individual workers
+        // still wait for their OWN proposal and buy reply, but never block
+        // unrelated workers while waiting for those confirmations.
+        const executePurchase = async i => {
                 let subscriptionId = null;
                 try {
                     const proposalRequest = {
@@ -630,7 +612,7 @@ const BulkTrader = observer(() => {
                     if (!isSafe()) {
                         skipped++;
                         logRun(`Trade #${i + 1} was skipped before purchase because the run stopped or the account changed.`);
-                        break;
+                        return;
                     }
                     const price = Number(proposal.ask_price);
                     if (price <= 0 || price > stakeValue + 0.00001) {
@@ -670,7 +652,7 @@ const BulkTrader = observer(() => {
                     if (reason.includes('Bulk trading stopped before sending this request.')) {
                         skipped++;
                         logRun(`Trade #${i + 1} was skipped before its request was sent.`);
-                        break;
+                        return;
                     }
                     failures++;
                     consecutiveErrors++;
@@ -694,26 +676,37 @@ const BulkTrader = observer(() => {
                     if (subscriptionId && api.connection?.readyState === 1) {
                         try { api.send({ forget: subscriptionId }); } catch { /* websocket closed */ }
                     }
-                    completed++;
-                    inProgress--;
-                    if (mountedRef.current && activeAccountRef.current === activeAccountId) {
-                        setProgress(completed);
-                        setInFlight(inProgress);
-                    }
                 }
-            }
         };
 
         try {
-            // Workers complete independently: the next trade can start as
-            // soon as a slot frees, without waiting for unrelated confirmations.
-            await Promise.all(Array.from({ length: workerLimit }, () => worker()));
-            const stopped = stopRef.current || !isSafe() || completed < numberTrades;
+            const stats = await runBoundedBulkOperations({
+                quantity: numberTrades,
+                maxConcurrent: MAX_IN_FLIGHT_PURCHASES,
+                spacingMs: MIN_PACING_MS,
+                shouldContinue: isSafe,
+                execute: executePurchase,
+                onProgress: ({ completed, active }) => {
+                    if (mountedRef.current && activeAccountRef.current === activeAccountId) {
+                        setProgress(completed);
+                        setInFlight(active);
+                    }
+                },
+            });
+            const stopped = stopRef.current || !isSafe() || stats.completed < numberTrades;
+            const elapsedSeconds = (stats.elapsedMs / 1000).toFixed(1);
             if (mountedRef.current && activeAccountRef.current === activeAccountId) {
                 setStatus(stopped ? 'stopped' : 'finished');
-                setMessage(`${stopped ? 'Stopped' : 'Completed'}. ${completed}/${numberTrades} operations processed; ${successes} purchases confirmed, ${failures} failed/unconfirmed, ${skipped} skipped. Check Summary/Transactions/Journal and the Deriv statement for uncertain orders.`);
+                setMessage(`${stopped ? 'Stopped' : 'Completed'}. ${stats.completed}/${numberTrades} operations processed in ${elapsedSeconds}s; ${successes} confirmed, ${failures} failed/unconfirmed, ${skipped} skipped. Peak concurrent operations: ${stats.peakInFlight}/${workerLimit}. Check Summary/Transactions/Journal and the Deriv statement for uncertain orders.`);
             }
-            logRun(`Execution ${stopped ? 'stopped' : 'completed'}: ${completed}/${numberTrades} operations processed, ${successes} confirmed purchases, ${failures} failed/unconfirmed, ${skipped} skipped.`);
+            logRun(`Execution ${stopped ? 'stopped' : 'completed'}: ${stats.completed}/${numberTrades} operations processed over ${elapsedSeconds}s; ${successes} confirmed, ${failures} failed/unconfirmed, ${skipped} skipped, peak concurrency ${stats.peakInFlight}/${workerLimit}.`);
+        } catch (error) {
+            stopRef.current = true;
+            if (mountedRef.current && activeAccountRef.current === activeAccountId) {
+                setStatus('stopped');
+                setMessage(`Bulk execution stopped unexpectedly: ${messageFor(error)}. Check the Deriv account statement for outstanding purchases.`);
+            }
+            logRun(`Bulk execution stopped unexpectedly: ${messageFor(error)}.`);
         } finally {
             runRef.current = false;
             if (mountedRef.current && activeAccountRef.current === activeAccountId) setInFlight(0);

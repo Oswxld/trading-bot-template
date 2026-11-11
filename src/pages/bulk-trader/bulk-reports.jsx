@@ -1,9 +1,6 @@
 import { useState } from 'react';
-import Drawer from '@/components/shared_ui/drawer';
-import Tabs from '@/components/shared_ui/tabs';
 import DraggableResizeWrapper from '@/components/draggable/draggable-resize-wrapper';
 import { StatisticsSummary } from '@/components/run-panel/run-panel';
-import { useDevice } from '@deriv-com/ui';
 import './bulk-reports.scss';
 
 // A bulk purchase is not a Deriv Bot run. Render the existing Deriv Drawer,
@@ -80,8 +77,9 @@ const exportCsv = (records, currency) => {
 function BulkReports({ records, journal, accountId, currency, balance, isRunning, onReset, reportsOpen, onReportsToggle }) {
     const [active, setActive] = useState(0);
     const [detail, setDetail] = useState(false);
+    const [maximized, setMaximized] = useState(false);
     const [showInfo, setShowInfo] = useState(false);
-    const { isDesktop } = useDevice();
+
     const confirmed = records.filter(r => r.contractId && ['open', 'won', 'lost'].includes(r.status));
     const settled = records.filter(r => r.contractId && ['won', 'lost'].includes(r.status));
     const totalStake = confirmed.reduce((sum, r) => sum + Number(r.price || 0), 0);
@@ -90,6 +88,7 @@ function BulkReports({ records, journal, accountId, currency, balance, isRunning
     const won = settled.filter(r => r.status === 'won').length;
     const lost = settled.filter(r => r.status === 'lost').length;
     const mostRecent = settled[0] || confirmed[0];
+    const sections = ['Summary', 'Transactions', 'Journal'];
 
     const onClear = () => {
         if (isRunning) return;
@@ -98,65 +97,77 @@ function BulkReports({ records, journal, accountId, currency, balance, isRunning
         }
     };
 
+    // Render the report as an ordinary right-hand panel inside Bulk Trader.
+    // The previous nested, fixed-position Deriv Drawer could show an empty
+    // white overlay because of inherited height/overflow/transform rules.
+    // The tabs, stats and draggable detail modal are still the same experience.
     return (
         <>
-            <div className='run-panel bulk-reports' id='bulk-reports-panel'>
-                <Drawer
-                    anchor='right'
-                    className='run-panel run-panel__container bulk-reports__drawer'
-                    contentClassName='run-panel__content bulk-reports__content'
-                    width={420}
-                    is_open={reportsOpen}
-                    toggleDrawer={onReportsToggle}
-                    zIndex={6}
-                    footer={
-                        <div className='run-panel__footer'>
-                            <button type='button' className='bulk-reports__reset' onClick={onClear}
-                                disabled={(!records.length && !journal.length) || isRunning}>Reset</button>
+            {reportsOpen && <aside
+                id='bulk-reports-panel'
+                className={`bulk-reports__panel${maximized ? ' bulk-reports__panel--maximized' : ''}`}
+                aria-label='Bulk Trader reports'
+            >
+                <header className='bulk-reports__header'>
+                    <strong>Bulk Trader Reports</strong>
+                    <div className='bulk-reports__header-actions'>
+                        <button type='button' onClick={() => setMaximized(value => !value)}
+                            aria-label={maximized ? 'Restore reports size' : 'Expand reports'}
+                            title={maximized ? 'Restore size' : 'Expand reports'}>
+                            {maximized ? 'Restore' : 'Expand'}
+                        </button>
+                        <button type='button' onClick={() => { setMaximized(false); onReportsToggle(false); }}
+                            aria-label='Hide Bulk Trader reports'>✕</button>
+                    </div>
+                </header>
+
+                <nav className='bulk-reports__tabs' aria-label='Bulk trading report sections'>
+                    {sections.map((section, index) => (
+                        <button key={section} type='button'
+                            className={active === index ? 'bulk-reports__tab bulk-reports__tab--active' : 'bulk-reports__tab'}
+                            aria-current={active === index ? 'page' : undefined}
+                            onClick={() => setActive(index)}>{section}</button>
+                    ))}
+                </nav>
+
+                <div className='bulk-reports__panel-body'>
+                    {active === 0 && <div className='bulk-reports__summary'>
+                        {mostRecent ? <>
+                            <span className={mostRecent.status === 'won' ? 'bulk-reports__profit' : mostRecent.status === 'lost' ? 'bulk-reports__loss' : ''}>
+                                {mostRecent.status === 'won' || mostRecent.status === 'lost' ? '⚑ Closed' : '◷ Open'}
+                            </span>
+                            <strong className={mostRecent.status === 'won' ? 'bulk-reports__profit' : mostRecent.status === 'lost' ? 'bulk-reports__loss' : ''}>
+                                {['won', 'lost'].includes(mostRecent.status) ?
+                                    (Number(mostRecent.profit) > 0 ? '+' : '') + amount(mostRecent.profit, currency) :
+                                    amount(mostRecent.price, currency) + ' stake'}
+                            </strong>
+                            <small>Contract {mostRecent.contractId}</small>
+                        </> : <span>No bulk trades yet. Select a demo account and place a trade to see its summary.</span>}
+                    </div>}
+
+                    {active === 1 && <div className='bulk-reports__transactions'>
+                        <div className='bulk-reports__actions'>
+                            <button type='button' onClick={() => exportCsv(records, currency)}
+                                disabled={!records.length}>Download</button>
+                            <button type='button' onClick={() => setDetail(true)}>View Detail</button>
                         </div>
-                    }
-                >
-                    <Tabs active_index={active} onTabItemClick={setActive} top>
-                        <div id='bulk-reports-summary-tab' label='Summary'>
-                            <div className='bulk-reports__summary'>
-                                {mostRecent ? (
-                                    <>
-                                        <span className={mostRecent.status === 'won' ? 'bulk-reports__profit' : mostRecent.status === 'lost' ? 'bulk-reports__loss' : ''}>
-                                            {mostRecent.status === 'won' || mostRecent.status === 'lost' ? '⚑ Closed' : '◷ Open'}
-                                        </span>
-                                        <strong className={mostRecent.status === 'won' ? 'bulk-reports__profit' : mostRecent.status === 'lost' ? 'bulk-reports__loss' : ''}>
-                                            {['won', 'lost'].includes(mostRecent.status) ?
-                                                (Number(mostRecent.profit) > 0 ? '+' : '') + amount(mostRecent.profit, currency) :
-                                                amount(mostRecent.price, currency) + ' stake'}
-                                        </strong>
-                                        <small>Contract {mostRecent.contractId}</small>
-                                    </>
-                                ) : <span>No bulk trades completed yet.</span>}
+                        <TradesTable records={records} currency={currency} />
+                    </div>}
+
+                    {active === 2 && <div className='bulk-reports__journal'>
+                        {journal.length ? journal.map((entry, index) => (
+                            <div className='bulk-reports__log' key={entry.id || index}>
+                                <time>{new Date(entry.timestamp).toLocaleTimeString()}</time>
+                                <p>{entry.message}</p>
                             </div>
-                        </div>
-                        <div id='bulk-reports-transactions-tab' label='Transactions'>
-                            <div className='bulk-reports__transactions'>
-                                <div className='bulk-reports__actions'>
-                                    <button type='button' onClick={() => exportCsv(records, currency)} disabled={!records.length}>Download</button>
-                                    <button type='button' onClick={() => setDetail(true)} disabled={!records.length}>View Detail</button>
-                                </div>
-                                <TradesTable records={records} currency={currency} />
-                            </div>
-                        </div>
-                        <div id='bulk-reports-journal-tab' label='Journal'>
-                            <div className='bulk-reports__journal'>
-                                {journal.length ? journal.map((entry, index) => (
-                                    <div className='bulk-reports__log' key={entry.id || index}>
-                                        <time>{new Date(entry.timestamp).toLocaleTimeString()}</time>
-                                        <p>{entry.message}</p>
-                                    </div>
-                                )) : <p className='bulk-reports__empty'>There are no messages to display.</p>}
-                            </div>
-                        </div>
-                    </Tabs>
-                    {reportsOpen && active !== 2 && <StatisticsSummary
+                        )) : <p className='bulk-reports__empty'>There are no messages to display.</p>}
+                    </div>}
+                </div>
+
+                {active !== 2 && <div className='bulk-reports__stats'>
+                    <StatisticsSummary
                         currency={currency}
-                        is_mobile={!isDesktop}
+                        is_mobile={false}
                         lost_contracts={lost}
                         number_of_runs={confirmed.length}
                         total_stake={totalStake}
@@ -164,9 +175,13 @@ function BulkReports({ records, journal, accountId, currency, balance, isRunning
                         toggleStatisticsInfoModal={() => setShowInfo(true)}
                         total_profit={profit}
                         won_contracts={won}
-                    />}
-                </Drawer>
-            </div>
+                    />
+                </div>}
+
+                <footer className='bulk-reports__footer'>
+                    <button type='button' onClick={onClear} disabled={(!records.length && !journal.length) || isRunning}>Reset</button>
+                </footer>
+            </aside>}
 
             {detail && <DraggableResizeWrapper boundary='.main'
                 header='Transactions detailed summary'

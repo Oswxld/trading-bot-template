@@ -9,9 +9,11 @@ jest.mock('@/services/admin-test-kit', () => ({
     ADMIN_TEST_MANAGE_EVENT: 'yolo:admin-test-manage',
     exitAdminTest: jest.fn(),
     getAdminTestBalances: () => ({ VRTC_ADMIN_TEST: 10000, CR_ADMIN_TEST: 500 }),
+    getAdminTestWinProbability: jest.fn(() => 50),
     isAdminTestActive: jest.fn(() => false),
     isAdminTestAvailable: () => true,
     setAdminTestBalance: jest.fn(),
+    setAdminTestWinProbability: jest.fn(() => true),
     switchAdminTestAccount: jest.fn(),
     TEST_DEMO_ID: 'VRTC_ADMIN_TEST',
     TEST_REAL_ID: 'CR_ADMIN_TEST',
@@ -34,6 +36,21 @@ describe('Admin Test Kit footer secret trigger', () => {
         act(() => window.dispatchEvent(new Event('yolo:admin-test-manage')));
         expect(screen.getByRole('dialog', { name: 'Local Admin Test Kit' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /exit test kit/i })).toBeInTheDocument();
+    });
+
+    it('shows a single live slider and the complementary win/loss probabilities', () => {
+        const { isAdminTestActive, setAdminTestWinProbability } = require('@/services/admin-test-kit');
+        isAdminTestActive.mockReturnValue(true);
+        render(<AdminTestKit />);
+        const slider = screen.getByRole('slider', { name: /win probability/i });
+        expect(slider).toHaveValue('50');
+        expect(screen.getByText(/loss probability/i)).toHaveTextContent('50%');
+        fireEvent.change(slider, { target: { value: '85' } });
+        expect(setAdminTestWinProbability).toHaveBeenLastCalledWith(85);
+        expect(slider).toHaveValue('85');
+        expect(screen.getByText(/loss probability/i)).toHaveTextContent('15%');
+        fireEvent.change(slider, { target: { value: '100' } });
+        expect(screen.getByText(/loss probability/i)).toHaveTextContent('0%');
     });
 
     it('ignores the Manage shortcut when the test kit is inactive', () => {

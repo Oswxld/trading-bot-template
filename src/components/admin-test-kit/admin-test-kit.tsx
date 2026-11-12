@@ -5,9 +5,11 @@ import {
     ADMIN_TEST_MANAGE_EVENT,
     exitAdminTest,
     getAdminTestBalances,
+    getAdminTestWinProbability,
     isAdminTestActive,
     isAdminTestAvailable,
     setAdminTestBalance,
+    setAdminTestWinProbability,
     switchAdminTestAccount,
     TEST_DEMO_ID,
     TEST_REAL_ID,
@@ -22,6 +24,7 @@ export default function AdminTestKit() {
     const [opened, setOpened] = useState(false);
     const [demo, setDemo] = useState(() => String(getAdminTestBalances()[TEST_DEMO_ID]));
     const [real, setReal] = useState(() => String(getAdminTestBalances()[TEST_REAL_ID]));
+    const [winProbability, setWinProbability] = useState(() => getAdminTestWinProbability());
     const [error, setError] = useState('');
     const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const cancelHold = () => {
@@ -122,6 +125,33 @@ export default function AdminTestKit() {
                                 <input type='number' min='0' max='1000000' step='0.01'
                                     value={real} onChange={e => setReal(e.target.value)} />
                             </label>
+                        </div>
+                        <div className='admin-test-kit__probability'>
+                            <div className='admin-test-kit__probability-labels'>
+                                <label htmlFor='admin-test-win-probability'>
+                                    Win probability <strong>{winProbability}%</strong>
+                                </label>
+                                <span>Loss probability <strong>{100 - winProbability}%</strong></span>
+                            </div>
+                            <input
+                                id='admin-test-win-probability'
+                                type='range'
+                                min='0'
+                                max='100'
+                                step='1'
+                                value={winProbability}
+                                aria-valuetext={`${winProbability}% win, ${100 - winProbability}% loss`}
+                                onChange={event => {
+                                    const next = Number(event.target.value);
+                                    if (setAdminTestWinProbability(next)) {
+                                        setWinProbability(next);
+                                    }
+                                }}
+                            />
+                            <div className='admin-test-kit__probability-scale' aria-hidden='true'>
+                                <span>0%</span><span>50%</span><span>100%</span>
+                            </div>
+                            <small>Simulated trades only · Updates immediately</small>
                         </div>
                         <button type='button' onClick={resetBalances}>Save test balances & reload</button>
                         <div className='admin-test-kit__row'>

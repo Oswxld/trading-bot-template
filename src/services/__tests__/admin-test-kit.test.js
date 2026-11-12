@@ -2,6 +2,7 @@ import {
     ADMIN_TEST_KEY, TEST_DEMO_ID, TEST_REAL_ID,
     isAdminTestActive, enterAdminTest, exitAdminTest,
     switchAdminTestAccount, setAdminTestBalance,
+    setAdminTestWinProbability, getAdminTestWinProbability,
     getAdminTestBalances, getAdminTestAccounts, createAdminTestApi,
 } from '../admin-test-kit';
 
@@ -33,6 +34,28 @@ describe('local admin test kit (no broker connection)', () => {
         expect(sessionStorage.getItem(ADMIN_TEST_KEY)).toBeNull();
         expect(localStorage.getItem('active_loginid')).toBe('PREVIOUS_DERIV_ACCOUNT');
         expect(sessionStorage.getItem('auth_info')).toBe('previous-oauth-session');
+    });
+
+    it('uses 50% by default and persists one independent slider for both simulated accounts', () => {
+        expect(getAdminTestWinProbability()).toBe(50);
+        expect(setAdminTestWinProbability(100)).toBe(false);
+        enterAdminTest();
+        expect(getAdminTestWinProbability()).toBe(50);
+        expect(setAdminTestWinProbability(80)).toBe(true);
+        expect(getAdminTestWinProbability()).toBe(80);
+        expect(setAdminTestWinProbability(-1)).toBe(false);
+        expect(setAdminTestWinProbability(101)).toBe(false);
+        expect(setAdminTestWinProbability(50.5)).toBe(false);
+        expect(setAdminTestWinProbability(NaN)).toBe(false);
+        expect(getAdminTestWinProbability()).toBe(80);
+        switchAdminTestAccount(TEST_REAL_ID);
+        expect(getAdminTestWinProbability()).toBe(80);
+        switchAdminTestAccount(TEST_DEMO_ID);
+        expect(getAdminTestWinProbability()).toBe(80);
+        exitAdminTest();
+        expect(getAdminTestWinProbability()).toBe(50);
+        enterAdminTest();
+        expect(getAdminTestWinProbability()).toBe(50);
     });
 
     it('keeps demo and real-labelled test balances isolated and refuses unsafe values', () => {
@@ -125,6 +148,138 @@ describe('local admin test kit (no broker connection)', () => {
         expect((await api.forget(candles.subscription.id)).forget).toBe(1);
         expect((await api.forget(history.subscription.id)).forget).toBe(1);
         api.disconnect();
+    });
+
+    it('settles every simulated contract as a win at 100%, with matching exit ticks and profits', async () => {
+        enterAdminTest();
+        setAdminTestWinProbability(100);
+        const api = createAdminTestApi();
+        await opened(api);
+        const settlementMessages = [];
+        const sub = api.onMessage().subscribe(({ data }) => {
+            if (data.msg_type === 'proposal_open_contract' && data.proposal_open_contract?.is_sold) {
+                settlementMessages.push(data.proposal_open_contract);
+            }
+        });
+        const types = ['DIGITMATCH', 'DIGITDIFF', 'DIGITOVER', 'DIGITUNDER', 'DIGITEVEN', 'DIGITODD', 'CALL', 'PUT'];
+        for (const type of types) {
+            const proposal = await api.send({
+                proposal: 1, amount: 1, basis: 'stake', contract_type: type,
+                underlying_symbol: 'R_100', currency: 'USD', duration: 1, duration_unit: 't',
+                prediction: 5,
+            });
+            const purchased = await api.send({ buy: proposal.proposal.id, price: 1 });
+            expect(purchased.buy.contract_id).toBeGreaterThan(0);
+        }
+        await delay(1000);
+        expect(settlementMessages).toHaveLength(types.length);
+        for (const contract of settlementMessages) {
+            expect(contract.status).toBe('won');
+            expect(contract.profit).toBeGreaterThan(0);
+            expect(contract.sell_price).toBeGreaterThan(contract.buy_price);
+            const digit = Number(contract.exit_tick.toFixed(2).slice(-1));
+            switch (contract.contract_type) {
+                case 'DIGITMATCH': expect(digit).toBe(5); break;
+                case 'DIGITDIFF': expect(digit).not.toBe(5); break;
+                case 'DIGITOVER': expect(digit).toBeGreaterThan(5); break;
+                case 'DIGITUNDER': expect(digit).toBeLessThan(5); break;
+                case 'DIGITEVEN': expect(digit % 2).toBe(0); break;
+                case 'DIGITODD': expect(digit % 2).toBe(1); break;
+                case 'CALL': expect(contract.exit_tick).toBeGreaterThan(contract.entry_tick); break;
+                case 'PUT': expect(contract.exit_tick).toBeLessThan(contract.entry_tick); break;
+            }
+        }
+        expect(getAdminTestBalances()[TEST_DEMO_ID]).toBeGreaterThan(10000);
+        expect(getAdminTestBalances()[TEST_REAL_ID]).toBe(500);
+        sub.unsubscribe();
+        api.disconnect();
+    });
+
+    it('settles every simulated contract as a loss at 0%, including the real-labelled test account', async () => {
+        enterAdminTest();
+        switchAdminTestAccount(TEST_REAL_ID);
+        setAdminTestWinProbability(0);
+        const api = createAdminTestApi();
+        await opened(api);
+        const settlements = [];
+        const sub = api.onMessage().subscribe(({ data }) => {
+            if (data.msg_type === 'proposal_open_contract' && data.proposal_open_contract?.is_sold) {
+                settlements.push(data.proposal_open_contract);
+            }
+        });
+        for (const type of ['DIGITDIFF', 'DIGITMATCH', 'CALL', 'PUT']) {
+            const proposal = await api.send({
+                proposal: 1, amount: 1, basis: 'stake', contract_type: type,
+                underlying_symbol: 'R_100', currency: 'USD', duration: 1, duration_unit: 't',
+                prediction: 5,
+            });
+            await api.send({ buy: proposal.proposal.id, price: 1 });
+        }
+        await delay(1000);
+        expect(settlements).toHaveLength(4);
+        expect(settlements.every(contract => contract.status === 'lost' && contract.profit < 0)).toBe(true);
+        expect(getAdminTestBalances()[TEST_REAL_ID]).toBe(496);
+        expect(getAdminTestBalances()[TEST_DEMO_ID]).toBe(10000);
+        sub.unsubscribe();
+        api.disconnect();
+    });
+
+    it('applies slider changes without reloading, including to already-open simulated trades', async () => {
+        enterAdminTest();
+        setAdminTestWinProbability(100);
+        const api = createAdminTestApi();
+        await opened(api);
+        const settlements = [];
+        const sub = api.onMessage().subscribe(({ data }) => {
+            if (data.msg_type === 'proposal_open_contract' && data.proposal_open_contract?.is_sold) {
+                settlements.push(data.proposal_open_contract);
+            }
+        });
+        const proposal = await api.send({
+            proposal: 1, amount: 1, basis: 'stake', contract_type: 'CALL',
+            underlying_symbol: 'R_100', duration: 1, duration_unit: 't',
+        });
+        await api.send({ buy: proposal.proposal.id, price: 1 });
+        setAdminTestWinProbability(0);
+        await delay(1000);
+        expect(settlements).toHaveLength(1);
+        expect(settlements[0].status).toBe('lost');
+        expect(getAdminTestBalances()[TEST_DEMO_ID]).toBe(9999);
+        sub.unsubscribe();
+        api.disconnect();
+    });
+
+    it('uses the configured 50% threshold for normal random settlement outcomes', async () => {
+        enterAdminTest();
+        const api = createAdminTestApi();
+        await opened(api);
+        const settlements = [];
+        const sub = api.onMessage().subscribe(({ data }) => {
+            if (data.msg_type === 'proposal_open_contract' && data.proposal_open_contract?.is_sold) {
+                settlements.push(data.proposal_open_contract);
+            }
+        });
+        const makeTrade = async () => {
+            const proposal = await api.send({
+                proposal: 1, amount: 1, basis: 'stake', contract_type: 'CALL',
+                underlying_symbol: 'R_100', duration: 1, duration_unit: 't',
+            });
+            await api.send({ buy: proposal.proposal.id, price: 1 });
+        };
+        const random = jest.spyOn(Math, 'random').mockReturnValue(0.49);
+        try {
+            await makeTrade();
+            await delay(1000);
+            expect(settlements[0].status).toBe('won');
+            random.mockReturnValue(0.5);
+            await makeTrade();
+            await delay(1000);
+            expect(settlements[1].status).toBe('lost');
+        } finally {
+            random.mockRestore();
+            sub.unsubscribe();
+            api.disconnect();
+        }
     });
 
     it('rejects requests that would spend more simulated funds than available', async () => {

@@ -64,6 +64,50 @@
             background: #fff; color: #111; border: 1px solid #777; border-radius: 5px;
         }
     }
+    &__probability {
+        display: flex;
+        flex-direction: column;
+        gap: 7px;
+        padding: 12px;
+        border-radius: 7px;
+        border: 1px solid #414956;
+        background: #20252d;
+        font-size: 12px;
+
+        &-labels {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            flex-wrap: wrap;
+            strong {
+                color: #76e0cb;
+                font-size: 14px;
+                margin-inline-start: 3px;
+            }
+        }
+
+        &-scale {
+            display: flex;
+            justify-content: space-between;
+            opacity: .75;
+            font-size: 11px;
+        }
+
+        input[type='range'] {
+            display: block;
+            width: 100%;
+            margin: 3px 0 0;
+            accent-color: #76e0cb;
+            cursor: pointer;
+        }
+
+        small {
+            color: #aeb8c5;
+            font-size: 11px;
+        }
+    }
+
     &__row { display: flex; gap: 10px; flex-wrap: wrap; }
     &__primary { background: #136962 !important; border-color: #228e83 !important; }
     &__exit { background: #681d2a !important; border-color: #a83245 !important; }

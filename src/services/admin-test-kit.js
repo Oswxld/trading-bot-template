@@ -11,12 +11,32 @@ export const ADMIN_TEST_BACKUP = 'yolo:local-admin-backup';
 export const TEST_DEMO_ID = 'VRTC_ADMIN_TEST';
 export const TEST_REAL_ID = 'CR_ADMIN_TEST';
 const STATE_KEY = 'yolo:local-admin-balances';
+const WIN_PROBABILITY_KEY = 'yolo:local-admin-win-probability';
+const DEFAULT_WIN_PROBABILITY = 50;
 
 export const isAdminTestAvailable = () =>
     typeof window !== 'undefined' &&
     /^(localhost|127\\.0\\.0\\.1|\\[::1\\])$/i.test(window.location.hostname);
 export const isAdminTestActive = () =>
     isAdminTestAvailable() && sessionStorage.getItem(ADMIN_TEST_KEY) === 'active';
+
+/** Percentage chance that any given SIMULATED contract settles as a win.
+ * Both Bot Builder and Bulk Trader share this setting through the same transport.
+ * Read on settlement so changes take effect without a reload.
+ */
+export const getAdminTestWinProbability = () => {
+    if (!isAdminTestActive()) return DEFAULT_WIN_PROBABILITY;
+    const stored = sessionStorage.getItem(WIN_PROBABILITY_KEY);
+    if (stored === null) return DEFAULT_WIN_PROBABILITY;
+    const value = Number(stored);
+    return Number.isInteger(value) && value >= 0 && value <= 100 ? value : DEFAULT_WIN_PROBABILITY;
+};
+
+export const setAdminTestWinProbability = value => {
+    if (!isAdminTestActive() || !Number.isInteger(value) || value < 0 || value > 100) return false;
+    sessionStorage.setItem(WIN_PROBABILITY_KEY, String(value));
+    return true;
+};
 
 const DEFAULT_BALANCES = { [TEST_DEMO_ID]: 10000, [TEST_REAL_ID]: 500 };
 const ACCOUNTS = [
@@ -67,6 +87,7 @@ export const enterAdminTest = () => {
     };
     sessionStorage.setItem(ADMIN_TEST_BACKUP, JSON.stringify(original));
     sessionStorage.setItem(STATE_KEY, JSON.stringify(DEFAULT_BALANCES));
+    sessionStorage.setItem(WIN_PROBABILITY_KEY, String(DEFAULT_WIN_PROBABILITY));
     sessionStorage.setItem(ADMIN_TEST_KEY, 'active');
     sessionStorage.removeItem('auth_info');
     sessionStorage.setItem('deriv_accounts', JSON.stringify(getAdminTestAccounts()));
@@ -81,6 +102,7 @@ export const exitAdminTest = () => {
     sessionStorage.removeItem(ADMIN_TEST_KEY);
     sessionStorage.removeItem(ADMIN_TEST_BACKUP);
     sessionStorage.removeItem(STATE_KEY);
+    sessionStorage.removeItem(WIN_PROBABILITY_KEY);
     restore(localStorage, 'active_loginid', previous?.accountId ?? null);
     restore(localStorage, 'account_type', previous?.accountType ?? null);
     restore(sessionStorage, 'deriv_accounts', previous?.derivAccounts ?? null);
@@ -113,6 +135,36 @@ const SYMBOLS = [
     exchange_is_open: true, is_trading_suspended: false,
     pip: 0.01, pip_size: 2,
 }));
+
+/**
+ * Pick a simulated exit quote consistent with the chosen result so the
+ * contract's displayed last digit / direction agrees with its win or loss.
+ * Only applied inside the offline simulator; real Deriv quotes are untouched.
+ */
+const simulatedExitQuote = (contract, quote, shouldWin) => {
+    const type = contract.contract_type;
+    if (type === 'CALL' || type === 'PUT') {
+        const direction = type === 'CALL' ? 1 : -1;
+        return Number((contract.entry_tick + direction * (shouldWin ? 0.11 : -0.11)).toFixed(2));
+    }
+
+    const barrier = Number(contract.barrier ?? 5);
+    const digitWins = digit => {
+        if (type === 'DIGITMATCH') return digit === barrier;
+        if (type === 'DIGITDIFF') return digit !== barrier;
+        if (type === 'DIGITOVER') return digit > barrier;
+        if (type === 'DIGITUNDER') return digit < barrier;
+        if (type === 'DIGITEVEN') return digit % 2 === 0;
+        if (type === 'DIGITODD') return digit % 2 !== 0;
+        return null;
+    };
+    if (!type.startsWith('DIGIT')) return quote;
+    const validDigits = Array.from({ length: 10 }, (_, digit) => digit)
+        .filter(digit => digitWins(digit) === shouldWin);
+    if (!validDigits.length) return quote; // Invalid/impossible barrier, never seen in a valid Deriv proposal.
+    const digit = validDigits[Math.floor(Math.random() * validDigits.length)];
+    return Number((Math.floor(quote * 10) / 10 + digit / 100).toFixed(2));
+};
 
 export const createAdminTestApi = () => {
     if (!isAdminTestActive()) throw new Error('Simulated API only exists in local admin test mode.');
@@ -197,20 +249,8 @@ export const createAdminTestApi = () => {
     const settle = contract => {
         if (closed || contract.is_sold) return;
         const last = makeTick(contract.underlying_symbol);
-        const digit = Number(last.quote.toFixed(2).slice(-1));
-        const initialDigit = Number(contract.entry_tick.toFixed(2).slice(-1));
-        const barrier = Number(contract.barrier ?? 5);
-        const wins = {
-            DIGITMATCH: digit === barrier,
-            DIGITDIFF: digit !== barrier,
-            DIGITOVER: digit > barrier,
-            DIGITUNDER: digit < barrier,
-            DIGITEVEN: digit % 2 === 0,
-            DIGITODD: digit % 2 !== 0,
-            CALL: last.quote > contract.entry_tick,
-            PUT: last.quote < contract.entry_tick,
-        };
-        const won = Boolean(wins[contract.contract_type]);
+        const won = Math.random() * 100 < getAdminTestWinProbability();
+        last.quote = simulatedExitQuote(contract, last.quote, won);
         contract.status = won ? 'won' : 'lost';
         contract.is_sold = 1;
         contract.is_expired = 1;

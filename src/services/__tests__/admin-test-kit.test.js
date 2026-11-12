@@ -97,6 +97,36 @@ describe('local admin test kit (no broker connection)', () => {
         api.disconnect();
     });
 
+    it('supplies market symbols, historical ticks and candle streams to Bot Builder', async () => {
+        enterAdminTest();
+        const api = createAdminTestApi();
+        await opened(api);
+        const markets = await api.send({ active_symbols: 'brief' });
+        expect(markets.active_symbols).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({ symbol: 'R_100', exchange_is_open: true }),
+            ])
+        );
+        const history = await api.send({
+            ticks_history: 'R_100', style: 'ticks', count: 30,
+            end: 'latest', subscribe: 1,
+        });
+        expect(history.history.prices).toHaveLength(30);
+        expect(history.history.times).toHaveLength(30);
+        const candles = await api.send({
+            ticks_history: 'R_100', style: 'candles', count: 30,
+            granularity: 60, end: 'latest', subscribe: 1,
+        });
+        expect(candles.candles).toHaveLength(30);
+        expect(candles.candles[0]).toEqual(expect.objectContaining({
+            open: expect.any(Number), high: expect.any(Number),
+            low: expect.any(Number), close: expect.any(Number),
+        }));
+        expect((await api.forget(candles.subscription.id)).forget).toBe(1);
+        expect((await api.forget(history.subscription.id)).forget).toBe(1);
+        api.disconnect();
+    });
+
     it('rejects requests that would spend more simulated funds than available', async () => {
         enterAdminTest();
         setAdminTestBalance(TEST_DEMO_ID, 0.25);

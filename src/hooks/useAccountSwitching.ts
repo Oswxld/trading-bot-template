@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { crypto_currencies_display_order, fiat_currencies_display_order } from '@/components/shared';
 import { TAuthData } from '@/types/api-types';
+import { isAdminTestActive } from '@/services/admin-test-kit';
 
 /**
  * Custom hook to handle account switching via URL parameter
@@ -22,6 +23,11 @@ import { TAuthData } from '@/types/api-types';
  */
 export const useAccountSwitching = () => {
     useEffect(() => {
+        // Admin Test Kit has its own isolated demo/real account selector. The
+        // legacy ?account=USD/DEMO OAuth switcher must never replace its ID
+        // with a previous genuine Deriv login ID or write a live auth token.
+        if (isAdminTestActive()) return;
+
         const accounts_list = localStorage.getItem('accountsList');
         const client_accounts = localStorage.getItem('clientAccounts');
         const url_params = new URLSearchParams(window.location.search);

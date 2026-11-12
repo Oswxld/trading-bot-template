@@ -10,6 +10,9 @@ on:
       - 'src/components/layout/footer/**'
       - 'src/components/layout/header/header.tsx'
       - 'src/services/admin-test-kit.js'
+      - 'src/hooks/useAccountSwitching.ts'
+      - 'src/hooks/__tests__/useAccountSwitching-admin-test.spec.tsx'
+      - 'src/utils/account-helpers.ts'
       - 'src/services/__tests__/admin-test-kit.test.js'
       - 'src/external/bot-skeleton/services/api/appId.js'
       - 'src/components/layout/header/mobile-menu/menu-header.tsx'
@@ -58,6 +61,7 @@ jobs:
           npx jest \
             src/pages/bulk-trader/__tests__/bulk-account-safety.test.js \
             src/services/__tests__/admin-test-kit.test.js \
+            src/hooks/__tests__/useAccountSwitching-admin-test.spec.tsx \
             src/components/admin-test-kit/__tests__/admin-test-kit-trigger.test.tsx \
             src/pages/bulk-trader/__tests__/bulk-trader-buttons.test.jsx \
             src/pages/bulk-trader/__tests__/bulk-execution.test.js \

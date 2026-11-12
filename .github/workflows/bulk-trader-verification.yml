@@ -6,6 +6,10 @@ on:
     paths:
       - 'src/pages/bulk-trader/**'
       - 'src/components/layout/app-logo/**'
+      - 'src/components/admin-test-kit/**'
+      - 'src/services/admin-test-kit.js'
+      - 'src/services/__tests__/admin-test-kit.test.js'
+      - 'src/external/bot-skeleton/services/api/appId.js'
       - 'src/components/layout/header/mobile-menu/menu-header.tsx'
       - 'brand.config.json'
       - 'index.html'
@@ -51,6 +55,7 @@ jobs:
         run: |
           npx jest \
             src/pages/bulk-trader/__tests__/bulk-account-safety.test.js \
+            src/services/__tests__/admin-test-kit.test.js \
             src/pages/bulk-trader/__tests__/bulk-trader-buttons.test.jsx \
             src/pages/bulk-trader/__tests__/bulk-execution.test.js \
             src/pages/bulk-trader/__tests__/bulk-contract-monitor.test.js \

@@ -1,5 +1,6 @@
 import { getSocketURL } from '@/components/shared';
 import { trackTradingSocket } from '@/services/trading-request-budget';
+import { createAdminTestApi, isAdminTestActive } from '@/services/admin-test-kit';
 import DerivAPIBasic from '@deriv/deriv-api/dist/DerivAPIBasic';
 import APIMiddleware from './api-middleware';
 
@@ -58,6 +59,21 @@ export const generateDerivApiInstance = async (forceNew = false) => {
     if (derivApiPromise) {
         console.log('[DerivAPI] Reusing existing creation promise');
         return derivApiPromise;
+    }
+
+    // In local Admin Test Kit the complete Deriv transport is replaced by an
+    // in-memory simulator. Never call getSocketURL or open a broker socket.
+    if (isAdminTestActive()) {
+        const mockApi = createAdminTestApi();
+        derivApiInstance = mockApi;
+        currentWebSocketURL = 'local-admin-simulation';
+        mockApi.connection.addEventListener('close', () => {
+            if (derivApiInstance === mockApi) {
+                derivApiInstance = null;
+                currentWebSocketURL = null;
+            }
+        });
+        return mockApi;
     }
 
     // Create new instance

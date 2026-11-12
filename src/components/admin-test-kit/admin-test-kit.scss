@@ -1,0 +1,92 @@
+.admin-test-kit {
+    &__secret {
+        position: fixed;
+        bottom: 8px;
+        right: 8px;
+        z-index: 800;
+        width: 20px;
+        height: 20px;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        color: var(--text-less-prominent, #888);
+        opacity: .4;
+        font-size: 22px;
+        cursor: pointer;
+        line-height: 1;
+    }
+    &__banner {
+        position: fixed;
+        top: 0;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 800;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        max-width: calc(100vw - 12px);
+        padding: 4px 8px;
+        border-radius: 0 0 6px 6px;
+        background: #811012;
+        color: white;
+        font-size: 10px;
+        font-weight: 800;
+        text-align: center;
+        white-space: normal;
+        button {
+            border: 1px solid white;
+            border-radius: 3px;
+            background: transparent;
+            color: white;
+            cursor: pointer;
+        }
+    }
+    &__overlay {
+        position: fixed;
+        z-index: 20000;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+        background: rgba(0, 0, 0, .78);
+    }
+    &__dialog {
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+        width: min(100%, 460px);
+        max-height: 90vh;
+        overflow-y: auto;
+        border-radius: 10px;
+        background: #181b22;
+        color: white;
+        padding: 23px;
+        box-shadow: 0 8px 30px #0008;
+        font-size: 14px;
+        line-height: 1.5;
+        button {
+            padding: 9px 12px;
+            border: 1px solid #69717e;
+            border-radius: 6px;
+            background: #282d36;
+            color: white;
+            font: inherit;
+            cursor: pointer;
+        }
+    }
+    &__head { display: flex; align-items: center; justify-content: space-between; gap: 8px;
+        h2 { margin: 0; font-size: 22px; }
+    }
+    &__warning { margin: 0; padding: 10px; background: #3d2023; border: 1px solid #e45b5b; border-radius: 6px; }
+    &__balances { display: grid; gap: 10px; grid-template-columns: repeat(2, minmax(0, 1fr));
+        label { font-size: 12px; }
+        input { margin-top: 5px; box-sizing: border-box; width: 100%; padding: 9px; font: inherit;
+            background: #fff; color: #111; border: 1px solid #777; border-radius: 5px;
+        }
+    }
+    &__row { display: flex; gap: 10px; flex-wrap: wrap; }
+    &__primary { background: #136962 !important; border-color: #228e83 !important; }
+    &__exit { background: #681d2a !important; border-color: #a83245 !important; }
+    &__error { margin: 0; color: #ff9696; font-weight: 700; }
+}

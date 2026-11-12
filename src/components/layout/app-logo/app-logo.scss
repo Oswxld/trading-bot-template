@@ -1,7 +1,38 @@
 .app-header {
+    &__brand {
+        display: inline-flex;
+        align-items: center;
+        min-height: 40px;
+        flex: 0 0 auto;
+    }
+
+    &__admin-mode-shortcut {
+        display: inline-flex;
+        justify-content: center;
+        align-items: center;
+        width: 20px;
+        height: 28px;
+        padding: 0;
+        margin-inline-start: 1px;
+        margin-inline-end: 1.2rem;
+        color: var(--text-general, #222);
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+        font-size: 1.2rem;
+        font-weight: 800;
+        opacity: 0.65;
+        background: transparent;
+        border: none;
+        cursor: pointer;
+    }
+
+    &__admin-mode-shortcut:hover,
+    &__admin-mode-shortcut:focus-visible {
+        opacity: 1;
+    }
+
     &__logo {
         padding-inline-start: 2.4rem;
-        padding-inline-end: 1.6rem;
+        padding-inline-end: 0.4rem;
         min-height: 40px;
         display: flex;
         align-items: center;

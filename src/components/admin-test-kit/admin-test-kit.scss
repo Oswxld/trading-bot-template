@@ -20,32 +20,6 @@
         cursor: pointer;
         line-height: 1;
     }
-    &__banner {
-        position: fixed;
-        top: 0;
-        left: 50%;
-        transform: translateX(-50%);
-        z-index: 800;
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        max-width: calc(100vw - 12px);
-        padding: 4px 8px;
-        border-radius: 0 0 6px 6px;
-        background: #811012;
-        color: white;
-        font-size: 10px;
-        font-weight: 800;
-        text-align: center;
-        white-space: normal;
-        button {
-            border: 1px solid white;
-            border-radius: 3px;
-            background: transparent;
-            color: white;
-            cursor: pointer;
-        }
-    }
     &__overlay {
         position: fixed;
         z-index: 20000;

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import {
     enterAdminTest,
+    ADMIN_TEST_MANAGE_EVENT,
     exitAdminTest,
     getAdminTestBalances,
     isAdminTestActive,
@@ -36,8 +37,18 @@ export default function AdminTestKit() {
             setOpened(true);
         }, 3000);
     };
-    useEffect(() => () => {
-        if (holdTimer.current !== null) clearTimeout(holdTimer.current);
+    useEffect(() => {
+        const openManage = () => {
+            if (isAdminTestActive()) {
+                setError('');
+                setOpened(true);
+            }
+        };
+        window.addEventListener(ADMIN_TEST_MANAGE_EVENT, openManage);
+        return () => {
+            if (holdTimer.current !== null) clearTimeout(holdTimer.current);
+            window.removeEventListener(ADMIN_TEST_MANAGE_EVENT, openManage);
+        };
     }, []);
     if (!isAdminTestAvailable()) return null;
     const active = isAdminTestActive();
@@ -57,10 +68,6 @@ export default function AdminTestKit() {
     };
     return (
         <>
-            {active && <div className='admin-test-kit__banner' role='status'>
-                TEST MODE — SIMULATED FUNDS / NO DERIV PURCHASES
-                <button type='button' onClick={() => setOpened(true)}>Manage</button>
-            </div>}
             <button
                 className='admin-test-kit__secret'
                 type='button'

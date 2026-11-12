@@ -6,9 +6,10 @@ jest.mock('@/external/bot-skeleton/services/api/api-base', () => ({
 }));
 jest.mock('@/services/admin-test-kit', () => ({
     enterAdminTest: jest.fn(),
+    ADMIN_TEST_MANAGE_EVENT: 'yolo:admin-test-manage',
     exitAdminTest: jest.fn(),
     getAdminTestBalances: () => ({ VRTC_ADMIN_TEST: 10000, CR_ADMIN_TEST: 500 }),
-    isAdminTestActive: () => false,
+    isAdminTestActive: jest.fn(() => false),
     isAdminTestAvailable: () => true,
     setAdminTestBalance: jest.fn(),
     switchAdminTestAccount: jest.fn(),
@@ -19,8 +20,26 @@ jest.mock('@/services/admin-test-kit', () => ({
 describe('Admin Test Kit footer secret trigger', () => {
     beforeEach(() => jest.useFakeTimers());
     afterEach(() => {
+        const { isAdminTestActive } = require('@/services/admin-test-kit');
+        isAdminTestActive.mockReturnValue(false);
         jest.clearAllTimers();
         jest.useRealTimers();
+    });
+
+    it('opens the Manage panel when the subtle D shortcut is clicked in test mode', () => {
+        const { isAdminTestActive } = require('@/services/admin-test-kit');
+        isAdminTestActive.mockReturnValue(true);
+        render(<AdminTestKit />);
+        expect(screen.queryByText(/TEST MODE — SIMULATED FUNDS/)).not.toBeInTheDocument();
+        act(() => window.dispatchEvent(new Event('yolo:admin-test-manage')));
+        expect(screen.getByRole('dialog', { name: 'Local Admin Test Kit' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /exit test kit/i })).toBeInTheDocument();
+    });
+
+    it('ignores the Manage shortcut when the test kit is inactive', () => {
+        render(<AdminTestKit />);
+        act(() => window.dispatchEvent(new Event('yolo:admin-test-manage')));
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
 
     it('opens after holding the dot for a full 3 seconds', () => {

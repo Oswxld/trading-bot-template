@@ -6,6 +6,7 @@
 import { observer as globalObserver } from '@/external/bot-skeleton/utils/observer';
 
 export const ADMIN_TEST_KEY = 'yolo:local-admin-test';
+export const ADMIN_TEST_MANAGE_EVENT = 'yolo:admin-test-manage';
 export const ADMIN_TEST_BACKUP = 'yolo:local-admin-backup';
 export const TEST_DEMO_ID = 'VRTC_ADMIN_TEST';
 export const TEST_REAL_ID = 'CR_ADMIN_TEST';

@@ -32,6 +32,7 @@ const makePanel = () => {
     const dbot = {
         saveRecentWorkspace: jest.fn(),
         unHighlightAllBlocks: jest.fn(),
+        getStrategySounds: jest.fn(() => []),
         shouldRunBot: jest.fn(() => true),
         runBot: jest.fn(),
     };

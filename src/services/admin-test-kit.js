@@ -3,6 +3,8 @@
  * use an OAuth token, or submit a real purchase. All amounts are fictional.
  * Used by BOTH Blockly Bot Builder and Bulk Trader through api_base.api.
  */
+import { observer as globalObserver } from '@/external/bot-skeleton/utils/observer';
+
 export const ADMIN_TEST_KEY = 'yolo:local-admin-test';
 export const ADMIN_TEST_BACKUP = 'yolo:local-admin-backup';
 export const TEST_DEMO_ID = 'VRTC_ADMIN_TEST';
@@ -37,6 +39,12 @@ const saveBalance = (id, next) => {
     const balances = readBalances();
     balances[id] = Math.max(0, Math.round(next * 100) / 100);
     sessionStorage.setItem(STATE_KEY, JSON.stringify(balances));
+    // Keep both accounts' displayed balances in sync with the paper ledger.
+    sessionStorage.setItem('deriv_accounts', JSON.stringify(
+        ACCOUNTS.map(account => ({
+            ...account, balance: balances[account.account_id].toFixed(2), group: 'test',
+        }))
+    ));
 };
 export const setAdminTestBalance = (id, value) => {
     if (!isAdminTestActive() || !(id in DEFAULT_BALANCES)) return false;
@@ -170,6 +178,16 @@ export const createAdminTestApi = () => {
         balance: readBalances()[accountId],
     });
     const broadcastBalance = () => {
+        const client = globalObserver.getState('client.store');
+        if (client?.loginid === accountId) {
+            client.setBalance(String(readBalances()[accountId]));
+            client.setAccountList(getAdminTestAccounts().map(account => ({
+                loginid: account.account_id,
+                is_virtual: account.account_type === 'demo' ? 1 : 0,
+                currency: account.currency,
+                balance: Number(account.balance),
+            })));
+        }
         emit({ msg_type: 'balance', balance: currentBalance() });
     };
     const broadcastContract = contract => {
@@ -219,6 +237,7 @@ export const createAdminTestApi = () => {
         }),
         disconnect: () => connection.close(),
         balance: () => api.send({ balance: 1 }),
+        forget: id => api.send({ forget: id }),
         authorize: () => Promise.resolve({ authorize: { loginid: accountId } }),
         async send(rawRequest) {
             const request = typeof rawRequest === 'string' ? JSON.parse(rawRequest) : rawRequest;
@@ -249,18 +268,41 @@ export const createAdminTestApi = () => {
             if (kind === 'ticks_history') {
                 const count = Math.max(10, Math.min(5000, Number(request.count) || 100));
                 const symbol = request.ticks_history;
+                const isCandles = request.style === 'candles';
+                const granularity = Math.max(60, Number(request.granularity) || 60);
                 const ticks = Array.from({ length: count }, () => makeTick(symbol));
-                const res = { history: {
-                    prices: ticks.map(t => t.quote),
-                    times: ticks.map((t, i) => t.epoch - count + i + 1),
-                }};
+                const prices = ticks.map(t => t.quote);
+                const times = ticks.map((t, i) => t.epoch - count + i + 1);
+                const candleFor = (price, epoch) => ({
+                    epoch, open: price, close: price + 0.03,
+                    high: price + 0.25, low: price - 0.25,
+                });
+                const res = isCandles ? {
+                    candles: prices.map((price, i) => candleFor(price, times[i])),
+                } : { history: { prices, times } };
                 if (request.subscribe) {
-                    const sub = subscription('ticks', symbol);
+                    const sub = subscription(isCandles ? 'candles' : 'ticks', symbol);
                     res.subscription = sub;
                     const entry = subscriptions.get(sub.id);
                     entry.timer = setInterval(() => {
                         if (closed) return;
-                        emit({ msg_type: 'tick', tick: makeTick(symbol), subscription: { id: sub.id } });
+                        const tick = makeTick(symbol);
+                        if (isCandles) {
+                            emit({
+                                msg_type: 'ohlc',
+                                ohlc: {
+                                    ...candleFor(tick.quote, tick.epoch), symbol,
+                                    granularity, id: sub.id, open_time: tick.epoch,
+                                },
+                                subscription: { id: sub.id },
+                            });
+                        } else {
+                            emit({
+                                msg_type: 'tick',
+                                tick: { ...tick, id: sub.id },
+                                subscription: { id: sub.id },
+                            });
+                        }
                     }, 750);
                 }
                 return message(res);
@@ -271,7 +313,8 @@ export const createAdminTestApi = () => {
                 if (sub) {
                     const entry = subscriptions.get(sub.id);
                     entry.timer = setInterval(() => {
-                        if (!closed) emit({ msg_type: 'tick', tick: makeTick(symbol), subscription: sub });
+                        if (!closed) emit({ msg_type: 'tick',
+                            tick: { ...makeTick(symbol), id: sub.id }, subscription: sub });
                     }, 750);
                 }
                 return message({ tick: makeTick(symbol), ...(sub ? { subscription: sub } : {}) }, 'tick');

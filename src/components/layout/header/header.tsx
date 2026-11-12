@@ -11,7 +11,6 @@ import { navigateToTransfer } from '@/utils/transfer-utils';
 import { Localize } from '@deriv-com/translations';
 import { Header, useDevice, Wrapper } from '@deriv-com/ui';
 import { AppLogo } from '../app-logo';
-import AdminTestKit from '@/components/admin-test-kit/admin-test-kit';
 import AccountSwitcher from './account-switcher';
 import MenuItems from './menu-items';
 import MobileMenu from './mobile-menu';
@@ -240,7 +239,6 @@ const AppHeader = observer(() => {
                     {isDesktop ? <MenuItems /> : renderAccountSection('left')}
                 </Wrapper>
                 <Wrapper variant='right'>{renderAccountSection('right')}</Wrapper>
-                <AdminTestKit />
             </Header>
         </>
     );

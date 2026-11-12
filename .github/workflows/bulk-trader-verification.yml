@@ -7,6 +7,8 @@ on:
       - 'src/pages/bulk-trader/**'
       - 'src/components/layout/app-logo/**'
       - 'src/components/admin-test-kit/**'
+      - 'src/components/layout/footer/**'
+      - 'src/components/layout/header/header.tsx'
       - 'src/services/admin-test-kit.js'
       - 'src/services/__tests__/admin-test-kit.test.js'
       - 'src/external/bot-skeleton/services/api/appId.js'
@@ -56,6 +58,7 @@ jobs:
           npx jest \
             src/pages/bulk-trader/__tests__/bulk-account-safety.test.js \
             src/services/__tests__/admin-test-kit.test.js \
+            src/components/admin-test-kit/__tests__/admin-test-kit-trigger.test.tsx \
             src/pages/bulk-trader/__tests__/bulk-trader-buttons.test.jsx \
             src/pages/bulk-trader/__tests__/bulk-execution.test.js \
             src/pages/bulk-trader/__tests__/bulk-contract-monitor.test.js \

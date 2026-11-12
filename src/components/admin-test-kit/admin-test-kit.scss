@@ -1,16 +1,21 @@
 .admin-test-kit {
     &__secret {
-        position: fixed;
-        bottom: 8px;
-        right: 8px;
-        z-index: 800;
-        width: 20px;
-        height: 20px;
+        display: inline-flex;
+        flex: 0 0 24px;
+        align-items: center;
+        justify-content: center;
+        align-self: center;
+        width: 24px;
+        height: 28px;
+        margin-inline-start: 0.2rem;
         padding: 0;
+        touch-action: none;
+        user-select: none;
+        -webkit-user-select: none;
         border: 0;
         background: transparent;
         color: var(--text-less-prominent, #888);
-        opacity: .4;
+        opacity: .45;
         font-size: 22px;
         cursor: pointer;
         line-height: 1;

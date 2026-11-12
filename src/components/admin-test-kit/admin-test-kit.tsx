@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import {
     enterAdminTest,
@@ -14,7 +14,7 @@ import {
 import './admin-test-kit.scss';
 
 /**
- * Hidden local development control: tap the dot five times within four seconds.
+ * Hidden local development control: press and hold the footer dot for 3 seconds.
  * It cannot be enabled on a deployed client domain by a URL, cookie, or PIN.
  */
 export default function AdminTestKit() {
@@ -22,18 +22,25 @@ export default function AdminTestKit() {
     const [demo, setDemo] = useState(() => String(getAdminTestBalances()[TEST_DEMO_ID]));
     const [real, setReal] = useState(() => String(getAdminTestBalances()[TEST_REAL_ID]));
     const [error, setError] = useState('');
-    const taps = useRef({ count: 0, first: 0 });
-    if (!isAdminTestAvailable()) return null;
-    const active = isAdminTestActive();
-    const openSecret = () => {
-        const now = Date.now();
-        if (now - taps.current.first > 4000) taps.current = { first: now, count: 0 };
-        taps.current.count += 1;
-        if (taps.current.count >= 5) {
-            taps.current = { first: 0, count: 0 };
-            setOpened(true);
+    const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const cancelHold = () => {
+        if (holdTimer.current !== null) {
+            clearTimeout(holdTimer.current);
+            holdTimer.current = null;
         }
     };
+    const startHold = () => {
+        if (holdTimer.current !== null || opened) return;
+        holdTimer.current = setTimeout(() => {
+            holdTimer.current = null;
+            setOpened(true);
+        }, 3000);
+    };
+    useEffect(() => () => {
+        if (holdTimer.current !== null) clearTimeout(holdTimer.current);
+    }, []);
+    if (!isAdminTestAvailable()) return null;
+    const active = isAdminTestActive();
     const resetBalances = () => {
         if (!setAdminTestBalance(TEST_DEMO_ID, demo) || !setAdminTestBalance(TEST_REAL_ID, real)) {
             setError('Enter valid simulated balances from 0 to 1,000,000.');
@@ -57,9 +64,28 @@ export default function AdminTestKit() {
             <button
                 className='admin-test-kit__secret'
                 type='button'
-                aria-label='Local test kit access'
-                title='Local development controls'
-                onClick={openSecret}
+                aria-label='Press and hold for 3 seconds to open local Admin Test Kit'
+                title='Hold for 3 seconds'
+                onPointerDown={event => {
+                    if (event.pointerType !== 'mouse' || event.button === 0) {
+                        event.preventDefault();
+                        startHold();
+                    }
+                }}
+                onPointerUp={cancelHold}
+                onPointerCancel={cancelHold}
+                onPointerLeave={cancelHold}
+                onContextMenu={event => event.preventDefault()}
+                onKeyDown={event => {
+                    if ((event.key === 'Enter' || event.key === ' ') && !event.repeat) {
+                        event.preventDefault();
+                        startHold();
+                    }
+                }}
+                onKeyUp={event => {
+                    if (event.key === 'Enter' || event.key === ' ') cancelHold();
+                }}
+                onBlur={cancelHold}
             >·</button>
             {opened && <div className='admin-test-kit__overlay' role='presentation' onClick={() => setOpened(false)}>
                 <section className='admin-test-kit__dialog' role='dialog' aria-modal='true'

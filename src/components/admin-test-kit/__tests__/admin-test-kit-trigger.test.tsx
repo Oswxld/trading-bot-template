@@ -42,6 +42,7 @@ describe('Admin Test Kit footer secret trigger', () => {
         const { isAdminTestActive, setAdminTestWinProbability } = require('@/services/admin-test-kit');
         isAdminTestActive.mockReturnValue(true);
         render(<AdminTestKit />);
+        act(() => window.dispatchEvent(new Event('yolo:admin-test-manage')));
         const slider = screen.getByRole('slider', { name: /win probability/i });
         expect(slider).toHaveValue('50');
         expect(screen.getByText(/loss probability/i)).toHaveTextContent('50%');

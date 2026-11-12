@@ -21,6 +21,7 @@ jest.mock('@/external/bot-skeleton/services/api/api-base', () => ({
     },
 }));
 jest.mock('@/external/bot-skeleton/scratch/utils', () => ({ getSelectedTradeType: jest.fn() }));
+jest.mock('@/utils/store-helpers', () => ({ helpers: {} }));
 
 const opened = (api: any) => new Promise<void>(resolve => {
     if (api.connection.readyState === 1) return resolve();
@@ -38,17 +39,17 @@ const makePanel = () => {
         setAccountSwitcherDisabledMessage: jest.fn(),
         setPromptHandler: jest.fn(),
     };
+    const journal = { onError: jest.fn(), journal_filters: [] };
     const root: any = {
         dbot,
-        summary_card: { clear: jest.fn() },
+        summary_card: { clear: jest.fn(), onBotContractEvent: jest.fn() },
+        transactions: { onBotContractEvent: jest.fn() },
+        journal,
     };
     const store = new RunPanelStore(root, {
         client, ui, common: { is_socket_opened: false },
     } as any);
-    store.registerBotListeners = jest.fn();
-    store.toggleDrawer = jest.fn();
-    store.showErrorMessage = jest.fn();
-    return { store, client, dbot, ui };
+    return { store, client, dbot, ui, journal };
 };
 
 describe('Run Bot button: simulated accounts never trigger OAuth login', () => {
@@ -80,7 +81,7 @@ describe('Run Bot button: simulated accounts never trigger OAuth login', () => {
             api_base.account_info = { loginid: id, currency: 'USD', balance: 100 };
             api_base.is_authorized = true;
 
-            const { store, client, dbot } = makePanel();
+            const { store, client, dbot, journal } = makePanel();
             (api_base.authorizeAndSubscribe as jest.Mock).mockImplementation(async () => {
                 client.loginid = id;
                 client.is_logged_in = true;
@@ -90,7 +91,7 @@ describe('Run Bot button: simulated accounts never trigger OAuth login', () => {
             expect(api_base.authorizeAndSubscribe).toHaveBeenCalledTimes(1);
             expect(dbot.runBot).toHaveBeenCalledTimes(1);
             expect(store.is_dialog_open).toBe(false);
-            expect(store.showErrorMessage).not.toHaveBeenCalled();
+            expect(journal.onError).not.toHaveBeenCalled();
             store.disposeReactionsFn();
         });
     }
@@ -101,11 +102,11 @@ describe('Run Bot button: simulated accounts never trigger OAuth login', () => {
         api_base.is_authorized = true;
         api_base.account_id = TEST_DEMO_ID;
         api_base.account_info = { loginid: TEST_DEMO_ID };
-        const { store, dbot } = makePanel();
+        const { store, dbot, journal } = makePanel();
         await store.onRunButtonClick();
         expect(dbot.runBot).not.toHaveBeenCalled();
         expect(store.is_dialog_open).toBe(false);
-        expect(store.showErrorMessage).toHaveBeenCalledWith(expect.stringMatching(/Simulated account/));
+        expect(journal.onError).toHaveBeenCalledWith(expect.stringMatching(/Simulated account/));
         store.disposeReactionsFn();
     });
 

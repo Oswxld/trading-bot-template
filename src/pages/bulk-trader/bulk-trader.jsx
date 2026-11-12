@@ -3,6 +3,7 @@ import { observer } from 'mobx-react-lite';
 import { api_base } from '@/external/bot-skeleton';
 import { DerivWSAccountsService } from '@/services/derivws-accounts.service';
 import { OAuthTokenExchangeService } from '@/services/oauth-token-exchange.service';
+import { isAdminTestActive, isAdminTestTransportReady, isAdminTestSessionReady } from '@/services/admin-test-kit';
 import { checkRealExposure, identifyBulkAccount, REAL_LIMITS } from './bulk-account-safety';
 import { tradingBudgetSnapshot } from '@/services/trading-request-budget';
 import { useStore } from '@/hooks/useStore';
@@ -133,8 +134,11 @@ const BulkTrader = observer(() => {
         liveAccount, socketAuthorized: socketMatches,
         clientAccount: client?.accounts?.[activeAccountId],
     });
+    const isSimulated = isAdminTestActive();
     const isReal = accountMode === 'real';
-    const accountLabel = isReal ? 'REAL ACCOUNT' : accountMode === 'demo' ? 'Practice account' : 'Select an account';
+    const accountLabel = isSimulated
+        ? (isReal ? 'SIMULATED REAL ACCOUNT' : accountMode === 'demo' ? 'SIMULATED DEMO ACCOUNT' : 'Select an account')
+        : (isReal ? 'REAL ACCOUNT' : accountMode === 'demo' ? 'Practice account' : 'Select an account');
     const [reportAccount, setReportAccount] = useState(activeAccountId);
     const [records, setRecords] = useState(() => fromStorage(activeAccountId, 'records', true));
     const [journal, setJournal] = useState(() => fromStorage(activeAccountId, 'journal'));
@@ -155,7 +159,7 @@ const BulkTrader = observer(() => {
     // This is especially important for real accounts: never guess real-money
     // permissions from an account ID or a locally cached display balance.
     useEffect(() => {
-        if (!activeAccountId || accountMode !== 'unavailable' || !client?.is_logged_in) return;
+        if (isAdminTestActive() || !activeAccountId || accountMode !== 'unavailable' || !client?.is_logged_in) return;
         const accessToken = OAuthTokenExchangeService.getAccessToken();
         if (!accessToken) return;
         let cancelled = false;
@@ -516,8 +520,21 @@ const BulkTrader = observer(() => {
             setMessage('Enter valid stake, trades (1–50), duration (1–10 ticks) and history ticks (10–5,000).');
             return;
         }
+        // A simulated account is never allowed to borrow a real Deriv socket.
+        if (isSimulated && !isAdminTestTransportReady(api_base)) {
+            setMessage('Simulated account is not connected. Re-enter Admin Test Mode.');
+            return;
+        }
+        if (isSimulated && !isAdminTestSessionReady(api_base)) {
+            await api_base.authorizeAndSubscribe();
+            if (!isAdminTestSessionReady(api_base)) {
+                setMessage('Simulated account could not initialize. Retry the trade.');
+                return;
+            }
+        }
         if (accountMode === 'unavailable') {
-            setMessage('Select a verified authenticated Deriv account before trading.');
+            setMessage(isSimulated ? 'Simulated account not ready. Re-enter Admin Test Mode.' :
+                'Select a verified authenticated Deriv account before trading.');
             return;
         }
         if (availableContracts && !availableContracts.has(contractType)) {
@@ -551,7 +568,8 @@ const BulkTrader = observer(() => {
                     setMessage('Real-account limits exceeded. Reduce stake, trade count or total exposure.');
                     return;
                 }
-                setMessage('Verifying real-account balance and exposure…');
+                setMessage(isSimulated ? 'Verifying simulated Real-account balance and exposure…' :
+                    'Verifying real-account balance and exposure…');
                 let balanceData;
                 try {
                     const response = await request(api, { balance: 1 }, 12000);
@@ -585,7 +603,7 @@ const BulkTrader = observer(() => {
                 `Stake each: ${stakeValue.toFixed(2)} ${currency}\n` +
                 `Maximum intended stake: ${exposure.toFixed(2)} ${currency}\n\n` +
                 `Up to ${Math.min(isReal ? REAL_LIMITS.concurrent : MAX_IN_FLIGHT_PURCHASES, numberTrades)} purchase operations may overlap.\n` +
-                'Submitted orders cannot be undone. Proceed?'
+                (isSimulated ? 'No real purchases are made. Proceed?' : 'Submitted orders cannot be undone. Proceed?')
             )) return;
         } finally {
             preflightRef.current = false;
@@ -938,7 +956,7 @@ const BulkTrader = observer(() => {
                 {isRunning && <button className='bulk-trader__stop' type='button' onClick={stop}>
                     Stop bulk orders ({progress}/{quantity} processed; {inFlight} in flight)
                 </button>}
-                {isReal && <p className='bulk-trader__notice' role='alert'>
+                {isReal && !isSimulated && <p className='bulk-trader__notice' role='alert'>
                     REAL MONEY: orders debit the selected account. Limits: {REAL_LIMITS.trades} trades,
                     {REAL_LIMITS.stake} {currency} per trade, {REAL_LIMITS.batch} {currency} per batch,
                     at most {REAL_LIMITS.percent * 100}% of freshly verified balance. Orders already sent cannot be recalled.

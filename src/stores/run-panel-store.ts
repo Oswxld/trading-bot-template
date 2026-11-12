@@ -6,6 +6,8 @@ import { contract_stages, TContractStage } from '@/constants/contract-stage';
 import { run_panel } from '@/constants/run-panel';
 import { ErrorTypes, MessageTypes, observer, unrecoverable_errors } from '@/external/bot-skeleton';
 import { getSelectedTradeType } from '@/external/bot-skeleton/scratch/utils';
+import { api_base } from '@/external/bot-skeleton/services/api/api-base';
+import { isAdminTestActive, isAdminTestTransportReady, isAdminTestSessionReady } from '@/services/admin-test-kit';
 import { handleBackendError, isBackendError } from '@/utils/error-handler';
 // import { journalError, switch_account_notification } from '@/utils/bot-notifications';
 import GTM from '@/utils/gtm';
@@ -179,7 +181,23 @@ export default class RunPanelStore {
         const is_ios = mobileOSDetect() === 'iOS';
         this.dbot.saveRecentWorkspace();
         this.dbot.unHighlightAllBlocks();
-        if (!client.is_logged_in) {
+        // In local simulation, restore Bot Builder's ordinary logged-in state
+        // using the fake API, never a real Deriv OAuth session.
+        if (isAdminTestActive()) {
+            if (!isAdminTestTransportReady(api_base)) {
+                this.showErrorMessage('Simulated account is not connected. Re-enter Admin Test Mode.');
+                return;
+            }
+            if (!isAdminTestSessionReady(api_base) ||
+                !client.is_logged_in || client.loginid !== api_base.account_id) {
+                await api_base.authorizeAndSubscribe();
+            }
+            if (!isAdminTestSessionReady(api_base) ||
+                !client.is_logged_in || client.loginid !== api_base.account_id) {
+                this.showErrorMessage('Simulated account could not initialize. Re-enter Admin Test Mode.');
+                return;
+            }
+        } else if (!client.is_logged_in) {
             this.showLoginDialog();
             return;
         }

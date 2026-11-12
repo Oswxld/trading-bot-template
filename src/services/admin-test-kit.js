@@ -20,6 +20,21 @@ export const isAdminTestAvailable = () =>
 export const isAdminTestActive = () =>
     isAdminTestAvailable() && sessionStorage.getItem(ADMIN_TEST_KEY) === 'active';
 
+// The local-only flag alone must not authorize trading through a genuine broker.
+export const isAdminTestTransportReady = apiBase => {
+    if (!isAdminTestActive()) return false;
+    const selected = localStorage.getItem('active_loginid');
+    return (selected === TEST_DEMO_ID || selected === TEST_REAL_ID) &&
+        apiBase?.api?.isAdminSimulation === true &&
+        apiBase.api.simulatedAccountId === selected &&
+        apiBase.api.connection?.readyState === 1;
+};
+export const isAdminTestSessionReady = apiBase =>
+    isAdminTestTransportReady(apiBase) &&
+    apiBase.is_authorized === true &&
+    apiBase.account_id === localStorage.getItem('active_loginid') &&
+    apiBase.account_info?.loginid === apiBase.account_id;
+
 /** Percentage chance that any given SIMULATED contract settles as a win.
  * Both Bot Builder and Bulk Trader share this setting through the same transport.
  * Read on settlement so changes take effect without a reload.
@@ -269,6 +284,8 @@ export const createAdminTestApi = () => {
         } });
     };
     const api = {
+        isAdminSimulation: true,
+        simulatedAccountId: accountId,
         connection,
         onMessage: () => ({
             subscribe(callback) {

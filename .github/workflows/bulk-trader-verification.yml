@@ -23,6 +23,7 @@ on:
       - 'src/services/__tests__/trading-request-budget.test.js'
       - 'src/external/bot-skeleton/services/api/appId.js'
       - 'src/external/bot-skeleton/services/api/api-base.ts'
+      - 'src/stores/run-panel-store.ts'
       - 'package.json'
       - 'package-lock.json'
       - '.github/workflows/bulk-trader-verification.yml'

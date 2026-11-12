@@ -4,6 +4,7 @@ import {
     switchAdminTestAccount, setAdminTestBalance,
     setAdminTestWinProbability, getAdminTestWinProbability,
     getAdminTestBalances, getAdminTestAccounts, createAdminTestApi,
+    isAdminTestTransportReady, isAdminTestSessionReady,
 } from '../admin-test-kit';
 
 const opened = api => new Promise(resolve => {
@@ -34,6 +35,28 @@ describe('local admin test kit (no broker connection)', () => {
         expect(sessionStorage.getItem(ADMIN_TEST_KEY)).toBeNull();
         expect(localStorage.getItem('active_loginid')).toBe('PREVIOUS_DERIV_ACCOUNT');
         expect(sessionStorage.getItem('auth_info')).toBe('previous-oauth-session');
+    });
+
+    it('authorizes only the matching simulated transport, never the actual Deriv API', async () => {
+        enterAdminTest();
+        const realSocket = { api: { connection: { readyState: 1 } },
+            is_authorized: true, account_id: TEST_DEMO_ID, account_info: { loginid: TEST_DEMO_ID } };
+        expect(isAdminTestTransportReady(realSocket)).toBe(false);
+        expect(isAdminTestSessionReady(realSocket)).toBe(false);
+        const sim = createAdminTestApi();
+        await opened(sim);
+        const state = {
+            api: sim, is_authorized: false,
+            account_id: TEST_DEMO_ID, account_info: { loginid: TEST_DEMO_ID },
+        };
+        expect(isAdminTestTransportReady(state)).toBe(true);
+        expect(isAdminTestSessionReady(state)).toBe(false);
+        state.is_authorized = true;
+        expect(isAdminTestSessionReady(state)).toBe(true);
+        expect(switchAdminTestAccount(TEST_REAL_ID)).toBe(true);
+        expect(isAdminTestTransportReady(state)).toBe(false);
+        expect(isAdminTestSessionReady(state)).toBe(false);
+        sim.disconnect();
     });
 
     it('uses 50% by default and persists one independent slider for both simulated accounts', () => {

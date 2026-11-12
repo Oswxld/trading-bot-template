@@ -3,6 +3,7 @@ import { getAccountId, getAccountType, isDemoAccount, removeUrlParameter } from 
 /* [/AI] */
 import CommonStore from '@/stores/common-store';
 import { DerivWSAccountsService } from '@/services/derivws-accounts.service';
+import { isAdminTestActive } from '@/services/admin-test-kit';
 import { TAuthData } from '@/types/api-types';
 import { clearAuthData } from '@/utils/auth-utils';
 import { handleBackendError, isBackendError } from '@/utils/error-handler';
@@ -98,6 +99,12 @@ class APIBase {
     }
 
     private async handleTokenExchangeIfNeeded() {
+        // Simulated accounts must never be replaced by a stale OAuth URL
+        // account_id. Authorize exclusively through the in-memory API.
+        if (isAdminTestActive()) {
+            if (getAccountId()) await this.authorizeAndSubscribe();
+            return;
+        }
         const urlParams = new URLSearchParams(window.location.search);
         const account_id = urlParams.get('account_id');
         const accountType = urlParams.get('account_type');

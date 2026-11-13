@@ -296,6 +296,9 @@ export const createAdminTestApi = () => {
         disconnect: () => connection.close(),
         balance: () => api.send({ balance: 1 }),
         forget: id => api.send({ forget: id }),
+        // Bot Builder's TicksService uses forgetAll(), while Bulk Trader
+        // uses send({ forget_all }). Both must be supported locally.
+        forgetAll: type => api.send({ forget_all: type }),
         authorize: () => Promise.resolve({ authorize: { loginid: accountId } }),
         async send(rawRequest) {
             const request = typeof rawRequest === 'string' ? JSON.parse(rawRequest) : rawRequest;
@@ -363,7 +366,10 @@ export const createAdminTestApi = () => {
                         }
                     }, 750);
                 }
-                return message(res);
+                // Deriv responds to ticks_history with msg_type=history or
+                // msg_type=candles. Bot Builder's and Bulk Trader's listeners
+                // rely on these exact names.
+                return message(res, isCandles ? 'candles' : 'history');
             }
             if (kind === 'ticks') {
                 const symbol = request.ticks;

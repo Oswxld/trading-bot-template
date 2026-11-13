@@ -59,6 +59,41 @@ describe('local admin test kit (no broker connection)', () => {
         sim.disconnect();
     });
 
+    it('provides Bot Builder-compatible tick history, candles, and forgetAll on simulated Real', async () => {
+        enterAdminTest();
+        switchAdminTestAccount(TEST_REAL_ID);
+        const api = createAdminTestApi();
+        await opened(api);
+        const stream = [];
+        const listener = api.onMessage().subscribe(({ data }) => stream.push(data));
+
+        const history = await api.send({
+            ticks_history: 'R_100', count: 20, style: 'ticks',
+            subscribe: 1, req_id: 203,
+        });
+        expect(history.msg_type).toBe('history');
+        expect(history.req_id).toBe(203);
+        expect(history.history.prices).toHaveLength(20);
+        expect(history.history.times).toHaveLength(20);
+        expect(history.subscription.id).toEqual(expect.any(String));
+
+        const candles = await api.send({
+            ticks_history: 'R_100', count: 10, style: 'candles',
+            granularity: 60, subscribe: 1, req_id: 204,
+        });
+        expect(candles.msg_type).toBe('candles');
+        expect(candles.candles).toHaveLength(10);
+
+        const cleared = await api.forgetAll('ticks');
+        expect(cleared).toHaveProperty('forget_all');
+        expect(stream).toContainEqual(expect.objectContaining({
+            msg_type: 'history', req_id: 203,
+        }));
+        expect(localStorage.getItem('active_loginid')).toBe(TEST_REAL_ID);
+        listener.unsubscribe();
+        api.disconnect();
+    });
+
     it('uses 50% by default and persists one independent slider for both simulated accounts', () => {
         expect(getAdminTestWinProbability()).toBe(50);
         expect(setAdminTestWinProbability(100)).toBe(false);

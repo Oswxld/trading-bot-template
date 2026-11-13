@@ -1,6 +1,7 @@
 import { action, computed, makeObservable, observable } from 'mobx';
 /* [AI] - Analytics removed - utility functions moved to @/utils/account-helpers */
 import { getAccountId } from '@/utils/account-helpers';
+import { isAdminTestActive } from '@/services/admin-test-kit';
 /* [/AI] */
 import { isEmptyObject } from '@/components/shared';
 import { isMultipliersOnly, isOptionsBlocked } from '@/components/shared/common/utility';
@@ -334,6 +335,10 @@ export default class ClientStore {
      * @returns True if WebSocket needs regeneration, false otherwise
      */
     needsWebSocketRegeneration(): boolean {
+        // Simulated account changes are managed by the Admin Test Kit and
+        // reload the page. The ordinary OAuth account regeneration clears
+        // both client state and authData$, which wrongly logs out fake Real.
+        if (isAdminTestActive()) return false;
         const active_login_id = getAccountId();
         return (
             !this.is_regenerating &&
@@ -360,7 +365,7 @@ export default class ClientStore {
      * Includes error handling to prevent users from being stuck in loading state
      */
     async regenerateWebSocket() {
-        if (this.is_regenerating) return;
+        if (isAdminTestActive() || this.is_regenerating) return;
 
         this.is_regenerating = true;
         this.setIsAccountRegenerating(true);

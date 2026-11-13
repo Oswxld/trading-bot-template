@@ -24,6 +24,8 @@ on:
       - 'src/external/bot-skeleton/services/api/appId.js'
       - 'src/external/bot-skeleton/services/api/api-base.ts'
       - 'src/stores/run-panel-store.ts'
+      - 'src/stores/client-store.ts'
+      - 'src/external/bot-skeleton/services/api/__tests__/**'
       - 'src/stores/__tests__/run-panel-admin-test.spec.ts'
       - 'package.json'
       - 'package-lock.json'
@@ -64,6 +66,8 @@ jobs:
             src/pages/bulk-trader/__tests__/bulk-account-safety.test.js \
             src/services/__tests__/admin-test-kit.test.js \
             src/stores/__tests__/run-panel-admin-test.spec.ts \
+            src/external/bot-skeleton/services/api/__tests__/ticks-simulated-real.test.js \
+            src/external/bot-skeleton/services/api/__tests__/api-base-admin-reconnect.test.ts \
             src/hooks/__tests__/useAccountSwitching-admin-test.spec.tsx \
             src/components/admin-test-kit/__tests__/admin-test-kit-trigger.test.tsx \
             src/pages/bulk-trader/__tests__/bulk-trader-buttons.test.jsx \

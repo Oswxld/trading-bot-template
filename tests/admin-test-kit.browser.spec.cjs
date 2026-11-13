@@ -142,7 +142,12 @@ test('local UI: Martingale Quick Strategy loads Blockly, presses Run, and comple
     // Entering Bot Builder triggers its *own* first-visit tutorial after the
     // dashboard tour was already skipped. Dismiss it through the real UI.
     await dismissWelcomeTour(page);
-    const choose = page.locator('.strategy-template-picker__links')
+    // The picker contains TWO Martingale presets: Accumulators and Options.
+    // Admin Test Kit supports tick options, not the separate ACCU contract.
+    // Select Martingale specifically from the Options section.
+    const optionsSection = page.locator('.strategy-template-picker__strategy')
+        .filter({ has: page.locator('.strategy-template-picker__title').getByText('Options', { exact: true }) });
+    const choose = optionsSection.locator('.strategy-template-picker__links')
         .filter({ hasText: /^Martingale$/ }).first();
     await expect(choose).toBeVisible({ timeout: 15000 });
     await choose.click({ timeout: 15000 });

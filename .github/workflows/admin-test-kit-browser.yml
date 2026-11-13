@@ -24,7 +24,7 @@ concurrency:
 jobs:
   browser-smoke:
     name: Localhost Chromium synthetic account smoke
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4

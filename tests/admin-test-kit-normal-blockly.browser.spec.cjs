@@ -87,11 +87,11 @@ async function createNormalBlocklyBot(page, {
             const mutation = option?.querySelector('mutation');
             if (!option || !mutation) throw new Error('Trade options mutation unavailable');
             mutation.setAttribute('has_prediction', 'true');
-            const prediction = xml.createElement('value');
+            const prediction = xml.ownerDocument.createElement('value');
             prediction.setAttribute('name', 'PREDICTION');
-            const number = xml.createElement('shadow');
+            const number = xml.ownerDocument.createElement('shadow');
             number.setAttribute('type', 'math_number_positive');
-            const digit = xml.createElement('field');
+            const digit = xml.ownerDocument.createElement('field');
             digit.setAttribute('name', 'NUM');
             digit.textContent = '5';
             number.appendChild(digit);

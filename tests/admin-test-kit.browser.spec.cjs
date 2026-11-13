@@ -15,13 +15,14 @@ const activateViaFooter = async page => {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
     const button = page.getByRole('button', { name: /Press and hold for 3 seconds to open local Admin Test Kit/i });
     await expect(button).toBeVisible({ timeout: 35000 });
-    const bounds = await button.boundingBox();
-    expect(bounds).toBeTruthy();
-    await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
-    await page.mouse.down();
-    await page.waitForTimeout(3150);
-    await page.mouse.up();
-    await expect(page.getByRole('dialog', { name: 'Local Admin Test Kit' })).toBeVisible();
+    // Give the lazy app layout time to stabilize before starting the hold.
+    // Dispatch a real PointerEvent to the footer's React event handler;
+    // mouse movement can trigger pointerleave on the tiny dot.
+    await page.waitForTimeout(1500);
+    await button.dispatchEvent('pointerdown', { pointerType: 'mouse', button: 0 });
+    await page.waitForTimeout(3300);
+    await expect(page.getByRole('dialog', { name: 'Local Admin Test Kit' })).toBeVisible({ timeout: 10000 });
+    await button.dispatchEvent('pointerup', { pointerType: 'mouse', button: 0 });
     await page.getByRole('button', { name: 'Enter simulated admin mode' }).click();
     await page.waitForLoadState('domcontentloaded');
     await expect.poll(() => page.evaluate(() => sessionStorage.getItem('yolo:local-admin-test')),

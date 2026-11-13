@@ -184,3 +184,47 @@ for (const { name, matcher } of [
         }
     );
 }
+
+
+test('6B regression: Martingale with ordinary fresh form values buys on 50% local simulation', async ({ page }) => {
+    page.on('dialog', async dialog => {
+        if (dialog.type() === 'confirm') await dialog.accept();
+        else await dialog.dismiss();
+    });
+    // Unlike other 6B tests, this leaves qs-fields UNSEEDED and uses the
+    // actual form defaults and user-entered P/L thresholds.
+    await enterLocalMode(page);
+    await expect(page.locator('#quick-strategy')).toBeVisible({ timeout: 35000 });
+    await dismissTour(page);
+    await page.locator('#quick-strategy').click({ timeout: 12000 });
+    await expect(page.locator('.strategy-template-picker__panel')).toBeVisible({ timeout: 15000 });
+    const botTour = page.locator('.tour-dialog').first();
+    if (await botTour.waitFor({ state: 'visible', timeout: 5000 }).then(() => true, () => false)) {
+        await dismissTour(page);
+    }
+    const options = page.locator('.strategy-template-picker__strategy')
+        .filter({ has: page.locator('.strategy-template-picker__title').getByText('Options', { exact: true }) });
+    await options.locator('.strategy-template-picker__links').filter({ hasText: /^Martingale$/ }).first().click();
+    const settings = await page.evaluate(() => ({
+        active: localStorage.getItem('active_loginid'),
+        qs: localStorage.getItem('qs-fields'),
+        simulator: sessionStorage.getItem('yolo:local-admin-test'),
+    }));
+    expect(settings.simulator).toBe('active');
+    expect(settings.qs).toBeNull();
+
+    await page.locator('input[name="profit"]').fill('100');
+    await page.locator('input[name="loss"]').fill('100');
+    const run = page.getByTestId('qs-run-button');
+    await expect(run).toBeEnabled({ timeout: 20000 });
+    await run.click();
+    await expect.poll(async () => (await ledger(page)).length,
+        { timeout: 30000, intervals: [500, 1000] }).toBeGreaterThan(0);
+    await expect.poll(async () => (await ledger(page)).some(c => c.is_sold),
+        { timeout: 20000 }).toBe(true);
+    await expect(page.locator('#db-animation__stop-button')).toBeVisible();
+    await page.locator('#db-animation__stop-button').click();
+    console.log('Fresh Martingale form purchases:', JSON.stringify({
+        settings, trades: (await ledger(page)).length,
+    }));
+});

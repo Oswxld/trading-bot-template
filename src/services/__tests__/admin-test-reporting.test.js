@@ -1,3 +1,4 @@
+import { getContractTypeName } from '@/external/bot-skeleton/utils/contract';
 import {
     createAdminTestApi, enterAdminTest, exitAdminTest,
     getAdminTestBalances, getAdminTestContracts, markAdminTestBotReportCleared,
@@ -40,6 +41,43 @@ describe('Admin Test Kit: account-local statement and reporting ledger', () => {
         localStorage.clear();
         sessionStorage.clear();
     });
+
+    it.each(['CALL', 'PUT', 'DIGITDIFF'])(
+        'creates a real-renderable shortcode for %s, including after simulator reconnection',
+        async contractType => {
+            const api = createAdminTestApi();
+            await open(api);
+            let contractId;
+            try {
+                const proposal = await api.send({
+                    proposal: 1, amount: 1, basis: 'stake',
+                    underlying_symbol: 'R_100', contract_type: contractType,
+                    duration: 1, duration_unit: 't', currency: 'USD',
+                });
+                const buyResponse = await api.send({
+                    buy: proposal.proposal.id, price: proposal.proposal.ask_price,
+                });
+                contractId = buyResponse.buy.contract_id;
+                const [contract] = getAdminTestContracts(TEST_DEMO_ID);
+                expect(contract.contract_id).toBe(contractId);
+                expect(contract.shortcode).toEqual(expect.any(String));
+                expect(contract.shortcode.split('_').slice(-2)[0]).toBe('S0P');
+                expect(() => getContractTypeName(contract)).not.toThrow();
+            } finally {
+                api.disconnect();
+            }
+            const recovered = createAdminTestApi();
+            try {
+                await open(recovered);
+                const contract = (await recovered.send({
+                    proposal_open_contract: 1, contract_id: contractId,
+                })).proposal_open_contract;
+                expect(() => getContractTypeName(contract)).not.toThrow();
+            } finally {
+                recovered.disconnect();
+            }
+        }
+    );
 
     it('reports a confirmed buy and settled win with realized payout, contract IDs and correct balance', async () => {
         setAdminTestWinProbability(100);

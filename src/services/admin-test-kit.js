@@ -559,6 +559,14 @@ export const createAdminTestApi = () => {
                 const contract = {
                     contract_id, contract_type: proposal.contract_type,
                     underlying_symbol: symbol,
+                    // The Transactions UI's getContractTypeName() reads the
+                    // penultimate shortcode segment for CALL/PUT to distinguish
+                    // Rise/Fall from Higher/Lower. Real Deriv contracts include
+                    // this field; omitting it crashed the entire report drawer.
+                    shortcode: [
+                        proposal.contract_type, symbol, amount, now,
+                        now + duration, 'S0P', '0',
+                    ].join('_'),
                     currency: 'USD', buy_price: amount, payout: proposal.payout,
                     barrier: proposal.barrier ?? proposal.selected_tick ?? proposal.prediction,
                     entry_tick: entry.quote, entry_spot: entry.quote,

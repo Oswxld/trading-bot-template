@@ -139,6 +139,9 @@ test('local UI: Martingale Quick Strategy loads Blockly, presses Run, and comple
         textTail: document.body.innerText.slice(-1000),
     }))));
     await expect(page.locator('.strategy-template-picker__panel')).toBeVisible({ timeout: 15000 });
+    // Entering Bot Builder triggers its *own* first-visit tutorial after the
+    // dashboard tour was already skipped. Dismiss it through the real UI.
+    await dismissWelcomeTour(page);
     const choose = page.locator('.strategy-template-picker__links')
         .filter({ hasText: /^Martingale$/ }).first();
     await expect(choose).toBeVisible({ timeout: 15000 });

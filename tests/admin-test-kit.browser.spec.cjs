@@ -11,6 +11,17 @@ const ledger = page => page.evaluate(() => {
     }
 });
 
+const dismissWelcomeTour = async page => {
+    // The standard first-visit tour is a blocking portal dialog. It must be
+    // closed using its real Skip action before interacting with the Kit.
+    const tour = page.locator('.tour-dialog').first();
+    if (await tour.isVisible().catch(() => false)) {
+        const skip = tour.getByRole('button', { name: /Skip/i });
+        await skip.click({ timeout: 10000 });
+        await expect(tour).toBeHidden({ timeout: 10000 });
+    }
+};
+
 const activateViaFooter = async page => {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
     const button = page.getByRole('button', { name: /Press and hold for 3 seconds to open local Admin Test Kit/i });
@@ -19,11 +30,13 @@ const activateViaFooter = async page => {
     // Dispatch a real PointerEvent to the footer's React event handler;
     // mouse movement can trigger pointerleave on the tiny dot.
     await page.waitForTimeout(1500);
+    await dismissWelcomeTour(page);
     await button.dispatchEvent('pointerdown', { pointerType: 'mouse', button: 0 });
     await page.waitForTimeout(3300);
     await expect(page.getByRole('dialog', { name: 'Local Admin Test Kit' })).toBeVisible({ timeout: 10000 });
     await button.dispatchEvent('pointerup', { pointerType: 'mouse', button: 0 });
-    await page.getByRole('button', { name: 'Enter simulated admin mode' }).click();
+    await dismissWelcomeTour(page);
+    await page.getByRole('button', { name: 'Enter simulated admin mode' }).click({ timeout: 15000 });
     await page.waitForLoadState('domcontentloaded');
     await expect.poll(() => page.evaluate(() => sessionStorage.getItem('yolo:local-admin-test')),
         { timeout: 20000 }).toBe('active');
@@ -32,6 +45,7 @@ const activateViaFooter = async page => {
 const runSingleBulkPurchase = async page => {
     await page.goto('/#bulk_trader', { waitUntil: 'domcontentloaded' });
     await expect(page.locator('.bulk-trader__buttons')).toBeVisible({ timeout: 35000 });
+    await dismissWelcomeTour(page);
     const button = page.locator('.bulk-trader__buy-a').first();
     await expect(button).toBeEnabled({ timeout: 25000 });
     await button.click();

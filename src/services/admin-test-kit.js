@@ -329,7 +329,9 @@ export const createAdminTestApi = () => {
     activeTimers.add(openTimer);
 
     const emit = payload => {
-        if (closed) return;
+        // A previous account's socket must never deliver its contracts,
+        // ticks, or balance into the newly selected account's UI.
+        if (closed || !isAdminTestActive() || localStorage.getItem('active_loginid') !== accountId) return;
         for (const callback of [...listeners]) callback({ data: payload });
     };
     const sendResponse = (request, response, msg_type) => {
@@ -441,6 +443,12 @@ export const createAdminTestApi = () => {
         async send(rawRequest) {
             const request = typeof rawRequest === 'string' ? JSON.parse(rawRequest) : rawRequest;
             if (closed || connection.readyState !== 1) throw new Error('Simulated connection is not open.');
+            // The socket is bound to the account selected when it was made.
+            // Reject stale Bot Builder/Bulk Trader requests during a switch;
+            // APIBase can then recreate and authorize the correct local socket.
+            if (!isAdminTestActive() || localStorage.getItem('active_loginid') !== accountId) {
+                throw new Error('Simulated account changed; reconnect before sending requests.');
+            }
             const kind = Object.keys(request).find(key => [
                 'balance', 'time', 'active_symbols', 'contracts_for', 'trading_times',
                 'ticks_history', 'ticks', 'proposal', 'buy', 'proposal_open_contract',

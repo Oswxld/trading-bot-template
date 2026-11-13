@@ -33,9 +33,9 @@ async function enterLocalMode(page) {
         { timeout: 20000 }).toBe('active');
 }
 
-async function launchQuickStrategy(page, matcher, winProbability = 0) {
+async function launchQuickStrategy(page, matcher, winProbability = 0, settingsOverrides = {}) {
     await enterLocalMode(page);
-    await page.evaluate(winProbability => {
+    await page.evaluate(({ winProbability, settingsOverrides }) => {
         localStorage.setItem('qs-fields', JSON.stringify({
             symbol: 'R_100', tradetype: 'callput', type: 'CALL',
             durationtype: 't', duration: '1', stake: '1',
@@ -44,11 +44,12 @@ async function launchQuickStrategy(page, matcher, winProbability = 0) {
             profit: '1000', loss: '1000', size: '2', unit: '1',
             action: 'RUN', max_stake: 200, boolean_max_stake: false,
             last_digit_prediction: 5,
+            ...settingsOverrides,
         }));
         // Force losses so stake recovery is deterministic and loss-threshold
         // behavior cannot be mistaken for a healthy Stop-button flow.
         sessionStorage.setItem('yolo:local-admin-win-probability', String(winProbability));
-    }, winProbability);
+    }, { winProbability, settingsOverrides });
     await page.reload({ waitUntil: 'domcontentloaded' });
     await expect(page.locator('#quick-strategy')).toBeVisible({ timeout: 35000 });
     await dismissTour(page);
@@ -228,5 +229,32 @@ test('6B regression: Martingale with ordinary fresh form values buys on 50% loca
     await page.locator('#db-animation__stop-button').click();
     console.log('Fresh Martingale form purchases:', JSON.stringify({
         settings, trades: (await ledger(page)).length,
+    }));
+});
+
+test('6B regression: Martingale ends naturally after a one-trade profit limit and resets Run UI', async ({ page }) => {
+    page.on('dialog', async dialog => {
+        if (dialog.type() === 'confirm') await dialog.accept();
+        else await dialog.dismiss();
+    });
+    // A $2 stake settles with $1.60 profit at 100% wins. The configured
+    // $1 threshold intentionally ends the generated XML after one trade.
+    // This used to leave the UI stuck on "Bot running" forever because the
+    // interpreter resolved normally without emitting bot.stop.
+    await launchQuickStrategy(page, /^Martingale$/, 100, {
+        stake: '2', profit: '1', loss: '1000',
+    });
+    await expect.poll(async () => (await ledger(page)).filter(c => c.is_sold).length,
+        { timeout: 25000, intervals: [500, 1000] }).toBe(1);
+    await expect(page.locator('#db-animation__run-button'))
+        .toBeVisible({ timeout: 12000 });
+    await expect(page.locator('.animation__text'))
+        .toHaveText(/Bot is not running/, { timeout: 12000 });
+    await page.waitForTimeout(2500);
+    const settled = await ledger(page);
+    expect(settled).toHaveLength(1);
+    expect(settled[0].profit).toBeCloseTo(1.6, 2);
+    console.log('Martingale natural completion resets UI:', JSON.stringify({
+        contracts: settled.length, profit: settled[0].profit, running: false,
     }));
 });

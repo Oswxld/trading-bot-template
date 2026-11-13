@@ -179,6 +179,14 @@ export default class TransactionsStore {
         }
 
         this.elements = { ...this.elements }; // force update
+        if (isAdminTestActive()) {
+            // registerReactions() historically runs before makeObservable().
+            // Persist simulated Bot Builder rows explicitly so remount/reload
+            // cannot silently discard an otherwise successful trade.
+            const cached = getStoredItemsByKey(this.TRANSACTION_CACHE, {});
+            cached[current_account] = (this.elements[current_account] || []).slice(0, 5000);
+            setStoredItemsByKey(this.TRANSACTION_CACHE, cached);
+        }
     }
 
     clear() {
@@ -189,6 +197,10 @@ export default class TransactionsStore {
             this.elements[this.core?.client?.loginid as string] = [];
             if (isAdminTestActive()) {
                 this.elements = { ...this.elements };
+                const account = this.core?.client?.loginid as string;
+                const cached = getStoredItemsByKey(this.TRANSACTION_CACHE, {});
+                cached[account] = [];
+                setStoredItemsByKey(this.TRANSACTION_CACHE, cached);
             }
         }
         this.recovered_completed_transactions = this.recovered_completed_transactions?.slice(0, 0);

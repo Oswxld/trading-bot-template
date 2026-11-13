@@ -109,8 +109,10 @@ test('6D: five simultaneous simulated wins reconcile ledger, reports, journal an
         .not.toContainText('No bulk trade transactions yet.');
 
     await report.getByRole('button', { name: 'Journal' }).click();
+    // One batch start, five confirmed buys, five settlements and one
+    // completion event: all 12 entries must be present without duplication.
     await expect(report.locator('.bulk-reports__journal .bulk-reports__log'))
-        .toHaveCount(11, { timeout: 18000 });
+        .toHaveCount(12, { timeout: 18000 });
     await expect(report.locator('.bulk-reports__journal'))
         .toContainText(/settled WON/i);
 

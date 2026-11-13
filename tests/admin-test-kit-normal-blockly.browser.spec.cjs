@@ -17,6 +17,17 @@ async function dismissTour(page) {
     }
 }
 
+async function dismissDelayedBotTour(page) {
+    // Bot Builder's tour is mounted asynchronously after navigation. A
+    // one-off isVisible() check can miss it; wait for the portal dialog,
+    // then click its real Skip button (never force-click through the overlay).
+    const modal = page.locator('.tour-dialog').first();
+    if (await modal.waitFor({ state: 'visible', timeout: 5500 })
+        .then(() => true, () => false)) {
+        await dismissTour(page);
+    }
+}
+
 async function enterTestMode(page) {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
     const dot = page.getByRole('button', { name: /Press and hold for 3 seconds to open local Admin Test Kit/i });
@@ -32,7 +43,7 @@ async function enterTestMode(page) {
     await expect.poll(() => page.evaluate(() => sessionStorage.getItem('yolo:local-admin-test')),
         { timeout: 20000 }).toBe('active');
     await page.goto('/#bot_builder', { waitUntil: 'domcontentloaded' });
-    await dismissTour(page);
+    await dismissDelayedBotTour(page);
     await expect.poll(() => page.evaluate(() => Boolean(window.Blockly?.derivWorkspace?.cached_xml?.main)),
         { timeout: 20000 }).toBe(true);
 }
@@ -116,6 +127,7 @@ async function createNormalBlocklyBot(page, {
     expect(built.values.some(b => b.type === 'trade_definition_market' && b.symbol === 'R_100'))
         .toBe(true);
     console.log('Normal Blockly constructed: ' + JSON.stringify({ contract, condition, built }));
+    await dismissTour(page);
 }
 
 async function expectThreeTradesAndStop(page, contractType) {

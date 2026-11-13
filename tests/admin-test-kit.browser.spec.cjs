@@ -171,16 +171,29 @@ test('local UI: ' + strategyName + ' Quick Strategy loads Blockly, presses Run, 
     // other strategy cases independently confirm their own real purchases.
     if (strategyName === 'Martingale') {
         await page.locator('li#db-run-panel-tab__transactions').click();
-        console.log('Admin Test report diagnostics:', JSON.stringify(await page.evaluate(() => ({
+        const reportDebug = await page.evaluate(() => ({
             activeLoginid: localStorage.getItem('active_loginid'),
             simulated: sessionStorage.getItem('yolo:local-admin-test'),
             storedContracts: JSON.parse(sessionStorage.getItem(
                 'yolo:local-admin-contracts:' + localStorage.getItem('active_loginid')
             ) || '[]').map(x => ({ id: x.contract_id, source: x.source, is_sold: x.is_sold })),
-            transactionCache: sessionStorage.getItem('transaction_cache')?.length || 0,
-            tabText: document.querySelector('.run-panel__content .transactions')?.textContent?.slice(0,450),
+            transactionCache: sessionStorage.getItem('transaction_cache') || '',
+            tabs: [...document.querySelectorAll('li[id^="db-run-panel-tab__"]')].map(el => ({
+                text: el.textContent, active: el.classList.contains('dc-tabs__active')
+            })),
+            lists: [...document.querySelectorAll('.transactions')].map(el => ({
+                text: el.textContent?.slice(0,700),
+                childCount: el.children.length, visible: !!el.offsetParent
+            })),
             rowCount: document.querySelectorAll('[data-testid="dt_transactions_item"]').length,
-        }))));
+        }));
+        const LZ = require('lz-string');
+        const raw = JSON.parse(LZ.decompress(reportDebug.transactionCache) || '{}');
+        reportDebug.transactionCache = Object.fromEntries(Object.entries(raw)
+            .map(([account, rows]) => [account, Array.isArray(rows)
+                ? rows.map(row => ({ type: row.type, id: row.data?.contract_id, completed: row.data?.is_completed }))
+                : rows]));
+        console.log('Admin Test report diagnostics:', JSON.stringify(reportDebug));
         await expect(page.getByTestId('dt_transactions_item').first())
             .toBeVisible({ timeout: 20000 });
         await page.locator('li#db-run-panel-tab__journal').click();

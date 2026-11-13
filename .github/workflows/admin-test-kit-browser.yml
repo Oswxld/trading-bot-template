@@ -1,0 +1,61 @@
+name: Admin Test Kit browser smoke
+
+on:
+  push:
+    branches: ['fix/admin-test-kit-step6-integration']
+    paths:
+      - 'tests/admin-test-kit.browser.spec.cjs'
+      - '.github/workflows/admin-test-kit-browser.yml'
+      - 'src/services/admin-test-kit.js'
+      - 'src/services/admin-test-market-feed.js'
+      - 'src/pages/bulk-trader/**'
+      - 'src/stores/run-panel-store.ts'
+      - 'src/stores/transactions-store.ts'
+      - 'src/external/bot-skeleton/scratch/dbot.js'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: admin-test-browser-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  browser-smoke:
+    name: Localhost Chromium synthetic account smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install app and browser test runner
+        run: |
+          npm install --no-audit --no-fund --legacy-peer-deps
+          npm install --no-save --no-audit --no-fund --legacy-peer-deps @playwright/test@1.57.0
+          npx playwright install --with-deps chromium
+      - name: Build localhost site
+        run: npm run build
+      - name: Run real Chromium UI smoke without Deriv credentials
+        run: |
+          npx http-server dist -a 127.0.0.1 -p 4173 -s > /tmp/local-admin-http.log 2>&1 &
+          for i in $(seq 1 40); do
+            if curl -fsS http://localhost:4173/ > /dev/null; then break; fi
+            sleep 1
+          done
+          npx playwright test tests/admin-test-kit.browser.spec.cjs --reporter=line --workers=1 --timeout=100000
+        env:
+          CI: 'true'
+      - name: Save browser evidence on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: admin-test-kit-browser-failure
+          path: |
+            test-results/
+            /tmp/local-admin-http.log
+          if-no-files-found: ignore
+          retention-days: 3

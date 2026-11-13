@@ -53,6 +53,7 @@ describe('Admin Test Kit: account-local statement and reporting ledger', () => {
                 expect.objectContaining({
                     action_type: 'buy',
                     amount: -1,
+                    balance_after: 9999,
                     contract_id: bought.contract_id,
                     transaction_id: bought.transaction_id,
                 }),
@@ -65,6 +66,7 @@ describe('Admin Test Kit: account-local statement and reporting ledger', () => {
             expect(credit).toMatchObject({
                 contract_id: bought.contract_id,
                 amount: 1.8,
+                balance_after: 10000.8,
                 profit: 0.8,
                 currency: 'USD',
             });

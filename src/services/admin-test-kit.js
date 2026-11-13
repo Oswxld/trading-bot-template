@@ -100,7 +100,7 @@ const simulatedStatementRows = accountId => getAdminTestContracts(accountId).fla
     const buy = {
         action_type: 'buy',
         amount: -Number(contract.buy_price),
-        balance_after: undefined,
+        balance_after: contract.balance_after_buy,
         contract_id: contract.contract_id,
         currency: contract.currency || 'USD',
         longcode: 'LOCAL simulated contract only',
@@ -114,6 +114,7 @@ const simulatedStatementRows = accountId => getAdminTestContracts(accountId).fla
     return [buy, {
         action_type: 'sell',
         amount: Number(contract.sell_price || 0),
+        balance_after: contract.balance_after_sell,
         contract_id: contract.contract_id,
         currency: contract.currency || 'USD',
         payout: Number(contract.sell_price || 0),
@@ -392,6 +393,7 @@ export const createAdminTestApi = () => {
         contract.date_expiry = last.epoch;
         contract.transaction_ids.sell = 500000 + nextContractSerial();
         saveBalance(accountId, readBalances()[accountId] + contract.sell_price);
+        contract.balance_after_sell = readBalances()[accountId];
         saveContractLedger(accountId, contracts);
         market.releaseSymbol(contract.underlying_symbol);
         broadcastContract(contract);
@@ -575,6 +577,7 @@ export const createAdminTestApi = () => {
                 };
                 contracts.set(String(contract_id), contract);
                 saveBalance(accountId, readBalances()[accountId] - amount);
+                contract.balance_after_buy = readBalances()[accountId];
                 saveContractLedger(accountId, contracts);
                 // Keep the underlying market clock running even if the user
                 // navigates away and has zero active UI tick subscriptions.

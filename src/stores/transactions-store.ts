@@ -191,17 +191,14 @@ export default class TransactionsStore {
 
     clear() {
         if (isAdminTestActive()) {
-            markAdminTestBotReportCleared(this.core?.client?.loginid as string);
-        }
-        if (this.elements && this.elements[this.core?.client?.loginid as string]?.length > 0) {
+            const account = this.core?.client?.loginid as string;
+            markAdminTestBotReportCleared(account);
+            this.elements = { ...this.elements, [account]: [] };
+            const cached = getStoredItemsByKey(this.TRANSACTION_CACHE, {});
+            cached[account] = [];
+            setStoredItemsByKey(this.TRANSACTION_CACHE, cached);
+        } else if (this.elements && this.elements[this.core?.client?.loginid as string]?.length > 0) {
             this.elements[this.core?.client?.loginid as string] = [];
-            if (isAdminTestActive()) {
-                this.elements = { ...this.elements };
-                const account = this.core?.client?.loginid as string;
-                const cached = getStoredItemsByKey(this.TRANSACTION_CACHE, {});
-                cached[account] = [];
-                setStoredItemsByKey(this.TRANSACTION_CACHE, cached);
-            }
         }
         this.recovered_completed_transactions = this.recovered_completed_transactions?.slice(0, 0);
         this.recovered_transactions = this.recovered_transactions?.slice(0, 0);

@@ -182,6 +182,10 @@ test('local UI: ' + strategyName + ' Quick Strategy loads Blockly, presses Run, 
         // entry rendered after the purchase and settlement.
         await expect(page.locator('.journal__item').first())
             .toBeVisible({ timeout: 15000 });
+        // Confirm the journal references the executed simulated contract,
+        // not merely the welcome or bot-loading notification.
+        await expect(page.locator('.journal__item-list'))
+            .toContainText(/Bought|Loss amount|Profit amount/, { timeout: 15000 });
 
         await page.locator('li#db-run-panel-tab__summary').click();
         await expect(page.getByTestId('mock-summary'))

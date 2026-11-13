@@ -1,4 +1,5 @@
 import RunPanelStore from '../run-panel-store';
+import { observer as botObserver } from '@/external/bot-skeleton';
 import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import {
     createAdminTestApi,
@@ -96,6 +97,14 @@ describe('Run Bot button: simulated accounts never trigger OAuth login', () => {
             expect(dbot.runBot).toHaveBeenCalledTimes(1);
             expect(dbot.initializeInterpreter.mock.invocationCallOrder[0])
                 .toBeLessThan(dbot.runBot.mock.invocationCallOrder[0]);
+            // Interpreter termination emits bot.stop. A listener registered
+            // earlier would remove the new run's listeners during teardown.
+            const stopRegistrationIndex = (botObserver.register as jest.Mock).mock.calls
+                .findIndex(([event]) => event === 'bot.stop');
+            expect(stopRegistrationIndex).toBeGreaterThanOrEqual(0);
+            expect(dbot.initializeInterpreter.mock.invocationCallOrder[0])
+                .toBeLessThan((botObserver.register as jest.Mock)
+                    .mock.invocationCallOrder[stopRegistrationIndex]);
             expect(store.is_dialog_open).toBe(false);
             expect(journal.onError).not.toHaveBeenCalled();
             store.disposeReactionsFn();

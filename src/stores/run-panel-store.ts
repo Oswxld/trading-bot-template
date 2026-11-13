@@ -212,13 +212,17 @@ export default class RunPanelStore {
          */
         if (is_ios || isSafari()) this.preloadAudio();
 
-        this.registerBotListeners();
+        const is_simulated = isAdminTestActive();
+        // Keep the original live Run-button path unchanged. In simulation,
+        // rebuilding an old interpreter emits bot.stop; register the new
+        // run's event listeners AFTER that teardown, not before it.
+        if (!is_simulated) this.registerBotListeners();
 
         if (!this.dbot.shouldRunBot()) {
-            this.unregisterBotListeners();
+            if (!is_simulated) this.unregisterBotListeners();
             return;
         }
-        if (isAdminTestActive()) {
+        if (is_simulated) {
             // Always rebuild the Blockly interpreter against the CURRENT
             // simulator socket before Run. Its TicksService/TradeEngine
             // listeners otherwise remain bound to a previously closed socket
@@ -226,10 +230,10 @@ export default class RunPanelStore {
             try {
                 await this.dbot.initializeInterpreter();
             } catch (error) {
-                this.unregisterBotListeners();
                 this.showErrorMessage('Could not initialize simulated Bot Builder ticks. Retry Run.');
                 return;
             }
+            this.registerBotListeners();
         }
 
         ui?.setAccountSwitcherDisabledMessage(

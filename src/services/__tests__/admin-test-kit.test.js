@@ -116,14 +116,15 @@ describe('local admin test kit (no broker connection)', () => {
         const contracts = await api.send({ proposal_open_contract: 1, subscribe: 1 });
         const tickId = ticks.subscription.id;
         const candleId = candles.subscription.id;
-        const otherIds = [balance.subscription.id, transactions.subscription.id, contracts.subscription.id];
-
         expect((await api.forgetAll('ticks')).forget_all).toEqual([tickId]);
         expect((await api.forgetAll('ticks')).forget_all).toEqual([]);
         expect((await api.forgetAll('candles')).forget_all).toEqual([candleId]);
-        for (const id of otherIds) {
-            expect((await api.send({ forget: id })).forget).toBe(1);
-        }
+        expect((await api.forgetAll('transaction')).forget_all)
+            .toEqual([transactions.subscription.id]);
+        expect((await api.forgetAll('balance')).forget_all)
+            .toEqual([balance.subscription.id]);
+        expect((await api.forgetAll('proposal_open_contract')).forget_all)
+            .toEqual([contracts.subscription.id]);
         api.disconnect();
     });
 

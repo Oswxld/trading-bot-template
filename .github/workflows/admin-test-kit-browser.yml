@@ -7,6 +7,7 @@ on:
       - 'tests/admin-test-kit.browser.spec.cjs'
       - 'tests/admin-test-kit-quick-strategies.browser.spec.cjs'
       - 'tests/admin-test-kit-normal-blockly.browser.spec.cjs'
+      - 'tests/admin-test-kit-bulk-trader.browser.spec.cjs'
       - '.github/workflows/admin-test-kit-browser.yml'
       - 'src/services/admin-test-kit.js'
       - 'src/services/admin-test-market-feed.js'
@@ -49,7 +50,7 @@ jobs:
             if curl -fsS http://localhost:4173/ > /dev/null; then break; fi
             sleep 1
           done
-          npx playwright test tests/admin-test-kit.browser.spec.cjs tests/admin-test-kit-quick-strategies.browser.spec.cjs tests/admin-test-kit-normal-blockly.browser.spec.cjs --reporter=line --workers=1 --timeout=100000
+          npx playwright test tests/admin-test-kit.browser.spec.cjs tests/admin-test-kit-quick-strategies.browser.spec.cjs tests/admin-test-kit-normal-blockly.browser.spec.cjs tests/admin-test-kit-bulk-trader.browser.spec.cjs --reporter=line --workers=1 --timeout=100000
         env:
           CI: 'true'
       - name: Save browser evidence on failure

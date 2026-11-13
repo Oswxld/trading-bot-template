@@ -4,6 +4,7 @@
  * Used by BOTH Blockly Bot Builder and Bulk Trader through api_base.api.
  */
 import { observer as globalObserver } from '@/external/bot-skeleton/utils/observer';
+import { createAdminTestMarketFeed } from './admin-test-market-feed';
 
 export const ADMIN_TEST_KEY = 'yolo:local-admin-test';
 export const ADMIN_TEST_MANAGE_EVENT = 'yolo:admin-test-manage';
@@ -194,8 +195,13 @@ export const createAdminTestApi = () => {
     const contracts = new Map();
     const activeTimers = new Set();
     let serial = 0;
-    let priceIndex = 0;
     let closed = false;
+    // Single clock per symbol. A subscription is a view of the shared feed,
+    // not a separate source of randomly generated prices.
+    const market = createAdminTestMarketFeed({
+        emit: payload => emit(payload),
+        subscriptions,
+    });
     const connection = {
         readyState: 0,
         addEventListener(event, callback) { socketListeners[event]?.add(callback); },
@@ -207,7 +213,7 @@ export const createAdminTestApi = () => {
             connection.readyState = 3;
             for (const timer of activeTimers) clearTimeout(timer);
             activeTimers.clear();
-            for (const sub of subscriptions.values()) if (sub.timer) clearInterval(sub.timer);
+            market.close();
             subscriptions.clear();
             for (const callback of [...socketListeners.close]) callback({ type: 'close' });
             listeners.clear();
@@ -229,20 +235,18 @@ export const createAdminTestApi = () => {
         queueMicrotask(() => emit(message));
         return message;
     };
-    const subscription = (kind, symbol = null) => {
+    const subscription = (kind, symbol = null, granularity = null) => {
         const id = `adm-sub-${++serial}`;
-        subscriptions.set(id, { kind, symbol });
+        subscriptions.set(id, { kind, symbol, granularity });
+        if (kind === 'ticks' || kind === 'candles') market.subscriptionChanged(symbol);
         return { id };
     };
-    const simulatePrice = (symbol = 'R_100') => {
-        priceIndex++;
-        const base = symbol.includes('75') ? 1750 : symbol.includes('50') ? 1250 : 2000;
-        return Number((base + Math.sin(priceIndex * 0.72) * 12 +
-            Math.sin(priceIndex * 1.73) * 2 + (Math.random() - 0.5) * 8).toFixed(2));
+    const forgetSubscription = id => {
+        const key = String(id);
+        const sub = subscriptions.get(key);
+        subscriptions.delete(key);
+        if (sub?.kind === 'ticks' || sub?.kind === 'candles') market.subscriptionChanged(sub.symbol);
     };
-    const makeTick = symbol => ({
-        quote: simulatePrice(symbol), epoch: Math.floor(Date.now() / 1000), symbol,
-    });
     const currentBalance = () => ({
         loginid: accountId, account_id: accountId, currency: 'USD',
         balance: readBalances()[accountId],
@@ -265,7 +269,7 @@ export const createAdminTestApi = () => {
     };
     const settle = contract => {
         if (closed || contract.is_sold) return;
-        const last = makeTick(contract.underlying_symbol);
+        const last = market.recentTick(contract.underlying_symbol);
         const won = Math.random() * 100 < getAdminTestWinProbability();
         last.quote = simulatedExitQuote(contract, last.quote, won);
         contract.status = won ? 'won' : 'lost';
@@ -329,61 +333,33 @@ export const createAdminTestApi = () => {
                 barriers: ['DIGITMATCH', 'DIGITDIFF', 'DIGITOVER', 'DIGITUNDER'].includes(type) ? 1 : 0,
             })) } });
             if (kind === 'ticks_history') {
-                const count = Math.max(10, Math.min(5000, Number(request.count) || 100));
+                const count = Math.max(1, Math.min(5000, Number(request.count) || 100));
                 const symbol = request.ticks_history;
                 const isCandles = request.style === 'candles';
-                const granularity = Math.max(60, Number(request.granularity) || 60);
-                const ticks = Array.from({ length: count }, () => makeTick(symbol));
-                const prices = ticks.map(t => t.quote);
-                const times = ticks.map((t, i) => t.epoch - count + i + 1);
-                const candleFor = (price, epoch) => ({
-                    epoch, open: price, close: price + 0.03,
-                    high: price + 0.25, low: price - 0.25,
-                });
-                const res = isCandles ? {
-                    candles: prices.map((price, i) => candleFor(price, times[i])),
-                } : { history: { prices, times } };
-                if (request.subscribe) {
-                    const sub = subscription(isCandles ? 'candles' : 'ticks', symbol);
-                    res.subscription = sub;
-                    const entry = subscriptions.get(sub.id);
-                    entry.timer = setInterval(() => {
-                        if (closed) return;
-                        const tick = makeTick(symbol);
-                        if (isCandles) {
-                            emit({
-                                msg_type: 'ohlc',
-                                ohlc: {
-                                    ...candleFor(tick.quote, tick.epoch), symbol,
-                                    granularity, id: sub.id, open_time: tick.epoch,
-                                },
-                                subscription: { id: sub.id },
-                            });
-                        } else {
-                            emit({
-                                msg_type: 'tick',
-                                tick: { ...tick, id: sub.id },
-                                subscription: { id: sub.id },
-                            });
-                        }
-                    }, 750);
+                const granularity = Math.max(60, Math.floor(Number(request.granularity) || 60));
+                if (!SYMBOLS.some(item => item.symbol === symbol)) {
+                    return message({ error: { code: 'InvalidSymbol', message: 'Unknown simulated market symbol.' } },
+                        isCandles ? 'candles' : 'history');
                 }
-                // Deriv responds to ticks_history with msg_type=history or
-                // msg_type=candles. Bot Builder's and Bulk Trader's listeners
-                // rely on these exact names.
+                const res = isCandles
+                    ? { candles: market.candlesFor(symbol, count, granularity) }
+                    : { history: market.historyFor(symbol, count), pip_size: 2 };
+                if (request.subscribe) {
+                    res.subscription = subscription(isCandles ? 'candles' : 'ticks', symbol, granularity);
+                }
+                // The initial history snapshot and subsequent streamed updates
+                // refer to exactly the same underlying per-symbol market state.
                 return message(res, isCandles ? 'candles' : 'history');
             }
             if (kind === 'ticks') {
                 const symbol = request.ticks;
-                const sub = request.subscribe ? subscription('ticks', symbol) : null;
-                if (sub) {
-                    const entry = subscriptions.get(sub.id);
-                    entry.timer = setInterval(() => {
-                        if (!closed) emit({ msg_type: 'tick',
-                            tick: { ...makeTick(symbol), id: sub.id }, subscription: sub });
-                    }, 750);
+                if (!SYMBOLS.some(item => item.symbol === symbol)) {
+                    return message({ error: { code: 'InvalidSymbol', message: 'Unknown simulated market symbol.' } }, 'tick');
                 }
-                return message({ tick: makeTick(symbol), ...(sub ? { subscription: sub } : {}) }, 'tick');
+                const tick = market.recentTick(symbol);
+                const sub = request.subscribe ? subscription('ticks', symbol) : null;
+                return message({ tick: { ...tick, ...(sub ? { id: sub.id } : {}) },
+                    ...(sub ? { subscription: sub } : {}) }, 'tick');
             }
             if (kind === 'proposal') {
                 const amount = Number(request.amount);
@@ -420,7 +396,9 @@ export const createAdminTestApi = () => {
                     underlying_symbol: proposal.underlying_symbol || 'R_100',
                     currency: 'USD', buy_price: amount, payout: proposal.payout,
                     barrier: proposal.barrier || proposal.prediction,
-                    entry_tick: simulatePrice(proposal.underlying_symbol),
+                    // The purchased contract starts at the same visible
+                    // simulated quote that both trading interfaces received.
+                    entry_tick: market.recentTick(proposal.underlying_symbol || 'R_100').quote,
                     entry_tick_time: now, purchase_time: now, date_start: now,
                     date_expiry: now + Math.max(1, Number(proposal.duration) || 1),
                     bid_price: 0, sell_price: 0, profit: -amount,
@@ -461,8 +439,7 @@ export const createAdminTestApi = () => {
             });
             if (kind === 'forget') {
                 const sub = subscriptions.get(String(request.forget));
-                if (sub?.timer) clearInterval(sub.timer);
-                subscriptions.delete(String(request.forget));
+                if (sub) forgetSubscription(request.forget);
                 return message({ forget: 1 });
             }
             if (kind === 'forget_all') {
@@ -474,8 +451,7 @@ export const createAdminTestApi = () => {
                 const forgotten = [];
                 for (const [id, sub] of subscriptions) {
                     if (sub.kind !== target) continue;
-                    if (sub.timer) clearInterval(sub.timer);
-                    subscriptions.delete(id);
+                    forgetSubscription(id);
                     forgotten.push(id);
                 }
                 return message({ forget_all: forgotten });

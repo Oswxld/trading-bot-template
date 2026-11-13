@@ -46,7 +46,7 @@ const makePanel = () => {
     const journal = { onError: jest.fn(), journal_filters: [] };
     const root: any = {
         dbot,
-        summary_card: { clear: jest.fn(), clearContractUpdateConfigValues: jest.fn(), onBotContractEvent: jest.fn() },
+        summary_card: { clear: jest.fn(), onBotContractEvent: jest.fn() },
         transactions: { onBotContractEvent: jest.fn() },
         journal,
     };

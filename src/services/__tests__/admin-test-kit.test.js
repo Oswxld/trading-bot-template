@@ -451,6 +451,6 @@ describe('local admin test kit (no broker connection)', () => {
         )).toBe(true);
         expect(getAdminTestBalances()[TEST_REAL_ID]).toBe(500);
         recovered.disconnect();
-    });
+    }, 12000); // Five simulated market ticks legitimately need > Jest's 5s default.
 
 });

@@ -129,7 +129,16 @@ test('local UI: Martingale Quick Strategy loads Blockly, presses Run, and comple
     await page.locator('#quick-strategy').waitFor({ state: 'visible', timeout: 35000 });
     await dismissWelcomeTour(page);
     await page.locator('#quick-strategy').click({ timeout: 12000 });
-    await expect(page.locator('.modal--strategy')).toBeVisible({ timeout: 20000 });
+    await page.waitForTimeout(1000);
+    console.log('Quick Strategy UI diagnostics:', JSON.stringify(await page.evaluate(() => ({
+        hash: location.hash,
+        botBuilderClasses: document.querySelector('.bot-builder')?.className,
+        quickPanel: !!document.querySelector('.strategy-template-picker__panel'),
+        modalClasses: [...document.querySelectorAll('[role="dialog"]')].map(e => e.className),
+        errorText: [...document.querySelectorAll('[role="alert"]')].map(e => e.textContent),
+        textTail: document.body.innerText.slice(-1000),
+    }))));
+    await expect(page.locator('.strategy-template-picker__panel')).toBeVisible({ timeout: 15000 });
     const choose = page.locator('.strategy-template-picker__links')
         .filter({ hasText: /^Martingale$/ }).first();
     await expect(choose).toBeVisible({ timeout: 15000 });

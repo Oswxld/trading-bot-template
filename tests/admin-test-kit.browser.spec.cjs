@@ -164,5 +164,21 @@ test('local UI: ' + strategyName + ' Quick Strategy loads Blockly, presses Run, 
     await expect.poll(async () =>
         (await ledger(page)).some(contract => contract.source === 'bot_builder' && contract.is_sold),
     { timeout: 25000 }).toBe(true);
+
+    // Unlike a storage-only assertion, these are the real Bot Builder report
+    // tabs. The original bug left Transactions blank despite settled trades.
+    // Check one representative strategy's full report presentation, while the
+    // other strategy cases independently confirm their own real purchases.
+    if (strategyName === 'Martingale') {
+        await page.locator('li#db-run-panel-tab__transactions').click();
+        await expect(page.getByTestId('dt_transactions_item').first())
+            .toBeVisible({ timeout: 20000 });
+        await page.locator('li#db-run-panel-tab__journal').click();
+        await expect(page.getByTestId('dt_mock_journal'))
+            .toBeVisible({ timeout: 15000 });
+        await page.locator('li#db-run-panel-tab__summary').click();
+        await expect(page.getByTestId('mock-summary'))
+            .toBeVisible({ timeout: 15000 });
+    }
 });
 }

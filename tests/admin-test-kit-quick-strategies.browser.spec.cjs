@@ -220,8 +220,10 @@ test('6B regression: Martingale with ordinary fresh form values buys on 50% loca
     await run.click();
     await expect.poll(async () => (await ledger(page)).length,
         { timeout: 30000, intervals: [500, 1000] }).toBeGreaterThan(0);
-    await expect.poll(async () => (await ledger(page)).some(c => c.is_sold),
-        { timeout: 20000 }).toBe(true);
+    // A completed first contract is not sufficient: Martingale must
+    // re-enter Before Purchase and purchase new simulated contracts.
+    await expect.poll(async () => (await ledger(page)).filter(c => c.is_sold).length,
+        { timeout: 45000, intervals: [500, 1000] }).toBeGreaterThanOrEqual(3);
     await expect(page.locator('#db-animation__stop-button')).toBeVisible();
     await page.locator('#db-animation__stop-button').click();
     console.log('Fresh Martingale form purchases:', JSON.stringify({

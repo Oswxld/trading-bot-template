@@ -7,9 +7,9 @@ import { TEST_DEMO_ID, TEST_REAL_ID, enterAdminTest, exitAdminTest } from '@/ser
 // These are checks on preset wiring and form fields, not a replacement for
 // launching the Blockly workspace in a real browser.
 const presetCases = [
-    ['MARTINGALE', 'martingale'],
-    ['DALEMBERT', 'dalembert'],
-    ['OSCARS_GRIND', 'oscars_grind'],
+    ['MARTINGALE', 'martingale_max-stake'],
+    ['D_ALEMBERT', 'dalembert_max-stake'],
+    ['OSCARS_GRIND', 'oscars_grind_max-stake'],
 ];
 
 const actualTemplate = file => new DOMParser().parseFromString(

@@ -242,7 +242,9 @@ test('6B regression: Martingale ends naturally after a one-trade profit limit an
     // This used to leave the UI stuck on "Bot running" forever because the
     // interpreter resolved normally without emitting bot.stop.
     await launchQuickStrategy(page, /^Martingale$/, 100, {
-        stake: '2', profit: '1', loss: '1000',
+        // Keep loss at twice the profit limit so the Quick Strategy's
+        // warning dialog does not interrupt the intended one-win test.
+        stake: '2', profit: '1', loss: '2',
     });
     await expect.poll(async () => (await ledger(page)).filter(c => c.is_sold).length,
         { timeout: 25000, intervals: [500, 1000] }).toBe(1);

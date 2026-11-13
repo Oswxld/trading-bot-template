@@ -46,7 +46,7 @@ const makePanel = () => {
     const journal = { onError: jest.fn(), journal_filters: [] };
     const root: any = {
         dbot,
-        summary_card: { clear: jest.fn(), onBotContractEvent: jest.fn() },
+        summary_card: { clear: jest.fn(), clearContractUpdateConfigValues: jest.fn(), onBotContractEvent: jest.fn() },
         transactions: { onBotContractEvent: jest.fn() },
         journal,
     };
@@ -149,6 +149,26 @@ describe('Run Bot button: simulated accounts never trigger OAuth login', () => {
         expect(dbot.initializeInterpreter).toHaveBeenCalledTimes(1);
         expect(dbot.runBot).toHaveBeenCalledTimes(1);
         expect(store.is_dialog_open).toBe(false);
+        store.disposeReactionsFn();
+    });
+
+    it('does not change a running simulated bot to stopped when tick history becomes ready', () => {
+        enterAdminTest();
+        const { store } = makePanel();
+        store.setIsRunning(true);
+        store.onBotReadyEvent();
+        expect(store.is_running).toBe(true);
+        expect(botObserver.unregisterAll).toHaveBeenCalledWith('bot.bot_ready');
+        store.disposeReactionsFn();
+    });
+
+    it('resets simulated Run/Stop state when the interpreter actually terminates', () => {
+        enterAdminTest();
+        const { store } = makePanel();
+        store.setIsRunning(true);
+        store.onBotStopEvent();
+        expect(store.is_running).toBe(false);
+        expect(store.contract_stage).toBe(0);
         store.disposeReactionsFn();
     });
 

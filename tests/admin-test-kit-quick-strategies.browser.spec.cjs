@@ -66,6 +66,11 @@ async function launchQuickStrategy(page, matcher, winProbability = 0, settingsOv
         .filter({ hasText: matcher }).first();
     await expect(select).toBeVisible({ timeout: 15000 });
     await select.click({ timeout: 15000 });
+    // Strategy selection intentionally resets Formik stake to $1. Apply a
+    // requested override through the visible form, as a real user would.
+    if (settingsOverrides.stake && String(settingsOverrides.stake) !== '1') {
+        await page.locator('input[name="stake"]').fill(String(settingsOverrides.stake));
+    }
     const run = page.getByTestId('qs-run-button');
     await expect(run).toBeEnabled({ timeout: 20000 });
     await run.click({ timeout: 15000 });

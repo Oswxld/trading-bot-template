@@ -33,9 +33,9 @@ async function enterLocalMode(page) {
         { timeout: 20000 }).toBe('active');
 }
 
-async function launchQuickStrategy(page, matcher) {
+async function launchQuickStrategy(page, matcher, winProbability = 0) {
     await enterLocalMode(page);
-    await page.evaluate(() => {
+    await page.evaluate(winProbability => {
         localStorage.setItem('qs-fields', JSON.stringify({
             symbol: 'R_100', tradetype: 'callput', type: 'CALL',
             durationtype: 't', duration: '1', stake: '1',
@@ -47,8 +47,8 @@ async function launchQuickStrategy(page, matcher) {
         }));
         // Force losses so stake recovery is deterministic and loss-threshold
         // behavior cannot be mistaken for a healthy Stop-button flow.
-        sessionStorage.setItem('yolo:local-admin-win-probability', '0');
-    });
+        sessionStorage.setItem('yolo:local-admin-win-probability', String(winProbability));
+    }, winProbability);
     await page.reload({ waitUntil: 'domcontentloaded' });
     await expect(page.locator('#quick-strategy')).toBeVisible({ timeout: 35000 });
     await dismissTour(page);
@@ -132,6 +132,53 @@ for (const { name, matcher } of [
             console.log('Step 6B ' + name + ': ' + JSON.stringify({
                 settled: afterStop.length,
                 stakes: afterStop.map(c => c.buy_price),
+                stoppedWithoutNewBuys: true,
+            }));
+        }
+    );
+}
+
+for (const { name, matcher } of [
+    { name: 'Martingale', matcher: /^Martingale$/ },
+    { name: "D'Alembert", matcher: /Alembert/i },
+    { name: "Oscar's Grind", matcher: /Oscar.*Grind/i },
+]) {
+    test('6B: ' + name + ' continues after wins, credits payouts and stops cleanly',
+        async ({ page }) => {
+            page.on('dialog', async dialog => {
+                if (dialog.type() === 'confirm') await dialog.accept();
+                else await dialog.dismiss();
+            });
+            await launchQuickStrategy(page, matcher, 100);
+            await expect.poll(async () => (await ledger(page)).filter(c => c.is_sold).length,
+                { timeout: 45000, intervals: [500, 800, 1000] }).toBeGreaterThanOrEqual(3);
+
+            const firstThree = (await ledger(page)).filter(c => c.is_sold).slice(0, 3);
+            expect(new Set(firstThree.map(c => c.contract_id)).size).toBe(3);
+            for (const contract of firstThree) {
+                expect(contract.status).toBe('won');
+                expect(contract.is_sold).toBe(1);
+                expect(contract.sell_price).toBeGreaterThan(contract.buy_price);
+                expect(contract.profit).toBeGreaterThan(0);
+                expect(contract.balance_after_sell).toEqual(expect.any(Number));
+                expect(contract.transaction_ids.sell).toEqual(expect.any(Number));
+            }
+
+            const stop = page.locator('#db-animation__stop-button');
+            await expect(stop).toBeVisible({ timeout: 12000 });
+            await stop.click({ timeout: 10000 });
+            const countWhenStopped = (await ledger(page)).length;
+            await expect.poll(async () => (await ledger(page)).every(c => c.is_sold),
+                { timeout: 12000 }).toBe(true);
+            await page.waitForTimeout(2500);
+            expect(await ledger(page)).toHaveLength(countWhenStopped);
+            await expect(page.locator('#db-animation__run-button'))
+                .toBeVisible({ timeout: 10000 });
+
+            console.log('Step 6B winning ' + name + ': ' + JSON.stringify({
+                tradeCount: countWhenStopped,
+                firstStakes: firstThree.map(c => c.buy_price),
+                profits: firstThree.map(c => c.profit),
                 stoppedWithoutNewBuys: true,
             }));
         }

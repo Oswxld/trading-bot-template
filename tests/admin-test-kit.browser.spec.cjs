@@ -135,9 +135,16 @@ test('local UI: ' + strategyName + ' Quick Strategy loads Blockly, presses Run, 
     await dismissWelcomeTour(page);
     await page.locator('#quick-strategy').click({ timeout: 12000 });
     await expect(page.locator('.strategy-template-picker__panel')).toBeVisible({ timeout: 15000 });
-    // Entering Bot Builder triggers its *own* first-visit tutorial after the
-    // dashboard tour was already skipped. Dismiss it through the real UI.
-    await dismissWelcomeTour(page);
+    // The Bot Builder tutorial is mounted asynchronously *after* the picker
+    // becomes visible. Wait for that dialog before clicking a strategy;
+    // otherwise Chromium correctly reports that the tour intercepts clicks.
+    // Only use the real Skip control; never remove its DOM or force a click
+    // through a blocking dialog.
+    const botTour = page.locator('.tour-dialog').first();
+    if (await botTour.waitFor({ state: 'visible', timeout: 5000 })
+        .then(() => true, () => false)) {
+        await dismissWelcomeTour(page);
+    }
     // The picker contains both Accumulator and Options variants.
     // Admin Test Kit supports tick options, not the separate ACCU product.
     // Select the Options variant of each strategy.

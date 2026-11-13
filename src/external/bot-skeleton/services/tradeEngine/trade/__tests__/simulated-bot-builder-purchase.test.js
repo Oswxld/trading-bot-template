@@ -100,4 +100,55 @@ describe('real Bot Builder trading engine against local simulated account', () =
             expect(getAdminTestBalances()[accountId]).toBe(initialBalance - 1);
         }, 12000);
     }
+
+    it('runs two consecutive buy-and-settle cycles through the real Bot Builder trading engine', async () => {
+        const api = createAdminTestApi();
+        api_base.api = api;
+        api_base.account_info = { loginid: TEST_DEMO_ID, currency: 'USD' };
+        api_base.token = TEST_DEMO_ID;
+        await opened(api);
+        const scope = createScope();
+        const engine = new TradeEngine(scope);
+        engine.init(TEST_DEMO_ID, {
+            symbol: 'R_100',
+            contractTypes: ['DIGITDIFF', 'DIGITMATCH'],
+            shouldRestartOnError: false,
+            timeMachineEnabled: false,
+        });
+        const bought = [];
+        const sellEvents = [];
+        const observer = api.onMessage().subscribe(({ data }) => {
+            if (data.msg_type === 'proposal_open_contract' && data.proposal_open_contract?.is_sold) {
+                sellEvents.push(data.proposal_open_contract);
+            }
+        });
+        try {
+            for (let i = 0; i < 2; i++) {
+                engine.start({
+                    amount: 1,
+                    basis: 'stake',
+                    currency: 'USD',
+                    contractTypes: ['DIGITDIFF', 'DIGITMATCH'],
+                    duration: 1, duration_unit: 't', prediction: 5,
+                    limit_order: {},
+                });
+                expect(await Promise.race([engine.watch('before'), timeout(5000)])).toBe(true);
+                await Promise.race([engine.purchase('DIGITDIFF'), timeout(5000)]);
+                const contractId = engine.contractId;
+                expect(contractId).toEqual(expect.any(Number));
+                bought.push(contractId);
+                const started = Date.now();
+                while (sellEvents.filter(event => event.contract_id === contractId).length === 0 &&
+                    Date.now() - started < 4000) {
+                    await new Promise(resolve => setTimeout(resolve, 50));
+                }
+                expect(sellEvents.some(event => event.contract_id === contractId)).toBe(true);
+                expect(engine.store.getState().scope).toBe('STOP');
+            }
+            expect(new Set(bought).size).toBe(2);
+            expect(getAdminTestBalances()[TEST_DEMO_ID]).toBe(9998);
+        } finally {
+            observer.unsubscribe();
+        }
+    }, 14000);
 });

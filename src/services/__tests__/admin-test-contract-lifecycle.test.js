@@ -1,3 +1,4 @@
+import { requestBulkApi } from '@/pages/bulk-trader/bulk-api-request';
 import {
     enterAdminTest, exitAdminTest,
     createAdminTestApi, getAdminTestBalances, setAdminTestWinProbability,
@@ -153,6 +154,37 @@ describe('Admin Test Kit tick-driven contract lifecycle', () => {
             api.disconnect();
         }
     }, 7500);
+
+    it('completes two correlated Bulk Trader proposal/buy operations and settles both through the shared API', async () => {
+        const api = createAdminTestApi();
+        await opened(api);
+        setAdminTestWinProbability(0);
+        try {
+            const sendBulk = (payload, reqId) => requestBulkApi({
+                api, payload, reqId, timeout: 3000,
+                canSend: () => true,
+            });
+            const offers = await Promise.all([12300, 12301].map(reqId => sendBulk({
+                proposal: 1, amount: 1, basis: 'stake', currency: 'USD',
+                underlying_symbol: 'R_100', contract_type: 'DIGITDIFF',
+                duration: 1, duration_unit: 't', barrier: '5', subscribe: 1,
+            }, reqId)));
+            const purchases = await Promise.all(offers.map((offer, i) =>
+                sendBulk({ buy: offer.proposal.id, price: offer.proposal.ask_price }, 12302 + i)));
+            expect(new Set(purchases.map(p => p.buy.contract_id)).size).toBe(2);
+            const first = awaitSettlement(api, purchases[0].buy.contract_id);
+            const second = awaitSettlement(api, purchases[1].buy.contract_id);
+            const [closedFirst, closedSecond] = await Promise.all([first, second]);
+            expect(closedFirst.status).toBe('lost');
+            expect(closedSecond.status).toBe('lost');
+            expect(getAdminTestBalances()[TEST_DEMO_ID]).toBe(9998);
+            // The settled records are also queryable by contract ID.
+            expect((await status(api, purchases[0].buy.contract_id)).is_sold).toBe(1);
+            expect((await status(api, purchases[1].buy.contract_id)).is_sold).toBe(1);
+        } finally {
+            api.disconnect();
+        }
+    }, 8000);
 
     it('validates market, duration and stake before buying and never spends on a rejected request', async () => {
         const api = createAdminTestApi();

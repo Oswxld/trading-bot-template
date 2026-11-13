@@ -160,7 +160,7 @@ describe('Admin Test Kit tick-driven contract lifecycle', () => {
         try {
             const before = getAdminTestBalances()[TEST_DEMO_ID];
             const invalidDuration = await proposalFor(api, { duration: 0 });
-            expect(invalidDuration.error).toBeUndefined(); // omitted/zero duration currently defaults to one tick
+            expect(invalidDuration.error.code).toBe('InvalidContractProposal');
             const invalidSymbol = await proposalFor(api, { underlying_symbol: 'BAD_INDEX' });
             expect(invalidSymbol.error.code).toBe('InvalidContractProposal');
             const badUnit = await proposalFor(api, { duration_unit: 's' });

@@ -57,7 +57,7 @@ describe('Admin Test Kit navigation owns only the Blockly interpreter', () => {
             const { store } = makeStore();
             store.onUnmount();
             expect(sim.connection.readyState).toBe(1);
-            await new Promise(resolve => setTimeout(resolve, 950));
+            await new Promise(resolve => setTimeout(resolve, 1250));
             const status = await sim.send({
                 proposal_open_contract: 1, contract_id: purchase.buy.contract_id,
             });

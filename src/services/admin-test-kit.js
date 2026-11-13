@@ -430,7 +430,7 @@ export const createAdminTestApi = () => {
                 const amount = Number(request.amount);
                 const type = request.contract_type;
                 const symbol = request.underlying_symbol || 'R_100';
-                const duration = Number(request.duration || 1);
+                const duration = Number(request.duration ?? 1);
                 const durationUnit = request.duration_unit || 't';
                 if (!CONTRACT_TYPES.includes(type) || !SYMBOLS.some(s => s.symbol === symbol) ||
                     !Number.isFinite(amount) || amount <= 0 || !Number.isInteger(duration) ||
@@ -466,16 +466,22 @@ export const createAdminTestApi = () => {
                         barrier: direct.barrier ?? direct.selected_tick ?? direct.prediction,
                     });
                 const amount = Number(proposal?.stake ?? proposal?.amount);
-                const duration = Number(proposal?.duration || 1);
+                const duration = Number(proposal?.duration ?? 1);
                 const symbol = proposal?.underlying_symbol || 'R_100';
+                const offeredPrice = Number(request.price);
                 if (!proposal || !CONTRACT_TYPES.includes(proposal.contract_type) ||
                     !SYMBOLS.some(s => s.symbol === symbol) ||
                     !Number.isFinite(amount) || amount <= 0 ||
                     !Number.isInteger(duration) || duration < 1 || duration > 10 ||
                     (proposal.duration_unit || 't') !== 't' ||
-                    Number(request.price) + 1e-6 < amount || readBalances()[accountId] < amount) {
+                    !Number.isFinite(offeredPrice) || offeredPrice + 1e-6 < amount) {
                     return message({ error: {
-                        code: 'InvalidContractProposal', message: 'Simulated balance, contract or proposal is invalid.',
+                        code: 'InvalidContractProposal', message: 'Simulated contract, duration or purchase price is invalid.',
+                    } }, 'buy');
+                }
+                if (readBalances()[accountId] < amount) {
+                    return message({ error: {
+                        code: 'InsufficientBalance', message: 'Insufficient funds in the simulated account.',
                     } }, 'buy');
                 }
                 if (typeof request.buy === 'string') proposals.delete(request.buy);

@@ -91,7 +91,7 @@ describe('real Bot Builder trading engine against local simulated account', () =
             await Promise.race([engine.purchase('DIGITDIFF'), timeout(5000)]);
             expect(engine.contractId).toEqual(expect.any(Number));
             expect(getAdminTestBalances()[accountId]).toBe(initialBalance - 1);
-            await new Promise(resolve => setTimeout(resolve, 950));
+            await new Promise(resolve => setTimeout(resolve, 1250));
             expect(engine.data.contract).toMatchObject({
                 contract_id: engine.data.contract.contract_id,
                 status: 'lost',

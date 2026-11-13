@@ -2,7 +2,7 @@ name: Bulk Trader verification
 
 on:
   push:
-    branches: [develop, 'clients/kevin-forex-trader/develop', 'fix/admin-test-kit-step2-session-state', 'fix/admin-test-kit-step3-market-feed', 'fix/admin-test-kit-step4-contract-lifecycle', 'fix/admin-test-kit-step5-reporting-ledger']
+    branches: [develop, 'clients/kevin-forex-trader/develop', 'fix/admin-test-kit-step2-session-state', 'fix/admin-test-kit-step3-market-feed', 'fix/admin-test-kit-step4-contract-lifecycle', 'fix/admin-test-kit-step5-reporting-ledger', 'fix/admin-test-kit-step6-integration']
     paths:
       - 'src/pages/bulk-trader/**'
       - 'src/components/layout/app-logo/**'
@@ -39,6 +39,7 @@ on:
       - 'src/external/bot-skeleton/services/api/__tests__/**'
       - 'src/external/bot-skeleton/services/api/ticks_service.js'
       - 'src/external/bot-skeleton/services/tradeEngine/trade/__tests__/**'
+      - 'src/external/bot-skeleton/services/tradeEngine/utils/__tests__/**'
       - 'src/stores/__tests__/run-panel-admin-test.spec.ts'
       - 'package.json'
       - 'package-lock.json'
@@ -88,6 +89,7 @@ jobs:
             src/external/bot-skeleton/services/api/__tests__/ticks-simulated-real.test.js \
             src/external/bot-skeleton/services/api/__tests__/api-base-admin-reconnect.test.ts \
             src/external/bot-skeleton/services/tradeEngine/trade/__tests__/simulated-bot-builder-purchase.test.js \
+            src/external/bot-skeleton/services/tradeEngine/utils/__tests__/simulated-interpreter-integration.test.js \
             src/hooks/__tests__/useAccountSwitching-admin-test.spec.tsx \
             src/components/admin-test-kit/__tests__/admin-test-kit-trigger.test.tsx \
             src/pages/bulk-trader/__tests__/bulk-trader-buttons.test.jsx \

@@ -129,15 +129,6 @@ test('local UI: Martingale Quick Strategy loads Blockly, presses Run, and comple
     await page.locator('#quick-strategy').waitFor({ state: 'visible', timeout: 35000 });
     await dismissWelcomeTour(page);
     await page.locator('#quick-strategy').click({ timeout: 12000 });
-    await page.waitForTimeout(1000);
-    console.log('Quick Strategy UI diagnostics:', JSON.stringify(await page.evaluate(() => ({
-        hash: location.hash,
-        botBuilderClasses: document.querySelector('.bot-builder')?.className,
-        quickPanel: !!document.querySelector('.strategy-template-picker__panel'),
-        modalClasses: [...document.querySelectorAll('[role="dialog"]')].map(e => e.className),
-        errorText: [...document.querySelectorAll('[role="alert"]')].map(e => e.textContent),
-        textTail: document.body.innerText.slice(-1000),
-    }))));
     await expect(page.locator('.strategy-template-picker__panel')).toBeVisible({ timeout: 15000 });
     // Entering Bot Builder triggers its *own* first-visit tutorial after the
     // dashboard tour was already skipped. Dismiss it through the real UI.
@@ -154,25 +145,7 @@ test('local UI: Martingale Quick Strategy loads Blockly, presses Run, and comple
     const run = page.getByTestId('qs-run-button');
     await expect(run).toBeVisible({ timeout: 20000 });
     await expect(run).toBeEnabled({ timeout: 20000 });
-    page.on('console', message => {
-        if (/error|WARN|simulat|purchase|proposal|trade|bot/i.test(message.text())) {
-            console.log('APP CONSOLE', message.type(), message.text().slice(0, 500));
-        }
-    });
-    page.on('pageerror', error => console.log('APP PAGE ERROR', error.message, error.stack));
     await run.click({ timeout: 15000 });
-    await page.waitForTimeout(4000);
-    console.log('Quick Strategy AFTER RUN:', JSON.stringify(await page.evaluate(() => ({
-        account: localStorage.getItem('active_loginid'),
-        contractLedger: JSON.parse(sessionStorage.getItem('yolo:local-admin-contracts:' +
-            localStorage.getItem('active_loginid')) || '[]'),
-        runStopButton: !!document.querySelector('#db-animation__stop-button'),
-        runButton: !!document.querySelector('#db-animation__run-button'),
-        builder: document.querySelector('.bot-builder')?.className,
-        errors: [...document.querySelectorAll('[role="alert"]')].map(e => e.textContent),
-        textTail: document.body.innerText.slice(-1250),
-        blockTypes: window.Blockly?.derivWorkspace?.getTopBlocks?.().map(b => b.type),
-    }))));
     await expect.poll(async () =>
         (await ledger(page)).filter(contract => contract.source === 'bot_builder').length,
     { timeout: 30000 }).toBeGreaterThan(0);

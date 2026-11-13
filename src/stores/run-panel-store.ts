@@ -563,6 +563,7 @@ export default class RunPanelStore {
     };
 
     onBotStopEvent = () => {
+        const normal_simulated_stop = isAdminTestActive() && !this.error_type;
         const { summary_card } = this.root_store;
         const { ui } = this.core;
         const indicateBotStopped = () => {
@@ -600,6 +601,12 @@ export default class RunPanelStore {
             this.unregisterBotListeners();
         }
 
+        // A normal interpreter termination in the local simulator must also
+        // reset the Run/Stop state. The existing live Deriv behavior is intact.
+        if (normal_simulated_stop) {
+            this.setIsRunning(false);
+            if (!this.has_open_contract) indicateBotStopped();
+        }
         this.setHasOpenContract(false);
 
         summary_card.clearContractUpdateConfigValues();
@@ -610,7 +617,10 @@ export default class RunPanelStore {
     };
 
     onBotReadyEvent = () => {
-        this.setIsRunning(false);
+        // Tick-monitor readiness is NOT a stop signal. During an Admin Test
+        // Kit run, watchTicks may complete after the Run button was pressed.
+        // Keep live Deriv's original readiness handling unchanged.
+        if (!isAdminTestActive() || !this.is_running) this.setIsRunning(false);
         observer.unregisterAll('bot.bot_ready');
     };
 

@@ -152,6 +152,26 @@ describe('Run Bot button: simulated accounts never trigger OAuth login', () => {
         store.disposeReactionsFn();
     });
 
+    it('does not change a running simulated bot to stopped when tick history becomes ready', () => {
+        enterAdminTest();
+        const { store } = makePanel();
+        store.setIsRunning(true);
+        store.onBotReadyEvent();
+        expect(store.is_running).toBe(true);
+        expect(botObserver.unregisterAll).toHaveBeenCalledWith('bot.bot_ready');
+        store.disposeReactionsFn();
+    });
+
+    it('resets simulated Run/Stop state when the interpreter actually terminates', () => {
+        enterAdminTest();
+        const { store } = makePanel();
+        store.setIsRunning(true);
+        store.onBotStopEvent();
+        expect(store.is_running).toBe(false);
+        expect(store.contract_stage).toBe(0);
+        store.disposeReactionsFn();
+    });
+
     it('preserves the original login dialog for unauthenticated live visitors', async () => {
         const { store, dbot } = makePanel();
         await store.onRunButtonClick();

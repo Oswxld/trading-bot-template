@@ -1,3 +1,4 @@
+import { isAdminTestActive } from '@/services/admin-test-kit';
 import { generateDerivApiInstance } from './appId';
 
 class ChartAPI {
@@ -9,6 +10,14 @@ class ChartAPI {
     }
 
     init = async (force_create_connection = false) => {
+        if (isAdminTestActive()) {
+            // ChartAPI and APIBase share the same local-only mock transport.
+            // A chart refresh must never disconnect the trading session.
+            // APIBase alone owns simulator reconnections.
+            this.api = await generateDerivApiInstance();
+            this.getTime();
+            return;
+        }
         if (!this.api || force_create_connection) {
             if (this.api?.connection) {
                 this.api.disconnect();
@@ -29,12 +38,15 @@ class ChartAPI {
     getTime() {
         if (!this.time_interval) {
             this.time_interval = setInterval(() => {
+                // A temporarily closed simulator is recovered by APIBase.
+                if (isAdminTestActive() && this.api?.connection?.readyState !== 1) return;
                 this.api.send({ time: 1 });
             }, 30000);
         }
     }
 
     reconnectIfNotConnected = () => {
+        if (isAdminTestActive()) return; // APIBase is the sole simulator owner.
         if (this.api?.connection?.readyState && this.api?.connection?.readyState > 1) {
             this.init(true);
         }

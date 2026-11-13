@@ -388,12 +388,23 @@ class DBot {
     /**
      * Immediately instructs the interpreter to terminate the WS connection and bot.
      */
-    async terminateBot() {
+    async terminateBot(restartTicks = true) {
         if (this.interpreter) {
-            await this.interpreter.terminateSession();
-            this.interpreter = null;
-            this.interpreter = Interpreter();
-            await this.interpreter.bot.tradeEngine.watchTicks(this.symbol);
+            const interpreter = this.interpreter;
+            if (!restartTicks) {
+                // Admin Test Kit view unmount: release the old interpreter before
+                // awaiting cleanup so a rapidly remounted workspace cannot be
+                // overwritten by the previous screen's async termination.
+                this.interpreter = null;
+                this.is_bot_running = false;
+                api_base.setIsRunning(false);
+            }
+            await interpreter.terminateSession();
+            if (restartTicks) {
+                this.interpreter = null;
+                this.interpreter = Interpreter();
+                await this.interpreter.bot.tradeEngine.watchTicks(this.symbol);
+            }
         }
     }
 

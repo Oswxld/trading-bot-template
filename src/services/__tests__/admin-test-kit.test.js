@@ -183,7 +183,7 @@ describe('local admin test kit (no broker connection)', () => {
         expect(buy.buy.contract_id).toBeGreaterThan(0);
         expect(messages.map(x => x.req_id)).toEqual(expect.arrayContaining([2, 3, 4]));
         expect(getAdminTestBalances()[TEST_DEMO_ID]).toBe(9999.5);
-        await delay(1000);
+        await delay(1250);
         expect(messages.find(x =>
             x.msg_type === 'proposal_open_contract' &&
             x.proposal_open_contract?.contract_id === buy.buy.contract_id &&
@@ -263,7 +263,7 @@ describe('local admin test kit (no broker connection)', () => {
             const purchased = await api.send({ buy: proposal.proposal.id, price: 1 });
             expect(purchased.buy.contract_id).toBeGreaterThan(0);
         }
-        await delay(1000);
+        await delay(1250);
         expect(settlementMessages).toHaveLength(types.length);
         for (const contract of settlementMessages) {
             expect(contract.status).toBe('won');
@@ -307,7 +307,7 @@ describe('local admin test kit (no broker connection)', () => {
             });
             await api.send({ buy: proposal.proposal.id, price: 1 });
         }
-        await delay(1000);
+        await delay(1250);
         expect(settlements).toHaveLength(4);
         expect(settlements.every(contract => contract.status === 'lost' && contract.profit < 0)).toBe(true);
         expect(getAdminTestBalances()[TEST_REAL_ID]).toBe(496);
@@ -333,7 +333,7 @@ describe('local admin test kit (no broker connection)', () => {
         });
         await api.send({ buy: proposal.proposal.id, price: 1 });
         setAdminTestWinProbability(0);
-        await delay(1000);
+        await delay(1250);
         expect(settlements).toHaveLength(1);
         expect(settlements[0].status).toBe('lost');
         expect(getAdminTestBalances()[TEST_DEMO_ID]).toBe(9999);
@@ -361,11 +361,11 @@ describe('local admin test kit (no broker connection)', () => {
         const random = jest.spyOn(Math, 'random').mockReturnValue(0.49);
         try {
             await makeTrade();
-            await delay(1000);
+            await delay(1250);
             expect(settlements[0].status).toBe('won');
             random.mockReturnValue(0.5);
             await makeTrade();
-            await delay(1000);
+            await delay(1250);
             expect(settlements[1].status).toBe('lost');
         } finally {
             random.mockRestore();

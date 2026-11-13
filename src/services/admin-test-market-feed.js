@@ -32,8 +32,9 @@ const tickAt = (symbol, epoch) => ({
 
 const normalizedGranularity = value => Math.max(60, Math.floor(Number(value) || 60));
 
-export const createAdminTestMarketFeed = ({ emit, subscriptions }) => {
+export const createAdminTestMarketFeed = ({ emit, subscriptions, onTick = () => {} }) => {
     const markets = new Map();
+    const retainedSymbols = new Map();
     let closed = false;
 
     const stateFor = symbol => {
@@ -140,12 +141,15 @@ export const createAdminTestMarketFeed = ({ emit, subscriptions }) => {
                 });
             }
         }
+        // Settlement is driven by the SAME tick that was just delivered to
+        // each market subscriber, never by a wall-clock timeout.
+        onTick({ ...tick });
     };
 
     const subscriptionChanged = symbol => {
         if (!symbol || closed) return;
         const state = stateFor(symbol);
-        if (hasSubscribers(symbol)) {
+        if (hasSubscribers(symbol) || (retainedSymbols.get(symbol) || 0) > 0) {
             if (!state.timer) state.timer = setInterval(() => publishTick(symbol), TICK_INTERVAL_MS);
         } else if (state.timer) {
             clearInterval(state.timer);
@@ -153,6 +157,17 @@ export const createAdminTestMarketFeed = ({ emit, subscriptions }) => {
         }
     };
 
+    const retainSymbol = symbol => {
+        if (closed) return;
+        retainedSymbols.set(symbol, (retainedSymbols.get(symbol) || 0) + 1);
+        subscriptionChanged(symbol);
+    };
+    const releaseSymbol = symbol => {
+        const count = retainedSymbols.get(symbol) || 0;
+        if (count <= 1) retainedSymbols.delete(symbol);
+        else retainedSymbols.set(symbol, count - 1);
+        subscriptionChanged(symbol);
+    };
     const close = () => {
         closed = true;
         markets.forEach(state => {
@@ -160,7 +175,8 @@ export const createAdminTestMarketFeed = ({ emit, subscriptions }) => {
             state.timer = null;
         });
         markets.clear();
+        retainedSymbols.clear();
     };
 
-    return { recentTick, historyFor, candlesFor, subscriptionChanged, close };
+    return { recentTick, historyFor, candlesFor, subscriptionChanged, retainSymbol, releaseSymbol, close };
 };

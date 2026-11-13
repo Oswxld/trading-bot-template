@@ -112,13 +112,6 @@ for (const [strategyName, matcher] of [
     ["Oscar's Grind", /Oscar.*Grind/i],
 ]) {
 test('local UI: ' + strategyName + ' Quick Strategy loads Blockly, presses Run, and completes a paper trade', async ({ page }) => {
-    const reactErrors = [];
-    page.on('pageerror', error => {
-        reactErrors.push({ message: error.message, stack: error.stack?.slice(0, 1000) });
-    });
-    page.on('console', event => {
-        if (event.type() === 'error') reactErrors.push({ console: event.text().slice(0, 1000) });
-    });
     page.on('dialog', async dialog => {
         if (dialog.type() === 'confirm') await dialog.accept();
         else await dialog.dismiss();
@@ -177,41 +170,32 @@ test('local UI: ' + strategyName + ' Quick Strategy loads Blockly, presses Run, 
     // Check one representative strategy's full report presentation, while the
     // other strategy cases independently confirm their own real purchases.
     if (strategyName === 'Martingale') {
-        console.log('Admin report prior to tab click:', JSON.stringify(await page.evaluate(() => ({
-            page: location.href,
-            tabs: [...document.querySelectorAll('li[id^="db-run-panel-tab__"]')].map(e => ({ text: e.textContent, active: e.classList.contains('dc-tabs__active') })),
-            errors: document.querySelector('#root')?.textContent?.slice(-500),
-        }))));
         await page.locator('li#db-run-panel-tab__transactions').click();
-        await page.waitForTimeout(1000);
-        console.log('Admin report browser errors:', JSON.stringify(reactErrors.slice(-12)));
-        console.log('Admin Test report DOM:', JSON.stringify(await page.evaluate(() => ({
-            location: window.location.href,
-            tabs: [...document.querySelectorAll('li[id^="db-run-panel-tab__"]')].map(el => ({
-                id: el.id, selected: el.classList.contains('dc-tabs__active'), text: el.textContent
-            })),
-            reportContainerCount: document.querySelectorAll('.run-panel__container').length,
-            reportContent: [...document.querySelectorAll('.dc-tabs__content')].map(el =>
-                el.textContent?.slice(0,350)
-            ),
-            lists: [...document.querySelectorAll('[data-testid="dt_data_list"], [data-testid="admin-simulated-transactions"], .transactions-empty-box')].map(el => ({
-                className: el.className,
-                count: el.getAttribute('data-row-count'),
-                length: el.children.length,
-                text: el.textContent?.slice(0,320)
-            })),
-            active: localStorage.getItem('active_loginid'),
-            ledger: JSON.parse(sessionStorage.getItem('yolo:local-admin-contracts:' +
-                localStorage.getItem('active_loginid')) || '[]').map(x => ({ type: x.source, id: x.contract_id })),
-            panel: document.querySelector('.transactions__scrollbar')?.innerHTML.slice(0,1800),
-        }))));
-        await expect(page.getByTestId('dt_transactions_item').first())
-            .toBeVisible({ timeout: 20000 });
+        const tradeRow = page.getByTestId('dt_transactions_item').first();
+        await expect(tradeRow).toBeVisible({ timeout: 20000 });
+        await expect(tradeRow).toContainText('USD');
+
         await page.locator('li#db-run-panel-tab__journal').click();
         await expect(page.getByTestId('dt_mock_journal'))
             .toBeVisible({ timeout: 15000 });
+        // A nonempty container alone is not enough: verify an actual journal
+        // entry rendered after the purchase and settlement.
+        await expect(page.locator('.journal__item').first())
+            .toBeVisible({ timeout: 15000 });
+
         await page.locator('li#db-run-panel-tab__summary').click();
         await expect(page.getByTestId('mock-summary'))
+            .toBeVisible({ timeout: 15000 });
+        const numberOfRuns = page.locator('.run-panel__tile')
+            .filter({ hasText: 'No. of runs' })
+            .locator('.run-panel__tile-content');
+        await expect(numberOfRuns).toBeVisible({ timeout: 15000 });
+        await expect.poll(async () => Number(await numberOfRuns.textContent()),
+            { timeout: 12000 }).toBeGreaterThan(0);
+
+        // Returning to Transactions must not clear the already confirmed row.
+        await page.locator('li#db-run-panel-tab__transactions').click();
+        await expect(page.getByTestId('dt_transactions_item').first())
             .toBeVisible({ timeout: 15000 });
     }
 });

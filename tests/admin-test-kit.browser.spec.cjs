@@ -112,6 +112,13 @@ for (const [strategyName, matcher] of [
     ["Oscar's Grind", /Oscar.*Grind/i],
 ]) {
 test('local UI: ' + strategyName + ' Quick Strategy loads Blockly, presses Run, and completes a paper trade', async ({ page }) => {
+    const reactErrors = [];
+    page.on('pageerror', error => {
+        reactErrors.push({ message: error.message, stack: error.stack?.slice(0, 1000) });
+    });
+    page.on('console', event => {
+        if (event.type() === 'error') reactErrors.push({ console: event.text().slice(0, 1000) });
+    });
     page.on('dialog', async dialog => {
         if (dialog.type() === 'confirm') await dialog.accept();
         else await dialog.dismiss();
@@ -170,8 +177,14 @@ test('local UI: ' + strategyName + ' Quick Strategy loads Blockly, presses Run, 
     // Check one representative strategy's full report presentation, while the
     // other strategy cases independently confirm their own real purchases.
     if (strategyName === 'Martingale') {
+        console.log('Admin report prior to tab click:', JSON.stringify(await page.evaluate(() => ({
+            page: location.href,
+            tabs: [...document.querySelectorAll('li[id^="db-run-panel-tab__"]')].map(e => ({ text: e.textContent, active: e.classList.contains('dc-tabs__active') })),
+            errors: document.querySelector('#root')?.textContent?.slice(-500),
+        }))));
         await page.locator('li#db-run-panel-tab__transactions').click();
         await page.waitForTimeout(1000);
+        console.log('Admin report browser errors:', JSON.stringify(reactErrors.slice(-12)));
         console.log('Admin Test report DOM:', JSON.stringify(await page.evaluate(() => ({
             location: window.location.href,
             tabs: [...document.querySelectorAll('li[id^="db-run-panel-tab__"]')].map(el => ({

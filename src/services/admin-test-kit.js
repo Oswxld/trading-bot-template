@@ -312,7 +312,7 @@ export const createAdminTestApi = () => {
     const settle = (contract, last, early = false) => {
         if (closed || contract.is_sold) return;
         const won = Math.random() * 100 < getAdminTestWinProbability();
-        last.quote = simulatedExitQuote(contract, last.quote, won);
+        const simulatedSettlementQuote = simulatedExitQuote(contract, last.quote, won);
         contract.status = won ? 'won' : 'lost';
         contract.is_sold = 1;
         contract.is_expired = early ? 0 : 1;
@@ -322,8 +322,8 @@ export const createAdminTestApi = () => {
         // A forced win percentage is a CONTRACT-LEVEL testing override.
         // Simultaneous contradictory contracts cannot all match one shared
         // public market quote; the displayed contract exit is synthetic.
-        contract.exit_tick = last.quote;
-        contract.exit_spot = last.quote;
+        contract.exit_tick = simulatedSettlementQuote;
+        contract.exit_spot = simulatedSettlementQuote;
         contract.exit_tick_time = last.epoch;
         contract.sell_time = last.epoch;
         contract.date_expiry = last.epoch;

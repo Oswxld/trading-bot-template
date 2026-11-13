@@ -177,6 +177,13 @@ describe('Admin Test Kit tick-driven contract lifecycle', () => {
             const [closedFirst, closedSecond] = await Promise.all([first, second]);
             expect(closedFirst.status).toBe('lost');
             expect(closedSecond.status).toBe('lost');
+            // The win-probability override may change contract-specific exit
+            // prices, but it must never rewrite the shared market tick used by
+            // a second contract expiring on the same market update.
+            const latest = await api.send({ ticks_history: 'R_100', count: 1, style: 'ticks' });
+            expect(closedFirst.current_spot).toBe(latest.history.prices[0]);
+            expect(closedSecond.current_spot).toBe(latest.history.prices[0]);
+            expect(closedFirst.current_spot_time).toBe(closedSecond.current_spot_time);
             expect(getAdminTestBalances()[TEST_DEMO_ID]).toBe(9998);
             // The settled records are also queryable by contract ID.
             expect((await status(api, purchases[0].buy.contract_id)).is_sold).toBe(1);

@@ -29,6 +29,7 @@ on:
       - 'src/external/bot-skeleton/services/api/appId.js'
       - 'src/external/bot-skeleton/services/api/api-base.ts'
       - 'src/stores/run-panel-store.ts'
+      - 'src/stores/transactions-store.ts'
       - 'src/stores/app-store.ts'
       - 'src/stores/__tests__/app-store-admin-test.spec.ts'
       - 'src/external/bot-skeleton/scratch/dbot.js'

@@ -106,7 +106,12 @@ test('local UI: enter Admin Test Kit, trade with Bulk Trader, switch account and
 });
 
 
-test('local UI: Martingale Quick Strategy loads Blockly, presses Run, and completes a paper trade', async ({ page }) => {
+for (const [strategyName, matcher] of [
+    ['Martingale', /^Martingale$/],
+    ["D'Alembert", /Alembert/i],
+    ["Oscar's Grind", /Oscar.*Grind/i],
+]) {
+test('local UI: ' + strategyName + ' Quick Strategy loads Blockly, presses Run, and completes a paper trade', async ({ page }) => {
     page.on('dialog', async dialog => {
         if (dialog.type() === 'confirm') await dialog.accept();
         else await dialog.dismiss();
@@ -133,13 +138,13 @@ test('local UI: Martingale Quick Strategy loads Blockly, presses Run, and comple
     // Entering Bot Builder triggers its *own* first-visit tutorial after the
     // dashboard tour was already skipped. Dismiss it through the real UI.
     await dismissWelcomeTour(page);
-    // The picker contains TWO Martingale presets: Accumulators and Options.
-    // Admin Test Kit supports tick options, not the separate ACCU contract.
-    // Select Martingale specifically from the Options section.
+    // The picker contains both Accumulator and Options variants.
+    // Admin Test Kit supports tick options, not the separate ACCU product.
+    // Select the Options variant of each strategy.
     const optionsSection = page.locator('.strategy-template-picker__strategy')
         .filter({ has: page.locator('.strategy-template-picker__title').getByText('Options', { exact: true }) });
     const choose = optionsSection.locator('.strategy-template-picker__links')
-        .filter({ hasText: /^Martingale$/ }).first();
+        .filter({ hasText: matcher }).first();
     await expect(choose).toBeVisible({ timeout: 15000 });
     await choose.click({ timeout: 15000 });
     const run = page.getByTestId('qs-run-button');
@@ -153,3 +158,4 @@ test('local UI: Martingale Quick Strategy loads Blockly, presses Run, and comple
         (await ledger(page)).some(contract => contract.source === 'bot_builder' && contract.is_sold),
     { timeout: 25000 }).toBe(true);
 });
+}

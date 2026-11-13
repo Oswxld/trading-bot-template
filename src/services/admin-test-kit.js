@@ -15,6 +15,7 @@ const STATE_KEY = 'yolo:local-admin-balances';
 const WIN_PROBABILITY_KEY = 'yolo:local-admin-win-probability';
 const CONTRACT_LEDGER_KEY = 'yolo:local-admin-contracts';
 const CONTRACT_SERIAL_KEY = 'yolo:local-admin-contract-serial';
+const REPORT_CLEAR_KEY = 'yolo:local-admin-report-clear';
 const DEFAULT_WIN_PROBABILITY = 50;
 
 export const isAdminTestAvailable = () =>
@@ -66,6 +67,67 @@ const readContractLedger = accountId => {
         ) : [];
     } catch { return []; }
 };
+/** Read only local paper contracts. Source tagging keeps Bot Builder's report
+ * independent of Bulk Trader while both still share the account balance.
+ * The sinceReportReset flag applies to Bot Builder's clear-statistics action,
+ * not the broker-style statement or the underlying paper ledger.
+ */
+export const getAdminTestContracts = (accountId, { source = null, sinceReportReset = false } = {}) => {
+    if (!isAdminTestActive() || !(accountId in DEFAULT_BALANCES)) return [];
+    const clearThrough = sinceReportReset ?
+        (Number(sessionStorage.getItem(`${REPORT_CLEAR_KEY}:${accountId}`)) || 0) : 0;
+    return readContractLedger(accountId)
+        .filter(contract =>
+            (source === null || contract.source === source) &&
+            Number(contract.contract_id) > clearThrough
+        )
+        .map(contract => ({
+            ...contract,
+            transaction_ids: { ...contract.transaction_ids },
+        }));
+};
+
+export const markAdminTestBotReportCleared = accountId => {
+    if (!isAdminTestActive() || !(accountId in DEFAULT_BALANCES)) return false;
+    const maximum = getAdminTestContracts(accountId, { source: 'bot_builder' })
+        .reduce((max, contract) => Math.max(max, Number(contract.contract_id)), 0);
+    const previous = Number(sessionStorage.getItem(`${REPORT_CLEAR_KEY}:${accountId}`)) || 0;
+    sessionStorage.setItem(`${REPORT_CLEAR_KEY}:${accountId}`, String(Math.max(maximum, previous)));
+    return true;
+};
+
+const simulatedStatementRows = accountId => getAdminTestContracts(accountId).flatMap(contract => {
+    const buy = {
+        action_type: 'buy',
+        amount: -Number(contract.buy_price),
+        balance_after: contract.balance_after_buy,
+        contract_id: contract.contract_id,
+        currency: contract.currency || 'USD',
+        longcode: 'LOCAL simulated contract only',
+        payout: Number(contract.payout),
+        purchase_price: Number(contract.buy_price),
+        symbol: contract.underlying_symbol,
+        transaction_id: contract.transaction_ids.buy,
+        transaction_time: contract.purchase_time,
+    };
+    if (!contract.is_sold) return [buy];
+    return [buy, {
+        action_type: 'sell',
+        amount: Number(contract.sell_price || 0),
+        balance_after: contract.balance_after_sell,
+        contract_id: contract.contract_id,
+        currency: contract.currency || 'USD',
+        payout: Number(contract.sell_price || 0),
+        profit: Number(contract.profit),
+        symbol: contract.underlying_symbol,
+        transaction_id: contract.transaction_ids.sell,
+        transaction_time: contract.sell_time,
+    }];
+}).sort((left, right) =>
+    Number(right.transaction_time) - Number(left.transaction_time) ||
+    Number(right.transaction_id) - Number(left.transaction_id)
+);
+
 const saveContractLedger = (accountId, contracts) => {
     // Open contracts must never be evicted. Bound completed history to avoid
     // overflowing session storage during long repeated-trading tests.
@@ -131,6 +193,7 @@ export const enterAdminTest = () => {
     sessionStorage.removeItem(CONTRACT_SERIAL_KEY);
     for (const accountId of Object.keys(DEFAULT_BALANCES)) {
         sessionStorage.removeItem(`${CONTRACT_LEDGER_KEY}:${accountId}`);
+        sessionStorage.removeItem(`${REPORT_CLEAR_KEY}:${accountId}`);
     }
     sessionStorage.setItem(ADMIN_TEST_KEY, 'active');
     sessionStorage.removeItem('auth_info');
@@ -150,6 +213,7 @@ export const exitAdminTest = () => {
     sessionStorage.removeItem(CONTRACT_SERIAL_KEY);
     for (const accountId of Object.keys(DEFAULT_BALANCES)) {
         sessionStorage.removeItem(`${CONTRACT_LEDGER_KEY}:${accountId}`);
+        sessionStorage.removeItem(`${REPORT_CLEAR_KEY}:${accountId}`);
     }
     restore(localStorage, 'active_loginid', previous?.accountId ?? null);
     restore(localStorage, 'account_type', previous?.accountType ?? null);
@@ -329,6 +393,7 @@ export const createAdminTestApi = () => {
         contract.date_expiry = last.epoch;
         contract.transaction_ids.sell = 500000 + nextContractSerial();
         saveBalance(accountId, readBalances()[accountId] + contract.sell_price);
+        contract.balance_after_sell = readBalances()[accountId];
         saveContractLedger(accountId, contracts);
         market.releaseSymbol(contract.underlying_symbol);
         broadcastContract(contract);
@@ -336,6 +401,8 @@ export const createAdminTestApi = () => {
         emit({ msg_type: 'transaction', transaction: {
             action: 'sell', contract_id: contract.contract_id, amount: contract.sell_price,
             balance: readBalances()[accountId], currency: 'USD',
+            transaction_id: contract.transaction_ids.sell,
+            transaction_time: contract.sell_time,
         } });
     };
     const onMarketTick = tick => {
@@ -498,6 +565,11 @@ export const createAdminTestApi = () => {
                     entry_tick_time: now, purchase_time: now, date_start: now,
                     date_expiry: now + duration,
                     current_spot: entry.quote, current_spot_time: now,
+                    // Bot Builder uses a direct buy or a proposal carrying
+                    // the trading engine's purchase_reference passthrough.
+                    // Bulk Trader quotes have no such passthrough.
+                    source: request.parameters || proposal.passthrough?.purchase_reference
+                        ? 'bot_builder' : 'bulk_trader',
                     tick_count: 0, remaining_ticks: duration,
                     bid_price: 0, sell_price: 0, profit: -amount,
                     is_sold: 0, is_expired: 0, is_valid_to_sell: 1, status: 'open',
@@ -505,6 +577,7 @@ export const createAdminTestApi = () => {
                 };
                 contracts.set(String(contract_id), contract);
                 saveBalance(accountId, readBalances()[accountId] - amount);
+                contract.balance_after_buy = readBalances()[accountId];
                 saveContractLedger(accountId, contracts);
                 // Keep the underlying market clock running even if the user
                 // navigates away and has zero active UI tick subscriptions.
@@ -518,6 +591,7 @@ export const createAdminTestApi = () => {
                     emit({ msg_type: 'transaction', transaction: {
                         action: 'buy', contract_id, amount: -amount,
                         balance: readBalances()[accountId], currency: 'USD',
+                        transaction_id, transaction_time: now,
                     } });
                 });
                 return result;
@@ -562,7 +636,15 @@ export const createAdminTestApi = () => {
                 return message({ sell: { contract_id: contract.contract_id, sold_for: contract.sell_price, transaction_id: contract.transaction_ids.sell } });
             }
             if (kind === 'portfolio') return message({ portfolio: { contracts: [...contracts.values()].filter(c => !c.is_sold) } });
-            if (kind === 'statement') return message({ statement: { count: 0, transactions: [] } });
+            if (kind === 'statement') {
+                const all = simulatedStatementRows(accountId);
+                const offset = Math.max(0, Math.floor(Number(request.offset) || 0));
+                const limit = Math.min(5000, Math.max(1, Math.floor(Number(request.limit) || 100)));
+                return message({ statement: {
+                    count: all.length,
+                    transactions: all.slice(offset, offset + limit),
+                } });
+            }
             return message({ error: {
                 code: 'AdminSimulationUnsupported',
                 message: 'This broker feature is not yet simulated in local Admin Test Kit.',

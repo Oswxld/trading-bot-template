@@ -2,7 +2,7 @@ name: Bulk Trader verification
 
 on:
   push:
-    branches: [develop, 'clients/kevin-forex-trader/develop', 'fix/admin-test-kit-step2-session-state', 'fix/admin-test-kit-step3-market-feed', 'fix/admin-test-kit-step4-contract-lifecycle']
+    branches: [develop, 'clients/kevin-forex-trader/develop', 'fix/admin-test-kit-step2-session-state', 'fix/admin-test-kit-step3-market-feed', 'fix/admin-test-kit-step4-contract-lifecycle', 'fix/admin-test-kit-step5-reporting-ledger']
     paths:
       - 'src/pages/bulk-trader/**'
       - 'src/components/layout/app-logo/**'
@@ -13,6 +13,8 @@ on:
       - 'src/services/admin-test-market-feed.js'
       - 'src/services/__tests__/admin-test-market-feed.test.js'
       - 'src/services/__tests__/admin-test-contract-lifecycle.test.js'
+      - 'src/services/__tests__/admin-test-reporting.test.js'
+      - 'src/stores/__tests__/transactions-admin-test.spec.ts'
       - 'src/hooks/useAccountSwitching.ts'
       - 'src/hooks/__tests__/useAccountSwitching-admin-test.spec.tsx'
       - 'src/utils/account-helpers.ts'
@@ -27,6 +29,7 @@ on:
       - 'src/external/bot-skeleton/services/api/appId.js'
       - 'src/external/bot-skeleton/services/api/api-base.ts'
       - 'src/stores/run-panel-store.ts'
+      - 'src/stores/transactions-store.ts'
       - 'src/stores/app-store.ts'
       - 'src/stores/__tests__/app-store-admin-test.spec.ts'
       - 'src/external/bot-skeleton/scratch/dbot.js'
@@ -77,6 +80,8 @@ jobs:
             src/services/__tests__/admin-test-kit.test.js \
             src/services/__tests__/admin-test-market-feed.test.js \
             src/services/__tests__/admin-test-contract-lifecycle.test.js \
+            src/services/__tests__/admin-test-reporting.test.js \
+            src/stores/__tests__/transactions-admin-test.spec.ts \
             src/stores/__tests__/run-panel-admin-test.spec.ts \
             src/stores/__tests__/app-store-admin-test.spec.ts \
             src/external/bot-skeleton/services/api/__tests__/chart-api-admin-test.test.js \

@@ -148,7 +148,9 @@ const SYMBOLS = [
     market: 'synthetic_index', market_display_name: 'Derived',
     submarket: 'random_index', submarket_display_name: 'Continuous Indices',
     exchange_is_open: true, is_trading_suspended: false,
-    pip: 0.01, pip_size: 2,
+    // Both pip and pip_size represent the minimum price increment here.
+    // Bot Builder converts 0.01 to 2 decimal places before evaluating digits.
+    pip: 0.01, pip_size: 0.01,
 }));
 
 /**
@@ -464,9 +466,19 @@ export const createAdminTestApi = () => {
                 return message({ forget: 1 });
             }
             if (kind === 'forget_all') {
-                for (const sub of subscriptions.values()) if (sub.timer) clearInterval(sub.timer);
-                subscriptions.clear();
-                return message({ forget_all: [] });
+                // Deriv forget_all only removes subscriptions of the requested
+                // category. Bot Builder stops tick/candle subscriptions while
+                // the header, contract monitor and Bulk Trader still depend
+                // on their own subscriptions.
+                const target = request.forget_all;
+                const forgotten = [];
+                for (const [id, sub] of subscriptions) {
+                    if (sub.kind !== target) continue;
+                    if (sub.timer) clearInterval(sub.timer);
+                    subscriptions.delete(id);
+                    forgotten.push(id);
+                }
+                return message({ forget_all: forgotten });
             }
             if (kind === 'sell') {
                 const contract = contracts.get(String(request.sell));

@@ -50,6 +50,8 @@ export default class TicksService {
         this.ticks_history_promise = null;
         this.active_symbols_promise = null;
         this.candles_promise = null;
+        this.observedApi = null;
+        this.observerSubscription = null;
 
         this.observe();
     }
@@ -196,7 +198,17 @@ export default class TicksService {
     }
 
     observe() {
-        if (api_base.api) {
+        if (api_base.api && api_base.api !== this.observedApi) {
+            // Each socket has its own onMessage stream. If the local simulator
+            // was recreated, an old listener can never receive new tick events.
+            this.observerSubscription?.unsubscribe();
+            this.observedApi = api_base.api;
+            this.ticks = new Map();
+            this.candles = new Map();
+            this.ticks_history_promise = null;
+            this.candles_promise = null;
+            this.pipSizes = null;
+            this.active_symbols_promise = null;
             const subscription = api_base.api.onMessage().subscribe(({ data }) => {
                 if (data.msg_type === 'tick') {
                     const { tick } = data;
@@ -220,11 +232,15 @@ export default class TicksService {
                     }
                 }
             });
+            this.observerSubscription = subscription;
             api_base.pushSubscription(subscription);
         }
     }
 
     requestStream(options) {
+        // requestStream may be called on an interpreter created before the
+        // current simulator connection; bind to the active socket first.
+        this.observe();
         const { style } = options;
         const stringified_options = JSON.stringify(options);
 

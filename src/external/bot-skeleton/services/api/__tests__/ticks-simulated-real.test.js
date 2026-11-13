@@ -31,6 +31,27 @@ describe('Bot Builder tick lifecycle on simulated Real', () => {
         sessionStorage.clear();
         localStorage.clear();
     });
+    it('rebinds its tick listener to a replacement simulated socket', async () => {
+        const oldApi = createAdminTestApi();
+        api_base.api = oldApi;
+        await opened(oldApi);
+        const ticks = new TicksService();
+        const observed = jest.fn();
+        await ticks.monitor({ symbol: 'R_100', callback: observed });
+
+        const next = createAdminTestApi();
+        api_base.api = next;
+        await opened(next);
+        // The next monitor request must attach to the new socket and fetch
+        // a new stream even if the old instance already cached 1000 ticks.
+        const nextCallback = jest.fn();
+        await ticks.monitor({ symbol: 'R_100', callback: nextCallback });
+        await new Promise(resolve => setTimeout(resolve, 1800));
+        expect(nextCallback).toHaveBeenCalled();
+        oldApi.disconnect();
+        next.disconnect();
+    });
+
     it('loads 1000 ticks and unsubscribes cleanly without OAuth', async () => {
         const api = createAdminTestApi();
         api_base.api = api;

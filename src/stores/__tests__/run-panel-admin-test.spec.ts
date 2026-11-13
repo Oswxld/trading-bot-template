@@ -18,6 +18,7 @@ jest.mock('@/external/bot-skeleton/services/api/api-base', () => ({
         api: null, account_id: '', account_info: {},
         is_authorized: false, is_running: false,
         authorizeAndSubscribe: jest.fn(),
+        ensureAdminTestSession: jest.fn(),
     },
 }));
 jest.mock('@/external/bot-skeleton/scratch/utils', () => ({ getSelectedTradeType: jest.fn() }));
@@ -33,6 +34,7 @@ const makePanel = () => {
         saveRecentWorkspace: jest.fn(),
         unHighlightAllBlocks: jest.fn(),
         getStrategySounds: jest.fn(() => []),
+        initializeInterpreter: jest.fn().mockResolvedValue(undefined),
         shouldRunBot: jest.fn(() => true),
         runBot: jest.fn(),
     };
@@ -90,7 +92,10 @@ describe('Run Bot button: simulated accounts never trigger OAuth login', () => {
             await store.onRunButtonClick();
 
             expect(api_base.authorizeAndSubscribe).toHaveBeenCalledTimes(1);
+            expect(dbot.initializeInterpreter).toHaveBeenCalledTimes(1);
             expect(dbot.runBot).toHaveBeenCalledTimes(1);
+            expect(dbot.initializeInterpreter.mock.invocationCallOrder[0])
+                .toBeLessThan(dbot.runBot.mock.invocationCallOrder[0]);
             expect(store.is_dialog_open).toBe(false);
             expect(journal.onError).not.toHaveBeenCalled();
             store.disposeReactionsFn();
@@ -104,10 +109,37 @@ describe('Run Bot button: simulated accounts never trigger OAuth login', () => {
         api_base.account_id = TEST_DEMO_ID;
         api_base.account_info = { loginid: TEST_DEMO_ID };
         const { store, dbot, journal } = makePanel();
+        (api_base.ensureAdminTestSession as jest.Mock).mockResolvedValue(false);
         await store.onRunButtonClick();
+        expect(api_base.ensureAdminTestSession).toHaveBeenCalledTimes(1);
         expect(dbot.runBot).not.toHaveBeenCalled();
         expect(store.is_dialog_open).toBe(false);
-        expect(journal.onError).toHaveBeenCalledWith(expect.stringMatching(/Simulated account/));
+        expect(journal.onError).toHaveBeenCalledWith(expect.stringMatching(/Simulated connection/));
+        store.disposeReactionsFn();
+    });
+
+    it('recovers a previously closed simulated connection before starting Bot Builder', async () => {
+        enterAdminTest();
+        switchAdminTestAccount(TEST_REAL_ID);
+        const { store, client, dbot } = makePanel();
+        (api_base.ensureAdminTestSession as jest.Mock).mockImplementation(async () => {
+            const sim = createAdminTestApi();
+            await opened(sim);
+            api_base.api = sim;
+            api_base.account_id = TEST_REAL_ID;
+            api_base.account_info = { loginid: TEST_REAL_ID, currency: 'USD' };
+            api_base.is_authorized = true;
+            return true;
+        });
+        (api_base.authorizeAndSubscribe as jest.Mock).mockImplementation(async () => {
+            client.is_logged_in = true;
+            client.loginid = TEST_REAL_ID;
+        });
+        await store.onRunButtonClick();
+        expect(api_base.ensureAdminTestSession).toHaveBeenCalledTimes(1);
+        expect(dbot.initializeInterpreter).toHaveBeenCalledTimes(1);
+        expect(dbot.runBot).toHaveBeenCalledTimes(1);
+        expect(store.is_dialog_open).toBe(false);
         store.disposeReactionsFn();
     });
 

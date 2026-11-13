@@ -94,6 +94,39 @@ describe('local admin test kit (no broker connection)', () => {
         api.disconnect();
     });
 
+    it('uses the correct 0.01 price increment for simulated digit strategies', async () => {
+        enterAdminTest();
+        const api = createAdminTestApi();
+        await opened(api);
+        const result = await api.send({ active_symbols: 'brief' });
+        expect(result.active_symbols).toEqual(expect.arrayContaining([
+            expect.objectContaining({ symbol: 'R_100', pip_size: 0.01, pip: 0.01 }),
+        ]));
+        api.disconnect();
+    });
+
+    it('forget_all ticks leaves all other simulated subscriptions untouched', async () => {
+        enterAdminTest();
+        const api = createAdminTestApi();
+        await opened(api);
+        const ticks = await api.send({ ticks_history: 'R_100', style: 'ticks', subscribe: 1 });
+        const candles = await api.send({ ticks_history: 'R_100', style: 'candles', subscribe: 1 });
+        const balance = await api.send({ balance: 1, subscribe: 1 });
+        const transactions = await api.send({ transaction: 1, subscribe: 1 });
+        const contracts = await api.send({ proposal_open_contract: 1, subscribe: 1 });
+        const tickId = ticks.subscription.id;
+        const candleId = candles.subscription.id;
+        const otherIds = [balance.subscription.id, transactions.subscription.id, contracts.subscription.id];
+
+        expect((await api.forgetAll('ticks')).forget_all).toEqual([tickId]);
+        expect((await api.forgetAll('ticks')).forget_all).toEqual([]);
+        expect((await api.forgetAll('candles')).forget_all).toEqual([candleId]);
+        for (const id of otherIds) {
+            expect((await api.send({ forget: id })).forget).toBe(1);
+        }
+        api.disconnect();
+    });
+
     it('uses 50% by default and persists one independent slider for both simulated accounts', () => {
         expect(getAdminTestWinProbability()).toBe(50);
         expect(setAdminTestWinProbability(100)).toBe(false);

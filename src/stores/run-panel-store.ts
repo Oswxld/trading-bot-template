@@ -184,8 +184,11 @@ export default class RunPanelStore {
         // In local simulation, restore Bot Builder's ordinary logged-in state
         // using the fake API, never a real Deriv OAuth session.
         if (isAdminTestActive()) {
-            if (!isAdminTestTransportReady(api_base)) {
-                this.showErrorMessage('Simulated account is not connected. Re-enter Admin Test Mode.');
+            // The local transport can be closed by Bot Builder unmounting.
+            // Recreate it and wait for local authorization instead of
+            // telling users to restart their Admin Test Kit session.
+            if (!isAdminTestTransportReady(api_base) && !(await api_base.ensureAdminTestSession())) {
+                this.showErrorMessage('Simulated connection could not recover. Reload the page and retry.');
                 return;
             }
             if (!isAdminTestSessionReady(api_base) ||
@@ -214,6 +217,19 @@ export default class RunPanelStore {
         if (!this.dbot.shouldRunBot()) {
             this.unregisterBotListeners();
             return;
+        }
+        if (isAdminTestActive()) {
+            // Always rebuild the Blockly interpreter against the CURRENT
+            // simulator socket before Run. Its TicksService/TradeEngine
+            // listeners otherwise remain bound to a previously closed socket
+            // after tab navigation or a local reconnection.
+            try {
+                await this.dbot.initializeInterpreter();
+            } catch (error) {
+                this.unregisterBotListeners();
+                this.showErrorMessage('Could not initialize simulated Bot Builder ticks. Retry Run.');
+                return;
+            }
         }
 
         ui?.setAccountSwitcherDisabledMessage(

@@ -26,6 +26,8 @@ on:
       - 'src/stores/run-panel-store.ts'
       - 'src/stores/client-store.ts'
       - 'src/external/bot-skeleton/services/api/__tests__/**'
+      - 'src/external/bot-skeleton/services/api/ticks_service.js'
+      - 'src/external/bot-skeleton/services/tradeEngine/trade/__tests__/**'
       - 'src/stores/__tests__/run-panel-admin-test.spec.ts'
       - 'package.json'
       - 'package-lock.json'
@@ -68,6 +70,7 @@ jobs:
             src/stores/__tests__/run-panel-admin-test.spec.ts \
             src/external/bot-skeleton/services/api/__tests__/ticks-simulated-real.test.js \
             src/external/bot-skeleton/services/api/__tests__/api-base-admin-reconnect.test.ts \
+            src/external/bot-skeleton/services/tradeEngine/trade/__tests__/simulated-bot-builder-purchase.test.js \
             src/hooks/__tests__/useAccountSwitching-admin-test.spec.tsx \
             src/components/admin-test-kit/__tests__/admin-test-kit-trigger.test.tsx \
             src/pages/bulk-trader/__tests__/bulk-trader-buttons.test.jsx \

@@ -3,7 +3,11 @@ import { getAccountId, getAccountType, isDemoAccount, removeUrlParameter } from 
 /* [/AI] */
 import CommonStore from '@/stores/common-store';
 import { DerivWSAccountsService } from '@/services/derivws-accounts.service';
-import { isAdminTestActive } from '@/services/admin-test-kit';
+import {
+    isAdminTestActive,
+    isAdminTestTransportReady,
+    isAdminTestSessionReady,
+} from '@/services/admin-test-kit';
 import { TAuthData } from '@/types/api-types';
 import { clearAuthData } from '@/utils/auth-utils';
 import { handleBackendError, isBackendError } from '@/utils/error-handler';
@@ -66,6 +70,7 @@ class APIBase {
     common_store: CommonStore | undefined;
     reconnection_attempts: number = 0;
     private reconnecting_local_simulator = false;
+    private local_simulation_recovery: Promise<boolean> | null = null;
 
     // Constants for timeouts - extracted magic numbers for better maintainability
     private readonly ACTIVE_SYMBOLS_TIMEOUT_MS = 10000; // 10 seconds
@@ -235,6 +240,60 @@ class APIBase {
         }
     }
 
+    /**
+     * Re-establish the local-only mock API and wait until the selected simulated
+     * account is authorized. Never allow a real Deriv socket to satisfy this
+     * check. Shared by the automatic reconnect handler and Bot Builder Run.
+     */
+    async ensureAdminTestSession(): Promise<boolean> {
+        if (!isAdminTestActive()) return false;
+        if (this.local_simulation_recovery) return this.local_simulation_recovery;
+
+        this.reconnecting_local_simulator = true;
+        const recover = async () => {
+            const socket = this.api?.connection;
+            const mock = this.api as (TApiBaseApi & {
+                isAdminSimulation?: boolean;
+                simulatedAccountId?: string;
+            }) | null;
+            if (!mock || mock.isAdminSimulation !== true ||
+                mock.simulatedAccountId !== getAccountId() ||
+                (socket && socket.readyState > 1)) {
+                await this.init(true);
+            }
+
+            const connection = this.api?.connection;
+            if (!connection) return false;
+            if (connection.readyState === 0) {
+                const opened = await new Promise<boolean>(resolve => {
+                    let timer: ReturnType<typeof setTimeout>;
+                    const onOpen = () => done(true);
+                    const onClose = () => done(false);
+                    const done = (ready: boolean) => {
+                        clearTimeout(timer);
+                        connection.removeEventListener('open', onOpen);
+                        connection.removeEventListener('close', onClose);
+                        resolve(ready);
+                    };
+                    connection.addEventListener('open', onOpen);
+                    connection.addEventListener('close', onClose);
+                    timer = setTimeout(() => done(false), 5000);
+                });
+                if (!opened) return false;
+            }
+
+            if (!isAdminTestTransportReady(this)) return false;
+            if (!isAdminTestSessionReady(this)) await this.authorizeAndSubscribe();
+            return isAdminTestSessionReady(this);
+        };
+
+        this.local_simulation_recovery = recover().finally(() => {
+            this.reconnecting_local_simulator = false;
+            this.local_simulation_recovery = null;
+        });
+        return this.local_simulation_recovery;
+    }
+
     reconnectIfNotConnected = () => {
         if (isAdminTestActive()) {
             // The Admin Test Kit has a local-only transport and no OAuth
@@ -242,11 +301,9 @@ class APIBase {
             // clear the selected account or turn the header into Log in.
             // Multiple close/focus listeners may fire during Bot Builder runs;
             // allow only one connection replacement at a time.
-            if (this.api?.connection?.readyState > 1 && !this.reconnecting_local_simulator) {
-                this.reconnecting_local_simulator = true;
-                void this.init(true)
-                    .catch(error => console.error('Local simulation reconnect failed:', error))
-                    .finally(() => { this.reconnecting_local_simulator = false; });
+            if ((!this.api || this.api.connection?.readyState > 1) && !this.reconnecting_local_simulator) {
+                void this.ensureAdminTestSession()
+                    .catch(error => console.error('Local simulation reconnect failed:', error));
             }
             return;
         }

@@ -2,6 +2,7 @@ import { api_base } from '../api-base';
 import { authData$, setAuthData } from '../observables/connection-status-stream';
 import {
     enterAdminTest, exitAdminTest, switchAdminTestAccount, TEST_REAL_ID,
+    createAdminTestApi, isAdminTestSessionReady,
 } from '@/services/admin-test-kit';
 
 jest.mock('../chart-api', () => ({
@@ -30,6 +31,31 @@ describe('Bot Builder: simulated Real reconnect never logs out local account', (
         exitAdminTest();
         sessionStorage.clear();
         localStorage.clear();
+    });
+
+    it('waits for the replacement local socket to open and reauthorizes the selected Real account', async () => {
+        restore.mockImplementation(async () => {
+            const replacement = createAdminTestApi();
+            api_base.api = replacement as any;
+            api_base.account_id = TEST_REAL_ID;
+            api_base.account_info = { loginid: TEST_REAL_ID };
+            api_base.is_authorized = false;
+        });
+        const authorization = jest.spyOn(api_base, 'authorizeAndSubscribe').mockImplementation(async () => {
+            api_base.account_id = TEST_REAL_ID;
+            api_base.account_info = { loginid: TEST_REAL_ID };
+            api_base.is_authorized = true;
+        });
+        try {
+            expect(await api_base.ensureAdminTestSession()).toBe(true);
+            expect(api_base.init).toHaveBeenCalledTimes(1);
+            expect(authorization).toHaveBeenCalledTimes(1);
+            expect(isAdminTestSessionReady(api_base)).toBe(true);
+            expect(localStorage.getItem('active_loginid')).toBe(TEST_REAL_ID);
+        } finally {
+            api_base.api?.disconnect();
+            authorization.mockRestore();
+        }
     });
 
     it('keeps the header account and reconnects only once across repeated close/focus events', async () => {

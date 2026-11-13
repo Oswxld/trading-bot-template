@@ -74,12 +74,30 @@ async function createNormalBlocklyBot(page, {
         setField('SUBMARKET_LIST', 'random_index');
         setField('SYMBOL_LIST', 'R_100');
         setField('TRADETYPECAT_LIST', isDigit ? 'digits' : 'callput');
-        setField('TRADETYPE_LIST', isDigit ? 'evenodd' : 'callput');
+        const needsPrediction = ['DIGITMATCH', 'DIGITDIFF'].includes(params.contract);
+        setField('TRADETYPE_LIST', needsPrediction ? 'matchesdiffers' : isDigit ? 'evenodd' : 'callput');
         setField('TYPE_LIST', 'both');
         setField('DURATIONTYPE_LIST', 't');
         setField('NUM', params.duration);
         setField('PURCHASE_LIST', params.contract);
         setField('RESTARTONERROR', 'FALSE');
+
+        if (needsPrediction) {
+            const option = xml.querySelector('block[type="trade_definition_tradeoptions"]');
+            const mutation = option?.querySelector('mutation');
+            if (!option || !mutation) throw new Error('Trade options mutation unavailable');
+            mutation.setAttribute('has_prediction', 'true');
+            const prediction = xml.createElement('value');
+            prediction.setAttribute('name', 'PREDICTION');
+            const number = xml.createElement('shadow');
+            number.setAttribute('type', 'math_number_positive');
+            const digit = xml.createElement('field');
+            digit.setAttribute('name', 'NUM');
+            digit.textContent = '5';
+            number.appendChild(digit);
+            prediction.appendChild(number);
+            option.appendChild(prediction);
+        }
 
         const stack = xml.querySelector('block[type="before_purchase"] > statement[name="BEFOREPURCHASE_STACK"]');
         if (!stack) throw new Error('Purchase conditions root not found');
@@ -172,6 +190,22 @@ test('6C: normal Blockly last-digit tick condition waits for a signal, then trad
     await expectThreeTradesAndStop(page, 'DIGITEVEN');
 });
 
+for (const { name, type, condition } of [
+    { name: 'Fall', type: 'PUT', condition: 'always' },
+    { name: 'Digit Odd', type: 'DIGITODD', condition: 'last_digit_gt_7' },
+    { name: 'Digit Matches', type: 'DIGITMATCH', condition: 'always' },
+    { name: 'Digit Differs', type: 'DIGITDIFF', condition: 'last_digit_gt_7' },
+]) {
+    test('6C: ordinary Blockly ' + name + ' loads real blocks, buys and repeats',
+        async ({ page }) => {
+            page.on('dialog', async d => d.type() === 'confirm' ? d.accept() : d.dismiss());
+            await enterTestMode(page);
+            await createNormalBlocklyBot(page, { contract: type, condition });
+            await expectThreeTradesAndStop(page, type);
+        }
+    );
+}
+
 test('6C: normal Blockly false purchase condition does not buy or falsely report a trade', async ({ page }) => {
     page.on('dialog', async d => d.type() === 'confirm' ? d.accept() : d.dismiss());
     await enterTestMode(page);
@@ -187,4 +221,8 @@ test('6C: normal Blockly false purchase condition does not buy or falsely report
     await expect(run).toBeVisible({ timeout: 12000 });
     await page.waitForTimeout(1200);
     expect(await paperTrades(page)).toHaveLength(0);
+    // Restart the normal Blockly workspace after a deliberate Stop, with
+    // purchase conditions changed from always-false to always-true.
+    await createNormalBlocklyBot(page, { contract: 'CALL', condition: 'always' });
+    await expectThreeTradesAndStop(page, 'CALL');
 });

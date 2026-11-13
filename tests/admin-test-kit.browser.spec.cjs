@@ -104,3 +104,44 @@ test('local UI: enter Admin Test Kit, trade with Bulk Trader, switch account and
             .test([error.message, error.stack].join(' ')));
     expect(simulationErrors).toEqual([]);
 });
+
+
+test('local UI: Martingale Quick Strategy loads Blockly, presses Run, and completes a paper trade', async ({ page }) => {
+    page.on('dialog', async dialog => {
+        if (dialog.type() === 'confirm') await dialog.accept();
+        else await dialog.dismiss();
+    });
+    await activateViaFooter(page);
+    await page.evaluate(() => {
+        // The normal Quick Strategy form persists its values in this key.
+        // Seed valid UI selections; the test still selects the real strategy,
+        // presses the real Run button and observes the resulting paper trade.
+        localStorage.setItem('qs-fields', JSON.stringify({
+            symbol: 'R_100', tradetype: 'callput', type: 'CALL',
+            durationtype: 't', duration: '1', stake: '1',
+            profit: '100', loss: '1', size: '1', unit: '1',
+            action: 'RUN', max_stake: 10, boolean_max_stake: false,
+            last_digit_prediction: 5,
+        }));
+        sessionStorage.setItem('yolo:local-admin-win-probability', '0');
+    });
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.locator('#quick-strategy').waitFor({ state: 'visible', timeout: 35000 });
+    await dismissWelcomeTour(page);
+    await page.locator('#quick-strategy').click({ timeout: 12000 });
+    await expect(page.locator('.modal--strategy')).toBeVisible({ timeout: 20000 });
+    const choose = page.locator('.strategy-template-picker__links')
+        .filter({ hasText: /^Martingale$/ }).first();
+    await expect(choose).toBeVisible({ timeout: 15000 });
+    await choose.click({ timeout: 15000 });
+    const run = page.getByTestId('qs-run-button');
+    await expect(run).toBeVisible({ timeout: 20000 });
+    await expect(run).toBeEnabled({ timeout: 20000 });
+    await run.click({ timeout: 15000 });
+    await expect.poll(async () =>
+        (await ledger(page)).filter(contract => contract.source === 'bot_builder').length,
+    { timeout: 30000 }).toBeGreaterThan(0);
+    await expect.poll(async () =>
+        (await ledger(page)).some(contract => contract.source === 'bot_builder' && contract.is_sold),
+    { timeout: 25000 }).toBe(true);
+});

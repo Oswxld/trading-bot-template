@@ -143,7 +143,7 @@ const Transactions = observer(({ is_drawer_open }: TTransactions) => {
                             // rows behind an empty screen. Render the local
                             // bounded report directly; leave live Deriv's
                             // virtualized list completely unchanged.
-                            <div className='transactions__local-rows'>
+                            <div className='transactions__local-rows' data-testid='admin-simulated-transactions' data-row-count={transaction_list.length}>
                                 {transaction_list.slice(0, 300).map((row, index) => (
                                     <TransactionItem
                                         key={row.type === transaction_elements.CONTRACT &&

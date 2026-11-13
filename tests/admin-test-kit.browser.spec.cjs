@@ -171,6 +171,18 @@ test('local UI: ' + strategyName + ' Quick Strategy loads Blockly, presses Run, 
     // other strategy cases independently confirm their own real purchases.
     if (strategyName === 'Martingale') {
         await page.locator('li#db-run-panel-tab__transactions').click();
+        console.log('Admin Test report DOM:', JSON.stringify(await page.evaluate(() => ({
+            lists: [...document.querySelectorAll('[data-testid="dt_data_list"], [data-testid="admin-simulated-transactions"], .transactions-empty-box')].map(el => ({
+                className: el.className,
+                count: el.getAttribute('data-row-count'),
+                length: el.children.length,
+                text: el.textContent?.slice(0,320)
+            })),
+            active: localStorage.getItem('active_loginid'),
+            ledger: JSON.parse(sessionStorage.getItem('yolo:local-admin-contracts:' +
+                localStorage.getItem('active_loginid')) || '[]').map(x => ({ type: x.source, id: x.contract_id })),
+            panel: document.querySelector('.transactions__scrollbar')?.innerHTML.slice(0,1800),
+        }))));
         await expect(page.getByTestId('dt_transactions_item').first())
             .toBeVisible({ timeout: 20000 });
         await page.locator('li#db-run-panel-tab__journal').click();

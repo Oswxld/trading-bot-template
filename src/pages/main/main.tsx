@@ -45,6 +45,7 @@ import RunStrategy from '../dashboard/run-strategy';
 import './main.scss';
 
 const ChartWrapper = lazy(() => import('../chart/chart-wrapper'));
+const DigitAnalyzer = lazy(() => import('../../features/digit-analyzer'));
 const BulkTrader = lazy(() => import('../bulk-trader/bulk-trader'));
 const TradingBots = lazy(() => import('../trading-bots'));
 
@@ -426,9 +427,9 @@ const AppWrapper = observer(() => {
                                 }
                                 id='id-analysis'
                             >
-                                <div role='status' style={{ padding: '2.4rem', color: 'var(--text-general)' }}>
-                                    The Digit Analyzer page will be connected in the next implementation step.
-                                </div>
+                                <Suspense fallback={<ChunkLoader message={localize('Loading Digit Analyzer...')} />}>
+                                    <DigitAnalyzer />
+                                </Suspense>
                             </div>
                             <div
                                 label={

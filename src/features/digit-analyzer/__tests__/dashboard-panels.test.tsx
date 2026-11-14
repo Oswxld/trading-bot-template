@@ -14,8 +14,13 @@ describe('Digit Analyzer presentational panels (controlled test fixtures only)',
             />
         );
 
-        expect(within(screen.getByLabelText('Digit 2')).getByText('66.7%')).toBeInTheDocument();
-        expect(within(screen.getByLabelText('Digit 3')).getByText('33.3%')).toBeInTheDocument();
+        const digit2 = screen.getByRole('group', { name: 'Digit 2: 2 of 3 ticks (66.7%)' });
+        const digit3 = screen.getByRole('group', { name: 'Digit 3: 1 of 3 ticks (33.3%)' });
+        expect(within(digit2).getByText('66.7%')).toBeInTheDocument();
+        expect(within(digit3).getByText('33.3%')).toBeInTheDocument();
+        // Small screens render rounded labels, while assistive text preserves exact values.
+        expect(within(digit2).getByText('67%')).toHaveAttribute('aria-hidden', 'true');
+        expect(within(digit3).getByText('33%')).toHaveAttribute('aria-hidden', 'true');
         expect(screen.queryByText('Awaiting market data')).not.toBeInTheDocument();
     });
 

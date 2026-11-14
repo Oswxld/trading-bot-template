@@ -33,10 +33,14 @@ const watchDuring = store =>
         passFlag: 'openContract',
     });
 
-/* The watchScope function is called randomly and resets the prevTick
- * which leads to the same problem we try to solve. So prevTick is isolated
+/*
+ * Each interpreter owns its own Redux trading store. A single module-global
+ * previous tick meant that the first store processing an epoch would consume
+ * it for EVERY other store, leaving a newly started Martingale waiting forever
+ * for a buy signal when an older interpreter/listener was still attached.
+ * Track the last processed tick per store, not across separate bot sessions.
  */
-let prevTick;
+const previousTickForStore = new WeakMap();
 const watchScope = ({ store, stopScope, passScope, passFlag }) => {
     // in case watch is called after stop is fired
     if (store.getState().scope === stopScope) {
@@ -46,8 +50,9 @@ const watchScope = ({ store, stopScope, passScope, passFlag }) => {
         const unsubscribe = store.subscribe(() => {
             const newState = store.getState();
 
-            if (newState.newTick === prevTick) return;
-            prevTick = newState.newTick;
+            const previousTick = previousTickForStore.get(store);
+            if (newState.newTick === previousTick) return;
+            previousTickForStore.set(store, newState.newTick);
 
             if (newState.scope === passScope && newState[passFlag]) {
                 unsubscribe();

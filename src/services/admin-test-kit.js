@@ -247,7 +247,23 @@ export const switchAdminTestAccount = id => {
     return true;
 };
 
-const CONTRACT_TYPES = ['DIGITDIFF', 'DIGITMATCH', 'DIGITOVER', 'DIGITUNDER', 'DIGITEVEN', 'DIGITODD', 'CALL', 'PUT'];
+const CONTRACT_TYPES = ['DIGITDIFF', 'DIGITMATCH', 'DIGITOVER', 'DIGITUNDER', 'DIGITEVEN', 'DIGITODD', 'CALL', 'PUT', 'ACCU'];
+
+// Fictional presentation prices are deliberately independent of a live
+// broker's quotes. The contract family and prediction influence the payout,
+// while the adjustable probability controls whether each trade wins.
+const simulatedPayoutFactor = (type, barrier, growthRate = 0.03, duration = 1) => {
+    if (type === 'DIGITMATCH') return 8.4;
+    if (type === 'DIGITDIFF') return 1.08;
+    if (type === 'DIGITEVEN' || type === 'DIGITODD') return 1.9;
+    if (type === 'DIGITOVER' || type === 'DIGITUNDER') {
+        const prediction = Number(barrier);
+        const matchingDigits = type === 'DIGITOVER' ? 9 - prediction : prediction;
+        return matchingDigits >= 1 && matchingDigits <= 9 ? Number((9 / matchingDigits).toFixed(2)) : null;
+    }
+    if (type === 'ACCU') return Number(Math.pow(1 + Number(growthRate || 0.03), duration).toFixed(4));
+    return 1.8;
+};
 const SYMBOLS = [
     ['R_100', 'Volatility 100 Index'],
     ['R_75', 'Volatility 75 Index'],
@@ -487,7 +503,7 @@ export const createAdminTestApi = () => {
             if (kind === 'trading_times') return message({ trading_times: { markets: [] } });
             if (kind === 'contracts_for') return message({ contracts_for: { available: CONTRACT_TYPES.map(type => ({
                 contract_type: type,
-                contract_category: type.startsWith('DIGIT') ? 'digits' : 'callput',
+                contract_category: type.startsWith('DIGIT') ? 'digits' : type === 'ACCU' ? 'accumulator' : 'callput',
                 expiry_type: 'tick', min_contract_duration: '1t', max_contract_duration: '10t',
                 barriers: ['DIGITMATCH', 'DIGITDIFF', 'DIGITOVER', 'DIGITUNDER'].includes(type) ? 1 : 0,
             })) } });
@@ -533,7 +549,12 @@ export const createAdminTestApi = () => {
                     return message({ error: err }, 'proposal');
                 }
                 const id = `adm-proposal-${++serial}`;
-                const multiplier = type === 'DIGITMATCH' ? 8.4 : 1.8;
+                const multiplier = simulatedPayoutFactor(type,
+                    request.barrier ?? request.selected_tick ?? request.prediction,
+                    request.growth_rate, duration);
+                if (!multiplier) return message({ error: {
+                    code: 'InvalidContractProposal', message: 'This digit prediction cannot produce the chosen contract outcome.',
+                } }, 'proposal');
                 const basisPayout = request.basis === 'payout';
                 const stake = Number((basisPayout ? amount / multiplier : amount).toFixed(2));
                 const payout = Number((basisPayout ? amount : stake * multiplier).toFixed(2));
@@ -548,7 +569,11 @@ export const createAdminTestApi = () => {
             if (kind === 'buy') {
                 const direct = request.parameters;
                 const directAmount = Number(direct?.amount);
-                const directMultiplier = direct?.contract_type === 'DIGITMATCH' ? 8.4 : 1.8;
+                const directMultiplier = simulatedPayoutFactor(
+                    direct?.contract_type,
+                    direct?.barrier ?? direct?.selected_tick ?? direct?.prediction,
+                    direct?.growth_rate, Number(direct?.duration ?? 1)
+                ) || 1.8;
                 const directStake = Number((direct?.basis === 'payout'
                     ? directAmount / directMultiplier : directAmount).toFixed(2));
                 const proposal = proposals.get(request.buy) ||
@@ -561,9 +586,14 @@ export const createAdminTestApi = () => {
                     });
                 const amount = Number(proposal?.stake ?? proposal?.amount);
                 const duration = Number(proposal?.duration ?? 1);
+                const payoutFactor = simulatedPayoutFactor(
+                    proposal?.contract_type,
+                    proposal?.barrier ?? proposal?.selected_tick ?? proposal?.prediction,
+                    proposal?.growth_rate, duration
+                );
                 const symbol = proposal?.underlying_symbol || 'R_100';
                 const offeredPrice = Number(request.price);
-                if (!proposal || !CONTRACT_TYPES.includes(proposal.contract_type) ||
+                if (!proposal || !payoutFactor || !CONTRACT_TYPES.includes(proposal.contract_type) ||
                     !SYMBOLS.some(s => s.symbol === symbol) ||
                     !Number.isFinite(amount) || amount <= 0 ||
                     !Number.isInteger(duration) || duration < 1 || duration > 10 ||

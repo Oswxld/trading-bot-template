@@ -9,7 +9,7 @@ import { createAdminTestDemoRunner, readAdminDemoConfig, nextAdminDemoStake } fr
 jest.mock('@/external/bot-skeleton/services/api/api-base', () => ({
     api_base: {
         api: null, account_id: null, is_authorized: true, account_info: null,
-        is_running: false, setIsRunning: jest.fn(value => { api_base.is_running = value; }),
+        is_running: false, setIsRunning: jest.fn(),
     },
 }));
 
@@ -49,6 +49,7 @@ describe('local-only Bot Builder presentation runner', () => {
         api = createAdminTestApi();
         await ready(api);
         api_base.api = api;
+        api_base.setIsRunning.mockImplementation(value => { api_base.is_running = value; });
         api_base.account_id = TEST_DEMO_ID;
         api_base.account_info = { loginid: TEST_DEMO_ID };
     });

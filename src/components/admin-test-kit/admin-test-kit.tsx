@@ -19,7 +19,7 @@ import {
 import './admin-test-kit.scss';
 
 /**
- * Browser-local simulation control: press and hold the footer dot for 3 seconds.
+ * Browser-local simulation control: hold the footer dot (desktop) or top-right dot (mobile) for 3 seconds.
  * Accessible on localhost and deployed domains; never operates a real Deriv account.
  */
 export default function AdminTestKit() {
@@ -29,6 +29,7 @@ export default function AdminTestKit() {
     const [winProbability, setWinProbability] = useState(() => getAdminTestWinProbability());
     const [executionMode, setExecutionMode] = useState(() => getAdminTestExecutionMode());
     const [error, setError] = useState('');
+    const [password, setPassword] = useState('');
     const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const cancelHold = () => {
         if (holdTimer.current !== null) {
@@ -40,6 +41,8 @@ export default function AdminTestKit() {
         if (holdTimer.current !== null || opened) return;
         holdTimer.current = setTimeout(() => {
             holdTimer.current = null;
+            setPassword('');
+            setError('');
             setOpened(true);
         }, 3000);
     };
@@ -77,7 +80,7 @@ export default function AdminTestKit() {
             <button
                 className='admin-test-kit__secret'
                 type='button'
-                aria-label='Press and hold for 3 seconds to open local Admin Test Kit'
+                aria-label='Press and hold for 3 seconds to open Admin Test Kit'
                 title='Hold for 3 seconds'
                 onPointerDown={event => {
                     if (event.pointerType !== 'mouse' || event.button === 0) {
@@ -114,10 +117,36 @@ export default function AdminTestKit() {
                     {!active ? <>
                         <p>Start without Deriv login and test the existing Bot Builder and Bulk Trader
                             using two independent virtual accounts labelled Demo and Real.</p>
-                        <button className='admin-test-kit__primary' type='button'
-                            onClick={() => { if (enterAdminTest()) window.location.reload(); }}>
-                            Enter simulated admin mode
-                        </button>
+                        <form
+                            className='admin-test-kit__entry-form'
+                            onSubmit={event => {
+                                event.preventDefault();
+                                if (password !== '4005') {
+                                    setError('Incorrect admin test password.');
+                                    setPassword('');
+                                    return;
+                                }
+                                if (enterAdminTest()) window.location.reload();
+                            }}
+                        >
+                            <label htmlFor='admin-test-kit-password'>Admin password</label>
+                            <input
+                                id='admin-test-kit-password'
+                                type='password'
+                                inputMode='numeric'
+                                autoComplete='off'
+                                maxLength={4}
+                                value={password}
+                                onChange={event => {
+                                    setPassword(event.target.value);
+                                    if (error) setError('');
+                                }}
+                                required
+                            />
+                            <button className='admin-test-kit__primary' type='submit'>
+                                Enter simulated admin mode
+                            </button>
+                        </form>
                     </> : <>
                         <div className='admin-test-kit__balances'>
                             <label>DEMO (simulated USD)

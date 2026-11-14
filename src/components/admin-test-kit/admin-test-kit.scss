@@ -1,3 +1,5 @@
+@use 'components/shared/styles/mixins' as *;
+
 .admin-test-kit {
     &__secret {
         display: inline-flex;
@@ -19,6 +21,21 @@
         font-size: 22px;
         cursor: pointer;
         line-height: 1;
+
+        // The footer is desktop-only, so mount the dot in the layout on mobile.
+        @include mobile-or-tablet-screen {
+            position: fixed;
+            inset-block-start: max(0.3rem, env(safe-area-inset-top));
+            inset-inline-end: max(0.3rem, env(safe-area-inset-right));
+            z-index: 10001;
+            flex: none;
+            width: 24px;
+            height: 24px;
+            margin: 0;
+            border-radius: 50%;
+            opacity: 0.7;
+            background: var(--general-main-1, #fff);
+        }
     }
     &__overlay {
         position: fixed;
@@ -54,6 +71,28 @@
             cursor: pointer;
         }
     }
+    &__entry-form {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+
+        label {
+            font-weight: 600;
+        }
+
+        input {
+            box-sizing: border-box;
+            width: 100%;
+            min-height: 44px;
+            padding: 0.9rem 1rem;
+            border: 1px solid #69717e;
+            border-radius: 6px;
+            background: #fff;
+            color: #111;
+            font: inherit;
+        }
+    }
+
     &__head { display: flex; align-items: center; justify-content: space-between; gap: 8px;
         h2 { margin: 0; font-size: 22px; }
     }

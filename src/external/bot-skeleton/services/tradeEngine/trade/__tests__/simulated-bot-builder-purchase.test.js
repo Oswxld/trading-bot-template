@@ -233,6 +233,13 @@ describe('real Bot Builder trading engine against local simulated account', () =
             contractTypes: ['CALL', 'PUT'],
             duration: 1, duration_unit: 't', limit_order: {},
         });
+        // watchTicks() is async; allow its initial stopMonitor() await to
+        // complete before inspecting the newly created history promise.
+        const pendingStarted = Date.now();
+        while (!engine.$scope.ticksService.ticks_history_promise &&
+            Date.now() - pendingStarted < 1500) {
+            await new Promise(resolve => setTimeout(resolve, 10));
+        }
         const stream = engine.$scope.ticksService.ticks_history_promise;
         expect(stream).toBeTruthy();
         await stream.promise;

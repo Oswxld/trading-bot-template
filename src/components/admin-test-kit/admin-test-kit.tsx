@@ -5,10 +5,12 @@ import {
     ADMIN_TEST_MANAGE_EVENT,
     exitAdminTest,
     getAdminTestBalances,
+    getAdminTestExecutionMode,
     getAdminTestWinProbability,
     isAdminTestActive,
     isAdminTestAvailable,
     setAdminTestBalance,
+    setAdminTestExecutionMode,
     setAdminTestWinProbability,
     switchAdminTestAccount,
     TEST_DEMO_ID,
@@ -25,6 +27,7 @@ export default function AdminTestKit() {
     const [demo, setDemo] = useState(() => String(getAdminTestBalances()[TEST_DEMO_ID]));
     const [real, setReal] = useState(() => String(getAdminTestBalances()[TEST_REAL_ID]));
     const [winProbability, setWinProbability] = useState(() => getAdminTestWinProbability());
+    const [executionMode, setExecutionMode] = useState(() => getAdminTestExecutionMode());
     const [error, setError] = useState('');
     const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const cancelHold = () => {
@@ -125,6 +128,22 @@ export default function AdminTestKit() {
                                 <input type='number' min='0' max='1000000' step='0.01'
                                     value={real} onChange={e => setReal(e.target.value)} />
                             </label>
+                        </div>
+                        <div className='admin-test-kit__probability'>
+                            <label htmlFor='admin-test-execution-mode'>Bot Builder simulated execution</label>
+                            <select
+                                id='admin-test-execution-mode'
+                                value={executionMode}
+                                disabled={api_base.is_running}
+                                onChange={event => {
+                                    const next = event.target.value;
+                                    if (setAdminTestExecutionMode(next)) setExecutionMode(next);
+                                }}
+                            >
+                                <option value='presentation'>Presentation (paper results and reports)</option>
+                                <option value='engine'>Engine test (actual Blockly against simulated API)</option>
+                            </select>
+                            <small>Presentation mode follows the chosen market and contract, but does not execute custom Blockly entry signals. Bulk Trader uses the same fake contracts and win percentage in either mode.</small>
                         </div>
                         <div className='admin-test-kit__probability'>
                             <div className='admin-test-kit__probability-labels'>

@@ -1,6 +1,6 @@
 import {
     ADMIN_TEST_KEY, TEST_DEMO_ID, TEST_REAL_ID,
-    isAdminTestActive, enterAdminTest, exitAdminTest,
+    isAdminTestAvailable, isAdminTestActive, enterAdminTest, exitAdminTest,
     switchAdminTestAccount, setAdminTestBalance,
     setAdminTestWinProbability, getAdminTestWinProbability,
     getAdminTestBalances, getAdminTestAccounts, createAdminTestApi,
@@ -13,7 +13,7 @@ const opened = api => new Promise(resolve => {
 });
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-describe('local admin test kit (no broker connection)', () => {
+describe('browser-local admin test kit (no broker connection)', () => {
     beforeEach(() => {
         sessionStorage.clear();
         localStorage.clear();
@@ -22,6 +22,11 @@ describe('local admin test kit (no broker connection)', () => {
         sessionStorage.clear();
         localStorage.clear();
     });
+    it('is available in a browser without requiring a localhost-only hostname', () => {
+        expect(isAdminTestAvailable()).toBe(true);
+        expect(isAdminTestActive()).toBe(false);
+    });
+
     it('creates two clearly simulated and separate accounts without OAuth login', () => {
         localStorage.setItem('active_loginid', 'PREVIOUS_DERIV_ACCOUNT');
         sessionStorage.setItem('auth_info', 'previous-oauth-session');

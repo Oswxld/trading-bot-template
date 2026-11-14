@@ -1,5 +1,5 @@
 /**
- * LOCAL-ONLY simulated Deriv transport. Does not open any broker WebSocket,
+ * Browser-local simulated Deriv transport. Does not open any broker WebSocket,
  * use an OAuth token, or submit a real purchase. All amounts are fictional.
  * Used by BOTH Blockly Bot Builder and Bulk Trader through api_base.api.
  */
@@ -19,13 +19,12 @@ const CONTRACT_SERIAL_KEY = 'yolo:local-admin-contract-serial';
 const REPORT_CLEAR_KEY = 'yolo:local-admin-report-clear';
 const DEFAULT_WIN_PROBABILITY = 50;
 
-export const isAdminTestAvailable = () =>
-    typeof window !== 'undefined' &&
-    /^(localhost|127\\.0\\.0\\.1|\\[::1\\])$/i.test(window.location.hostname);
+// Browser-local simulated trading is available on both localhost and deployed domains.
+export const isAdminTestAvailable = () => typeof window !== 'undefined';
 export const isAdminTestActive = () =>
     isAdminTestAvailable() && sessionStorage.getItem(ADMIN_TEST_KEY) === 'active';
 
-// The local-only flag alone must not authorize trading through a genuine broker.
+// The simulated-session flag alone must not authorize trading through a genuine broker.
 export const isAdminTestTransportReady = apiBase => {
     if (!isAdminTestActive()) return false;
     const selected = localStorage.getItem('active_loginid');
@@ -62,7 +61,7 @@ export const setAdminTestWinProbability = value => {
  * In presentation mode, only the local Admin Test Kit runs scripted paper
  * contracts for UI demonstrations. Engine mode keeps the original Blockly
  * execution against the fake API for testing actual strategy logic.
- * Neither mode is accessible on deployed domains.
+ * Both modes are available on deployed domains but remain browser-local and simulated.
  */
 export const getAdminTestExecutionMode = () => {
     if (!isAdminTestActive()) return 'engine';

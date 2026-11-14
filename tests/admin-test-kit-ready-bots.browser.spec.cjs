@@ -39,7 +39,10 @@ async function enterLocalMode(page) {
     await page.waitForTimeout(3200);
     await expect(page.getByRole('dialog', { name: 'Local Admin Test Kit' })).toBeVisible({ timeout: 12000 });
     await dot.dispatchEvent('pointerup', { pointerType: 'mouse', button: 0 });
-    await page.getByRole('button', { name: 'Enter simulated admin mode' }).click();
+    // The welcome tour may mount *after* the Admin Test Kit overlay appears.
+    // Close its actual Skip action so it cannot intercept the Enter button.
+    await dismissDelayedBotTour(page);
+    await page.getByRole('button', { name: 'Enter simulated admin mode' }).click({ timeout: 12000 });
     await expect.poll(() => page.evaluate(() => sessionStorage.getItem('yolo:local-admin-test')),
         { timeout: 20000 }).toBe('active');
     await expect(page.locator('#id-trading-bots')).toBeVisible({ timeout: 25000 });

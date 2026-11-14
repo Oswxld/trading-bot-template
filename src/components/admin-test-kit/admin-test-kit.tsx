@@ -19,8 +19,8 @@ import {
 import './admin-test-kit.scss';
 
 /**
- * Hidden local development control: press and hold the footer dot for 3 seconds.
- * It cannot be enabled on a deployed client domain by a URL, cookie, or PIN.
+ * Browser-local simulation control: press and hold the footer dot for 3 seconds.
+ * Accessible on localhost and deployed domains; never operates a real Deriv account.
  */
 export default function AdminTestKit() {
     const [opened, setOpened] = useState(false);
@@ -108,7 +108,7 @@ export default function AdminTestKit() {
                         <button type='button' onClick={() => setOpened(false)} aria-label='Close'>×</button>
                     </div>
                     <p className='admin-test-kit__warning'>
-                        LOCAL SIMULATION ONLY — not a Deriv account. All balances, prices, orders and
+                        BROWSER SIMULATION ONLY — not a Deriv account. All balances, prices, orders and
                         settlements are generated inside this browser. No real money can be spent.
                     </p>
                     {!active ? <>

@@ -18,6 +18,8 @@ on:
       - 'src/stores/transactions-store.ts'
       - 'src/components/transactions/**'
       - 'src/external/bot-skeleton/scratch/dbot.js'
+      - 'src/external/bot-skeleton/services/tradeEngine/trade/index.js'
+      - 'src/external/bot-skeleton/services/tradeEngine/trade/__tests__/**'
   workflow_dispatch:
 
 permissions:

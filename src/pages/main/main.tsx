@@ -10,7 +10,7 @@ import MobileWrapper from '@/components/shared_ui/mobile-wrapper';
 import Tabs from '@/components/shared_ui/tabs/tabs';
 import TradeTypeConfirmationModal from '@/components/trade-type-confirmation-modal';
 import TradingViewModal from '@/components/trading-view-chart/trading-view-modal';
-import { DBOT_TABS, TAB_IDS } from '@/constants/bot-contents';
+import { DBOT_TABS, TAB_HASHES, TAB_IDS } from '@/constants/bot-contents';
 import { api_base, updateWorkspaceName } from '@/external/bot-skeleton';
 import { CONNECTION_STATUS } from '@/external/bot-skeleton/services/api/observables/connection-status-stream';
 import { isDbotRTL } from '@/external/bot-skeleton/utils/workspace';
@@ -81,7 +81,7 @@ const AppWrapper = observer(() => {
     const { clear } = summary_card;
     const { DASHBOARD, BOT_BUILDER } = DBOT_TABS;
     const init_render = React.useRef(true);
-    const hash = ['dashboard', 'bot_builder', 'chart', 'bulk_trader', 'trading_bots', 'tutorial'];
+    const hash = TAB_HASHES;
     const { isDesktop } = useDevice();
     const location = useLocation();
     const navigate = useNavigate();
@@ -420,6 +420,19 @@ const AppWrapper = observer(() => {
                             <div
                                 label={
                                     <>
+                                        <span aria-hidden='true' style={{ fontSize: '18px', lineHeight: 1 }}>▦</span>
+                                        <Localize i18n_default_text='Analysis' />
+                                    </>
+                                }
+                                id='id-analysis'
+                            >
+                                <div role='status' style={{ padding: '2.4rem', color: 'var(--text-general)' }}>
+                                    The Digit Analyzer page will be connected in the next implementation step.
+                                </div>
+                            </div>
+                            <div
+                                label={
+                                    <>
                                         <span aria-hidden='true' style={{ fontSize: '18px', lineHeight: 1 }}>◈</span>
                                         <Localize i18n_default_text='Bulk Trader' />
                                     </>
@@ -496,7 +509,7 @@ const AppWrapper = observer(() => {
                 </div>
             </div>
             <DesktopWrapper>
-                {![DBOT_TABS.BULK_TRADER, DBOT_TABS.TRADING_BOTS].includes(active_tab) && (
+                {![DBOT_TABS.ANALYSIS, DBOT_TABS.BULK_TRADER, DBOT_TABS.TRADING_BOTS].includes(active_tab) && (
                     <div className='main__run-strategy-wrapper'>
                         <RunStrategy />
                         <RunPanel />
@@ -506,7 +519,7 @@ const AppWrapper = observer(() => {
                 <TradingViewModal />
             </DesktopWrapper>
             <MobileWrapper>
-                {![DBOT_TABS.BULK_TRADER, DBOT_TABS.TRADING_BOTS].includes(active_tab) && !is_open && <RunPanel />}
+                {![DBOT_TABS.ANALYSIS, DBOT_TABS.BULK_TRADER, DBOT_TABS.TRADING_BOTS].includes(active_tab) && !is_open && <RunPanel />}
             </MobileWrapper>
             <Dialog
                 cancel_button_text={cancel_button_text || localize('Cancel')}

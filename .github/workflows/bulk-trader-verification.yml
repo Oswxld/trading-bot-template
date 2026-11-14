@@ -12,6 +12,8 @@ on:
       - 'src/services/admin-test-kit.js'
       - 'src/services/admin-test-market-feed.js'
       - 'src/services/__tests__/admin-test-market-feed.test.js'
+      - 'src/services/admin-test-demonstration.js'
+      - 'src/services/__tests__/admin-test-demonstration.test.js'
       - 'src/services/__tests__/admin-test-contract-lifecycle.test.js'
       - 'src/services/__tests__/admin-test-reporting.test.js'
       - 'src/stores/__tests__/transactions-admin-test.spec.ts'
@@ -82,6 +84,7 @@ jobs:
             src/pages/bulk-trader/__tests__/bulk-account-safety.test.js \
             src/services/__tests__/admin-test-kit.test.js \
             src/services/__tests__/admin-test-market-feed.test.js \
+            src/services/__tests__/admin-test-demonstration.test.js \
             src/services/__tests__/admin-test-contract-lifecycle.test.js \
             src/services/__tests__/admin-test-reporting.test.js \
             src/stores/__tests__/transactions-admin-test.spec.ts \

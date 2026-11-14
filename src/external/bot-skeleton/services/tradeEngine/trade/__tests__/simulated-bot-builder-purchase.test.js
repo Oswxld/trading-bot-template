@@ -216,4 +216,35 @@ describe('real Bot Builder trading engine against local simulated account', () =
         expect(await Promise.race([waitingForSettlement, timeout(800)])).toBe(false);
     }, 4000);
 
+    it('recovers local Martingale purchase conditions after its tick subscription is lost', async () => {
+        const api = createAdminTestApi();
+        api_base.api = api;
+        api_base.account_info = { loginid: TEST_DEMO_ID, currency: 'USD' };
+        api_base.token = TEST_DEMO_ID;
+        await opened(api);
+
+        const engine = new TradeEngine(createScope());
+        engine.init(TEST_DEMO_ID, {
+            symbol: 'R_100', contractTypes: ['CALL', 'PUT'],
+            shouldRestartOnError: false, timeMachineEnabled: false,
+        });
+        engine.start({
+            amount: 1, basis: 'stake', currency: 'USD',
+            contractTypes: ['CALL', 'PUT'],
+            duration: 1, duration_unit: 't', limit_order: {},
+        });
+        const stream = engine.$scope.ticksService.ticks_history_promise;
+        expect(stream).toBeTruthy();
+        await stream.promise;
+        // Reproduce the genuine "Bot running, waiting for a signal" stall:
+        // a prior cleanup forgot the only subscription on the simulated
+        // socket. Without a rearm there will NEVER be another NEW_TICK.
+        const removed = await api.forgetAll('ticks');
+        expect(removed.forget_all.length).toBeGreaterThan(0);
+        const buyReady = await Promise.race([engine.watch('before'), timeout(8500)]);
+        expect(buyReady).toBe(true);
+        await Promise.race([engine.purchase('CALL'), timeout(4000)]);
+        expect(engine.contractId).toEqual(expect.any(Number));
+    }, 13000);
+
 });

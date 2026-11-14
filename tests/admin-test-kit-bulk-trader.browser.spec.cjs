@@ -206,3 +206,41 @@ test('6D: report survives Bulk Trader navigation and explicit Reset does not cha
         settled: settledContracts.length, reportReset: true, balancesPreserved: true,
     }));
 });
+
+test('presentation: Bulk Trader reports chosen market and Put/Digit Differs with shared win control', async ({ page }) => {
+    await enterAdminBulk(page, 100);
+    await page.locator('.bulk-trader__form-grid label').filter({ hasText: 'MARKET' })
+        .locator('select').selectOption('R_75');
+    await page.locator('.bulk-trader__form-grid label').filter({ hasText: 'TRADE TYPE' })
+        .locator('select').selectOption('RISE_FALL');
+    await enterBatchParameters(page, { quantity: 2, stake: 1 });
+    await expect(page.locator('.bulk-trader__buy-a')).toBeEnabled({ timeout: 15000 });
+    await page.locator('.bulk-trader__buy-a').click(); // Fall = PUT
+    await waitForClosedBatch(page, 2);
+    let contracts = await readPaper(page);
+    expect(contracts.every(c => c.contract_type === 'PUT' &&
+        c.underlying_symbol === 'R_75' && c.status === 'won')).toBe(true);
+    expect(await readBalance(page)).toBeCloseTo(10001.6, 2);
+
+    // The next order family and market must be read from the actual UI,
+    // NOT inherited from the first batch or hard-coded to Rise/Fall.
+    await page.evaluate(() => sessionStorage.setItem('yolo:local-admin-win-probability', '0'));
+    await page.locator('.bulk-trader__form-grid label').filter({ hasText: 'MARKET' })
+        .locator('select').selectOption('1HZ25V');
+    await page.locator('.bulk-trader__form-grid label').filter({ hasText: 'TRADE TYPE' })
+        .locator('select').selectOption('MATCH_DIFF');
+    await page.locator('.bulk-trader__form-grid label').filter({ hasText: 'PREDICTION' })
+        .locator('select').selectOption('3');
+    await expect(page.locator('.bulk-trader__buy-a')).toBeEnabled({ timeout: 15000 });
+    await page.locator('.bulk-trader__buy-a').click(); // Differs = DIGITDIFF
+    await waitForClosedBatch(page, 4);
+    contracts = await readPaper(page);
+    const differs = contracts.filter(c => c.contract_type === 'DIGITDIFF');
+    expect(differs).toHaveLength(2);
+    expect(differs.every(c => c.underlying_symbol === '1HZ25V' &&
+        c.barrier === '3' && c.status === 'lost')).toBe(true);
+    expect(await readBalance(page)).toBeCloseTo(9999.6, 2);
+    const reports = await readReports(page);
+    expect(reports.filter(c => c.contractType === 'Fall')).toHaveLength(2);
+    expect(reports.filter(c => c.contractType === 'Differs')).toHaveLength(2);
+});

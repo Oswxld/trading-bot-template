@@ -372,3 +372,38 @@ test('presentation: Martingale paper results update Summary, Transactions, Journ
         type: contracts[0].contract_type, balance,
     }));
 });
+
+test('presentation: Bot Builder Rise/Fall Put on selected Volatility 75 updates reported type and profit', async ({ page }) => {
+    page.on('dialog', async dialog => {
+        if (dialog.type() === 'confirm') await dialog.accept();
+        else await dialog.dismiss();
+    });
+    await launchQuickStrategy(page, /^Martingale$/, 100, {
+        symbol: 'R_75', tradetype: 'callput', type: 'PUT',
+        stake: '2', duration: '1', profit: '1', loss: '2',
+    }, 'presentation');
+    await expect.poll(async () => (await ledger(page)).filter(c => c.is_sold).length,
+        { timeout: 26000 }).toBe(1);
+    await expect(page.locator('#db-animation__run-button')).toBeVisible({ timeout: 12000 });
+    const trades = await ledger(page);
+    expect(trades).toHaveLength(1);
+    expect(trades[0]).toMatchObject({
+        underlying_symbol: 'R_75',
+        contract_type: 'PUT',
+        status: 'won',
+        buy_price: 2,
+        sell_price: 3.6,
+        profit: 1.6,
+    });
+    const selected = await page.evaluate(() => {
+        const blocks = window.Blockly.derivWorkspace.getAllBlocks(true);
+        return {
+            symbol: blocks.find(b => b.type === 'trade_definition_market')?.getFieldValue('SYMBOL_LIST'),
+            contractType: blocks.find(b => b.type === 'purchase')?.getFieldValue('PURCHASE_LIST'),
+        };
+    });
+    expect(selected).toMatchObject({ symbol: 'R_75', contractType: 'PUT' });
+    await page.locator('li#db-run-panel-tab__transactions').click();
+    await expect(page.getByTestId('dt_transactions_item').first()).toBeVisible({ timeout: 12000 });
+    console.log('Bot presentation Put on volatility 75:', JSON.stringify({ selected, profit: trades[0].profit }));
+});

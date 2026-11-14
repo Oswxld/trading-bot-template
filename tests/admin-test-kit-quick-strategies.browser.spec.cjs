@@ -314,6 +314,10 @@ test('presentation: Martingale paper results update Summary, Transactions, Journ
     await expect(stop).toBeVisible();
     await stop.click();
     await expect(page.locator('#db-animation__run-button')).toBeVisible({ timeout: 15000 });
+    // Stop can occur while a fourth contract is already purchased. All
+    // previously purchased paper contracts still settle via the market clock.
+    await expect.poll(async () => (await ledger(page)).every(contract => contract.is_sold),
+        { timeout: 18000, intervals: [350, 700, 1000] }).toBe(true);
     const contracts = await ledger(page);
     expect(contracts.length).toBeGreaterThanOrEqual(3);
     expect(contracts.slice(0, 3).map(c => c.buy_price)).toEqual([1, 2, 4]);

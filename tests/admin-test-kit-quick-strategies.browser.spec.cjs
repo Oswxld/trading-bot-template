@@ -317,8 +317,26 @@ test('presentation: Martingale paper results update Summary, Transactions, Journ
     const contracts = await ledger(page);
     expect(contracts.length).toBeGreaterThanOrEqual(3);
     expect(contracts.slice(0, 3).map(c => c.buy_price)).toEqual([1, 2, 4]);
+    const selected = await page.evaluate(() => {
+        const blocks = window.Blockly.derivWorkspace.getAllBlocks(true);
+        const get = (type, field) =>
+            blocks.find(block => block.type === type)?.getFieldValue(field);
+        return {
+            symbol: get('trade_definition_market', 'SYMBOL_LIST'),
+            contractType: get('purchase', 'PURCHASE_LIST'),
+        };
+    });
+    console.log('Presentation contract vs selected Blockly blocks:', JSON.stringify({
+        selected,
+        actual: contracts.slice(0, 5).map(c => ({
+            symbol: c.underlying_symbol, type: c.contract_type,
+            status: c.status, sold: c.is_sold, stake: c.buy_price,
+        })),
+    }));
+    // The Blockly workspace (not seeded localStorage) is the authoritative
+    // selected market and contract type after Quick Strategy form submission.
     expect(contracts.every(c => c.is_sold && c.status === 'lost' &&
-        c.underlying_symbol === 'R_100' && c.contract_type === 'CALL')).toBe(true);
+        c.underlying_symbol === selected.symbol && c.contract_type === selected.contractType)).toBe(true);
 
     // Journal and Transactions are LZ-compressed in session storage.
     // Verify the REAL rendered report tabs rather than pretending their

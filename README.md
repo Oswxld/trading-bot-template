@@ -1,5 +1,7 @@
 # Trading Bot Template
 
+<!-- Initial Vercel deploy trigger: use a client-specific production branch after setup. -->
+
 > A white-label starter for building and deploying your own visual trading bot platform on top of the Deriv trading API. Fork it, brand it, deploy it.
 
 ![Prerequisite](https://img.shields.io/badge/node-22.x%20%7C%2024.x-blue.svg)

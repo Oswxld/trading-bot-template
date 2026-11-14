@@ -50,6 +50,18 @@ const watchScope = ({ store, stopScope, passScope, passFlag }) => {
         const unsubscribe = store.subscribe(() => {
             const newState = store.getState();
 
+            // In the simulator a contract can settle on the last emitted
+            // price tick and its retained market clock can immediately stop.
+            // Waiting for ANOTHER tick before acknowledging STOP can strand
+            // Martingale forever after its first completed contract.
+            // State transitions are authoritative; only trade-entry signals
+            // require a new price tick.
+            if (api_base.api?.isAdminSimulation && newState.scope === stopScope) {
+                unsubscribe();
+                resolve(false);
+                return;
+            }
+
             const previousTick = previousTickForStore.get(store);
             if (newState.newTick === previousTick) return;
             previousTickForStore.set(store, newState.newTick);

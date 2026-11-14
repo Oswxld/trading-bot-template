@@ -42,6 +42,9 @@ async function enterTestMode(page) {
     await page.getByRole('button', { name: 'Enter simulated admin mode' }).click({ timeout: 15000 });
     await expect.poll(() => page.evaluate(() => sessionStorage.getItem('yolo:local-admin-test')),
         { timeout: 20000 }).toBe('active');
+    // This suite specifically verifies actual Blockly buy/entry conditions.
+    // Presentation mode intentionally does not execute those rules.
+    await page.evaluate(() => sessionStorage.setItem('yolo:local-admin-execution', 'engine'));
     await page.goto('/#bot_builder', { waitUntil: 'domcontentloaded' });
     await dismissDelayedBotTour(page);
     await expect.poll(() => page.evaluate(() => Boolean(window.Blockly?.derivWorkspace?.cached_xml?.main)),

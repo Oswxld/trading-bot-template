@@ -1,5 +1,6 @@
 import TradeEngine from '../index';
 import { createScope } from '../../utils/cliTools';
+import { start, purchaseSuccessful, sell } from '../state/actions';
 import { api_base } from '../../../api/api-base';
 import {
     enterAdminTest,
@@ -198,5 +199,21 @@ describe('real Bot Builder trading engine against local simulated account', () =
         expect(second.contractId).toEqual(expect.any(Number));
         expect(second.contractId).not.toBe(first.contractId);
     }, 14000);
+
+    it('exits the post-purchase watcher on settlement even without another tick', async () => {
+        const api = createAdminTestApi();
+        api_base.api = api;
+        await opened(api);
+        const engine = new TradeEngine(createScope());
+        engine.store.dispatch(start());
+        engine.store.dispatch(purchaseSuccessful());
+        expect(engine.store.getState().scope).toBe('DURING_PURCHASE');
+        const waitingForSettlement = engine.watch('during');
+        // The simulator may stop the synthetic market clock at the last
+        // contract settlement. The STOP transition itself must release
+        // the interpreter, not require one more price tick to arrive.
+        engine.store.dispatch(sell());
+        expect(await Promise.race([waitingForSettlement, timeout(800)])).toBe(false);
+    }, 4000);
 
 });

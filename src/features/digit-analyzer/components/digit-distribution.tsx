@@ -28,9 +28,19 @@ const DigitDistribution = ({ counts, totalTicks, latestDigit }: DigitDistributio
                         const percent = totalTicks > 0 ? (100 * count) / totalTicks : 0;
                         const barHeight = maxCount > 0 ? (100 * count) / maxCount : 0;
                         return (
-                            <div className='digit-analyzer__bar-column' key={digit} aria-label={`Digit ${digit}`}>
-                                <span className='digit-analyzer__bar-value'>
+                            <div
+                                className='digit-analyzer__bar-column'
+                                key={digit}
+                                aria-label={`Digit ${digit}`}
+                                title={totalTicks > 0
+                                    ? `Digit ${digit}: ${count} of ${totalTicks} ticks (${percent.toFixed(1)}%)`
+                                    : `Digit ${digit}: awaiting market data`}
+                            >
+                                <span className='digit-analyzer__bar-value digit-analyzer__bar-value--detailed'>
                                     {totalTicks > 0 ? `${percent.toFixed(1)}%` : '—'}
+                                </span>
+                                <span className='digit-analyzer__bar-value digit-analyzer__bar-value--compact' aria-hidden='true'>
+                                    {totalTicks > 0 ? `${Math.round(percent)}%` : '—'}
                                 </span>
                                 <div className='digit-analyzer__bar-track'>
                                     <span
@@ -49,7 +59,7 @@ const DigitDistribution = ({ counts, totalTicks, latestDigit }: DigitDistributio
             </div>
             {totalTicks === 0 && <p className='digit-analyzer__panel-empty'>Awaiting market data</p>}
             <div className='digit-analyzer__panel-footnote'>
-                Bars are scaled to the most frequent digit. Percentages use the actual tick count.
+                Bars are scaled to the most frequent digit. The highlighted bar marks the latest digit. Percentages use the actual tick count.
             </div>
         </section>
     );

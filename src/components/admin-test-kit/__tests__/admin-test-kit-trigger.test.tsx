@@ -21,7 +21,7 @@ jest.mock('@/services/admin-test-kit', () => ({
     TEST_REAL_ID: 'CR_ADMIN_TEST',
 }));
 
-describe('Admin Test Kit footer secret trigger', () => {
+describe('Admin Test Kit long-press trigger and password entry', () => {
     beforeEach(() => jest.useFakeTimers());
     afterEach(() => {
         const { isAdminTestActive } = require('@/services/admin-test-kit');
@@ -70,6 +70,27 @@ describe('Admin Test Kit footer secret trigger', () => {
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
         act(() => jest.advanceTimersByTime(1));
         expect(screen.getByRole('dialog', { name: 'Local Admin Test Kit' })).toBeInTheDocument();
+    });
+
+    it('requires the correct 4005 password before entering simulated mode', () => {
+        const { enterAdminTest } = require('@/services/admin-test-kit');
+        enterAdminTest.mockReset();
+        enterAdminTest.mockReturnValue(false); // Avoid triggering jsdom navigation in this test.
+        render(<AdminTestKit />);
+        const dot = screen.getByRole('button', { name: /press and hold for 3 seconds/i });
+        fireEvent.pointerDown(dot, { pointerType: 'touch' });
+        act(() => jest.advanceTimersByTime(3000));
+
+        const passwordInput = screen.getByLabelText('Admin password');
+        const enterButton = screen.getByRole('button', { name: /enter simulated admin mode/i });
+        fireEvent.change(passwordInput, { target: { value: '1234' } });
+        fireEvent.click(enterButton);
+        expect(enterAdminTest).not.toHaveBeenCalled();
+        expect(screen.getByRole('alert')).toHaveTextContent('Incorrect admin test password.');
+
+        fireEvent.change(passwordInput, { target: { value: '4005' } });
+        fireEvent.click(enterButton);
+        expect(enterAdminTest).toHaveBeenCalledTimes(1);
     });
 
     it('does not open on a short click or a released hold', () => {

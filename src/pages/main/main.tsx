@@ -46,6 +46,7 @@ import './main.scss';
 
 const ChartWrapper = lazy(() => import('../chart/chart-wrapper'));
 const BulkTrader = lazy(() => import('../bulk-trader/bulk-trader'));
+const TradingBots = lazy(() => import('../trading-bots'));
 
 const Tutorial = lazy(() => import('../tutorials'));
 
@@ -80,7 +81,7 @@ const AppWrapper = observer(() => {
     const { clear } = summary_card;
     const { DASHBOARD, BOT_BUILDER } = DBOT_TABS;
     const init_render = React.useRef(true);
-    const hash = ['dashboard', 'bot_builder', 'chart', 'bulk_trader', 'tutorial'];
+    const hash = ['dashboard', 'bot_builder', 'chart', 'bulk_trader', 'trading_bots', 'tutorial'];
     const { isDesktop } = useDevice();
     const location = useLocation();
     const navigate = useNavigate();
@@ -446,6 +447,19 @@ const AppWrapper = observer(() => {
                             <div
                                 label={
                                     <>
+                                        <span aria-hidden='true' style={{ fontSize: '18px', lineHeight: 1 }}>🤖</span>
+                                        <Localize i18n_default_text='Trading Bots' />
+                                    </>
+                                }
+                                id='id-trading-bots'
+                            >
+                                <Suspense fallback={<ChunkLoader message={localize('Loading trading bots...')} />}>
+                                    <TradingBots />
+                                </Suspense>
+                            </div>
+                            <div
+                                label={
+                                    <>
                                         <LegacyGuide1pxIcon
                                             height='16px'
                                             width='16px'
@@ -473,7 +487,7 @@ const AppWrapper = observer(() => {
                 </div>
             </div>
             <DesktopWrapper>
-                {active_tab !== DBOT_TABS.BULK_TRADER && (
+                {![DBOT_TABS.BULK_TRADER, DBOT_TABS.TRADING_BOTS].includes(active_tab) && (
                     <div className='main__run-strategy-wrapper'>
                         <RunStrategy />
                         <RunPanel />
@@ -483,7 +497,7 @@ const AppWrapper = observer(() => {
                 <TradingViewModal />
             </DesktopWrapper>
             <MobileWrapper>
-                {active_tab !== DBOT_TABS.BULK_TRADER && !is_open && <RunPanel />}
+                {![DBOT_TABS.BULK_TRADER, DBOT_TABS.TRADING_BOTS].includes(active_tab) && !is_open && <RunPanel />}
             </MobileWrapper>
             <Dialog
                 cancel_button_text={cancel_button_text || localize('Cancel')}

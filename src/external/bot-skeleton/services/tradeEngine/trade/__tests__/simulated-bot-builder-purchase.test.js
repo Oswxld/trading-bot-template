@@ -151,4 +151,52 @@ describe('real Bot Builder trading engine against local simulated account', () =
             observer.unsubscribe();
         }
     }, 14000);
+
+    it('does not starve a new Martingale watch when an older engine receives the same tick first', async () => {
+        const api = createAdminTestApi();
+        api_base.api = api;
+        api_base.account_info = { loginid: TEST_DEMO_ID, currency: 'USD' };
+        api_base.token = TEST_DEMO_ID;
+        await opened(api);
+
+        const first = new TradeEngine(createScope());
+        const second = new TradeEngine(createScope());
+        const options = {
+            symbol: 'R_100',
+            contractTypes: ['CALL', 'PUT'],
+            shouldRestartOnError: false,
+            timeMachineEnabled: false,
+        };
+        const tradeOptions = {
+            amount: 1,
+            basis: 'stake',
+            currency: 'USD',
+            contractTypes: ['CALL', 'PUT'],
+            duration: 1,
+            duration_unit: 't',
+            limit_order: {},
+        };
+        // Simulates a stale old engine still watching when a newly launched
+        // Martingale subscribes on the same market. Both see the SAME epoch.
+        first.init(TEST_DEMO_ID, options);
+        second.init(TEST_DEMO_ID, options);
+        first.start(tradeOptions);
+        second.start(tradeOptions);
+
+        const [firstReady, secondReady] = await Promise.race([
+            Promise.all([first.watch('before'), second.watch('before')]),
+            timeout(5000),
+        ]);
+        expect(firstReady).toBe(true);
+        expect(secondReady).toBe(true);
+
+        await Promise.race([
+            Promise.all([first.purchase('CALL'), second.purchase('CALL')]),
+            timeout(5000),
+        ]);
+        expect(first.contractId).toEqual(expect.any(Number));
+        expect(second.contractId).toEqual(expect.any(Number));
+        expect(second.contractId).not.toBe(first.contractId);
+    }, 14000);
+
 });

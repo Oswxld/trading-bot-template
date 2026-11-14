@@ -51,6 +51,7 @@ interface IQuickStrategyStore {
 export default class QuickStrategyStore implements IQuickStrategyStore {
     root_store: RootStore;
     is_open = false;
+    demo_form_data: TFormData | null = null;
     selected_strategy = 'MARTINGALE';
     selected_strategy_for_notofy = '';
     form_data: TFormData = {
@@ -153,6 +154,10 @@ export default class QuickStrategyStore implements IQuickStrategyStore {
     };
 
     onSubmit = async (data: TFormData) => {
+        // Snapshot the submitted Quick Strategy parameters for localhost-only
+        // presentation mode; the loaded Blockly blocks remain authoritative
+        // for the selected market and purchase contract.
+        this.demo_form_data = { ...data };
         const { contracts_for } = ApiHelpers?.instance ?? {};
         if (!contracts_for) return;
         const market = await contracts_for.getMarketBySymbol(data.symbol);

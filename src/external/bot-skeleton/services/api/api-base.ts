@@ -71,6 +71,7 @@ class APIBase {
     reconnection_attempts: number = 0;
     private reconnecting_local_simulator = false;
     private local_simulation_recovery: Promise<boolean> | null = null;
+    private local_simulation_authorization: Promise<any> | null = null;
 
     // Constants for timeouts - extracted magic numbers for better maintainability
     private readonly ACTIVE_SYMBOLS_TIMEOUT_MS = 10000; // 10 seconds
@@ -185,6 +186,14 @@ class APIBase {
             }
 
             this.api = await generateDerivApiInstance();
+            if (isAdminTestActive()) {
+                // A new local connection has no subscriptions or authorization.
+                // Never let stale state from the replaced simulator satisfy
+                // isAdminTestSessionReady() before reauthorization.
+                this.is_authorized = false;
+                this.account_info = {};
+                setIsAuthorized(false);
+            }
 
             this.api?.connection.addEventListener('open', this.onsocketopen.bind(this));
             this.api?.connection.addEventListener('close', this.onsocketclose.bind(this));
@@ -332,6 +341,22 @@ class APIBase {
     };
 
     async authorizeAndSubscribe() {
+        if (!isAdminTestActive()) return this.authorizeAndSubscribeInner();
+        // Never authorize an Admin Test Kit account on a genuine broker socket.
+        if (!isAdminTestTransportReady(this)) return;
+        // onsocketopen(), session recovery, and Run can all request local
+        // authorization together. Send a single balance/subscription handshake.
+        if (this.local_simulation_authorization) return this.local_simulation_authorization;
+        const pending = this.authorizeAndSubscribeInner();
+        this.local_simulation_authorization = pending;
+        try {
+            return await pending;
+        } finally {
+            if (this.local_simulation_authorization === pending) this.local_simulation_authorization = null;
+        }
+    }
+
+    private async authorizeAndSubscribeInner() {
         if (!this.api) return;
 
         this.account_id = getAccountId() || '';

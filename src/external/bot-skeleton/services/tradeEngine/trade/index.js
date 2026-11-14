@@ -33,10 +33,14 @@ const watchDuring = store =>
         passFlag: 'openContract',
     });
 
-/* The watchScope function is called randomly and resets the prevTick
- * which leads to the same problem we try to solve. So prevTick is isolated
+/*
+ * Each interpreter owns its own Redux trading store. A single module-global
+ * previous tick meant that the first store processing an epoch would consume
+ * it for EVERY other store, leaving a newly started Martingale waiting forever
+ * for a buy signal when an older interpreter/listener was still attached.
+ * Track the last processed tick per store, not across separate bot sessions.
  */
-let prevTick;
+const previousTickForStore = new WeakMap();
 const watchScope = ({ store, stopScope, passScope, passFlag }) => {
     // in case watch is called after stop is fired
     if (store.getState().scope === stopScope) {
@@ -46,8 +50,21 @@ const watchScope = ({ store, stopScope, passScope, passFlag }) => {
         const unsubscribe = store.subscribe(() => {
             const newState = store.getState();
 
-            if (newState.newTick === prevTick) return;
-            prevTick = newState.newTick;
+            // In the simulator a contract can settle on the last emitted
+            // price tick and its retained market clock can immediately stop.
+            // Waiting for ANOTHER tick before acknowledging STOP can strand
+            // Martingale forever after its first completed contract.
+            // State transitions are authoritative; only trade-entry signals
+            // require a new price tick.
+            if (api_base.api?.isAdminSimulation && newState.scope === stopScope) {
+                unsubscribe();
+                resolve(false);
+                return;
+            }
+
+            const previousTick = previousTickForStore.get(store);
+            if (newState.newTick === previousTick) return;
+            previousTickForStore.set(store, newState.newTick);
 
             if (newState.scope === passScope && newState[passFlag]) {
                 unsubscribe();
@@ -145,10 +162,44 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
     }
 
     watch(watchName) {
-        if (watchName === 'before') {
-            return watchBefore(this.store);
-        }
-        return watchDuring(this.store);
+        const pending = watchName === 'before'
+            ? watchBefore(this.store)
+            : watchDuring(this.store);
+
+        if (watchName !== 'before' || !api_base.api?.isAdminSimulation) return pending;
+
+        // If a previous run's cleanup or a simulated reconnection removed
+        // the tick subscription, the interpreter used to wait for a buy
+        // signal forever. Only in local Admin Test Mode, detect a genuinely
+        // idle feed and reattach the EXISTING price-driven purchase logic.
+        // Never manufacture a buy, bypass Blockly conditions, or alter the
+        // live Deriv API path.
+        let previousEpoch = this.store.getState().newTick;
+        let recovering = false;
+        const recoveryTimer = setInterval(() => {
+            if (this.$scope.stopped) {
+                clearInterval(recoveryTimer);
+                return;
+            }
+            const state = this.store.getState();
+            if (state.newTick !== previousEpoch) {
+                previousEpoch = state.newTick;
+                return;
+            }
+            if (state.scope !== constants.BEFORE_PURCHASE ||
+                recovering || !this.symbol || !api_base.api?.isAdminSimulation ||
+                api_base.api.connection?.readyState !== 1) {
+                return;
+            }
+            recovering = true;
+            const ticksService = this.$scope.ticksService;
+            ticksService.observe();
+            void ticksService.requestTicks({ symbol: this.symbol, style: 'ticks' })
+                .catch(error => globalObserver.emit('Error', error))
+                .finally(() => { recovering = false; });
+        }, 4000);
+
+        return pending.finally(() => clearInterval(recoveryTimer));
     }
 
     makeDirectPurchaseDecision() {

@@ -4,6 +4,7 @@ import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import {
     createAdminTestApi,
     enterAdminTest,
+    setAdminTestExecutionMode,
     exitAdminTest,
     switchAdminTestAccount,
     TEST_DEMO_ID,
@@ -46,7 +47,7 @@ const makePanel = () => {
     const journal = { onError: jest.fn(), journal_filters: [] };
     const root: any = {
         dbot,
-        summary_card: { clear: jest.fn(), onBotContractEvent: jest.fn() },
+        summary_card: { clear: jest.fn(), clearContractUpdateConfigValues: jest.fn(), onBotContractEvent: jest.fn() },
         transactions: { onBotContractEvent: jest.fn() },
         journal,
     };
@@ -77,6 +78,7 @@ describe('Run Bot button: simulated accounts never trigger OAuth login', () => {
     for (const [label, id] of [['Demo', TEST_DEMO_ID], ['Real', TEST_REAL_ID]] as const) {
         it(`starts a bot on simulated ${label} without a Deriv OAuth login popup`, async () => {
             enterAdminTest();
+        setAdminTestExecutionMode('engine');
             if (id === TEST_REAL_ID) switchAdminTestAccount(id);
             const sim = createAdminTestApi();
             await opened(sim);
@@ -113,6 +115,7 @@ describe('Run Bot button: simulated accounts never trigger OAuth login', () => {
 
     it('refuses simulated trading through a non-simulated socket, even if it appears authorized', async () => {
         enterAdminTest();
+        setAdminTestExecutionMode('engine');
         api_base.api = { connection: { readyState: 1 } } as any;
         api_base.is_authorized = true;
         api_base.account_id = TEST_DEMO_ID;
@@ -129,6 +132,7 @@ describe('Run Bot button: simulated accounts never trigger OAuth login', () => {
 
     it('recovers a previously closed simulated connection before starting Bot Builder', async () => {
         enterAdminTest();
+        setAdminTestExecutionMode('engine');
         switchAdminTestAccount(TEST_REAL_ID);
         const { store, client, dbot } = makePanel();
         (api_base.ensureAdminTestSession as jest.Mock).mockImplementation(async () => {
@@ -149,6 +153,28 @@ describe('Run Bot button: simulated accounts never trigger OAuth login', () => {
         expect(dbot.initializeInterpreter).toHaveBeenCalledTimes(1);
         expect(dbot.runBot).toHaveBeenCalledTimes(1);
         expect(store.is_dialog_open).toBe(false);
+        store.disposeReactionsFn();
+    });
+
+    it('does not change a running simulated bot to stopped when tick history becomes ready', () => {
+        enterAdminTest();
+        setAdminTestExecutionMode('engine');
+        const { store } = makePanel();
+        store.setIsRunning(true);
+        store.onBotReadyEvent();
+        expect(store.is_running).toBe(true);
+        expect(botObserver.unregisterAll).toHaveBeenCalledWith('bot.bot_ready');
+        store.disposeReactionsFn();
+    });
+
+    it('resets simulated Run/Stop state when the interpreter actually terminates', () => {
+        enterAdminTest();
+        setAdminTestExecutionMode('engine');
+        const { store } = makePanel();
+        store.setIsRunning(true);
+        store.onBotStopEvent();
+        expect(store.is_running).toBe(false);
+        expect(store.contract_stage).toBe(0);
         store.disposeReactionsFn();
     });
 

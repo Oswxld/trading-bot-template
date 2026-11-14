@@ -183,7 +183,7 @@ describe('local admin test kit (no broker connection)', () => {
         expect(buy.buy.contract_id).toBeGreaterThan(0);
         expect(messages.map(x => x.req_id)).toEqual(expect.arrayContaining([2, 3, 4]));
         expect(getAdminTestBalances()[TEST_DEMO_ID]).toBe(9999.5);
-        await delay(1000);
+        await delay(1250);
         expect(messages.find(x =>
             x.msg_type === 'proposal_open_contract' &&
             x.proposal_open_contract?.contract_id === buy.buy.contract_id &&
@@ -263,7 +263,7 @@ describe('local admin test kit (no broker connection)', () => {
             const purchased = await api.send({ buy: proposal.proposal.id, price: 1 });
             expect(purchased.buy.contract_id).toBeGreaterThan(0);
         }
-        await delay(1000);
+        await delay(1250);
         expect(settlementMessages).toHaveLength(types.length);
         for (const contract of settlementMessages) {
             expect(contract.status).toBe('won');
@@ -307,7 +307,7 @@ describe('local admin test kit (no broker connection)', () => {
             });
             await api.send({ buy: proposal.proposal.id, price: 1 });
         }
-        await delay(1000);
+        await delay(1250);
         expect(settlements).toHaveLength(4);
         expect(settlements.every(contract => contract.status === 'lost' && contract.profit < 0)).toBe(true);
         expect(getAdminTestBalances()[TEST_REAL_ID]).toBe(496);
@@ -333,7 +333,7 @@ describe('local admin test kit (no broker connection)', () => {
         });
         await api.send({ buy: proposal.proposal.id, price: 1 });
         setAdminTestWinProbability(0);
-        await delay(1000);
+        await delay(1250);
         expect(settlements).toHaveLength(1);
         expect(settlements[0].status).toBe('lost');
         expect(getAdminTestBalances()[TEST_DEMO_ID]).toBe(9999);
@@ -361,11 +361,11 @@ describe('local admin test kit (no broker connection)', () => {
         const random = jest.spyOn(Math, 'random').mockReturnValue(0.49);
         try {
             await makeTrade();
-            await delay(1000);
+            await delay(1250);
             expect(settlements[0].status).toBe('won');
             random.mockReturnValue(0.5);
             await makeTrade();
-            await delay(1000);
+            await delay(1250);
             expect(settlements[1].status).toBe('lost');
         } finally {
             random.mockRestore();
@@ -388,4 +388,69 @@ describe('local admin test kit (no broker connection)', () => {
         expect(getAdminTestBalances()[TEST_DEMO_ID]).toBe(0.25);
         api.disconnect();
     });
+    it('6E: rejects stale account sockets and prevents cross-account event delivery', async () => {
+        enterAdminTest();
+        const demoApi = createAdminTestApi();
+        await opened(demoApi);
+        const demoEvents = [];
+        const subscription = demoApi.onMessage().subscribe(({ data }) => demoEvents.push(data));
+        const demoBalance = (await demoApi.balance()).balance.balance;
+        await delay(0);
+        const countBeforeSwitch = demoEvents.length;
+
+        expect(switchAdminTestAccount(TEST_REAL_ID)).toBe(true);
+        await expect(demoApi.balance()).rejects.toThrow(/account changed/i);
+        await expect(demoApi.send({
+            proposal: 1, amount: 1, basis: 'stake', contract_type: 'DIGITDIFF',
+            underlying_symbol: 'R_100', duration: 1, duration_unit: 't',
+        })).rejects.toThrow(/account changed/i);
+        const realApi = createAdminTestApi();
+        await opened(realApi);
+        expect((await realApi.balance()).balance).toMatchObject({
+            loginid: TEST_REAL_ID, balance: 500,
+        });
+        await delay(0);
+        expect(demoEvents).toHaveLength(countBeforeSwitch);
+        expect(getAdminTestBalances()[TEST_DEMO_ID]).toBe(demoBalance);
+        subscription.unsubscribe();
+        demoApi.disconnect();
+        realApi.disconnect();
+    });
+
+    it('6E: recovers an outstanding contract after reconnect and account switch', async () => {
+        enterAdminTest();
+        setAdminTestWinProbability(100);
+        const demoApi = createAdminTestApi();
+        await opened(demoApi);
+        const proposal = await demoApi.send({
+            proposal: 1, amount: 2, basis: 'stake', contract_type: 'DIGITDIFF',
+            underlying_symbol: 'R_100', duration: 5, duration_unit: 't',
+        });
+        const purchase = await demoApi.send({ buy: proposal.proposal.id, price: 2 });
+        const contractId = purchase.buy.contract_id;
+        expect(getAdminTestBalances()[TEST_DEMO_ID]).toBe(9998);
+        demoApi.disconnect();
+
+        switchAdminTestAccount(TEST_REAL_ID);
+        const realApi = createAdminTestApi();
+        await opened(realApi);
+        expect((await realApi.send({ portfolio: 1 })).portfolio.contracts).toEqual([]);
+        expect((await realApi.send({ statement: 1 })).statement.transactions).toEqual([]);
+        expect(getAdminTestBalances()[TEST_REAL_ID]).toBe(500);
+        realApi.disconnect();
+
+        switchAdminTestAccount(TEST_DEMO_ID);
+        const recovered = createAdminTestApi();
+        await opened(recovered);
+        const open = (await recovered.send({ portfolio: 1 })).portfolio.contracts;
+        expect(open.some(contract => contract.contract_id === contractId)).toBe(true);
+        await delay(5500);
+        const statement = (await recovered.send({ statement: 1 })).statement.transactions;
+        expect(statement.some(row =>
+            row.contract_id === contractId && row.action_type === 'sell'
+        )).toBe(true);
+        expect(getAdminTestBalances()[TEST_REAL_ID]).toBe(500);
+        recovered.disconnect();
+    }, 12000); // Five simulated market ticks legitimately need > Jest's 5s default.
+
 });

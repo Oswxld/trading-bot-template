@@ -58,6 +58,30 @@ describe('Bot Builder: simulated Real reconnect never logs out local account', (
         }
     });
 
+    it('coalesces concurrent simulated authorization requests into one handshake', async () => {
+        const sim = createAdminTestApi();
+        await new Promise<void>(resolve => {
+            if (sim.connection.readyState === 1) return resolve();
+            sim.connection.addEventListener('open', () => resolve());
+        });
+        api_base.api = sim as any;
+        let release = () => {};
+        const gate = new Promise<void>(resolve => { release = resolve; });
+        const handshake = jest.spyOn(api_base as any, 'authorizeAndSubscribeInner')
+            .mockImplementation(() => gate);
+        try {
+            const first = api_base.authorizeAndSubscribe();
+            const second = api_base.authorizeAndSubscribe();
+            expect(handshake).toHaveBeenCalledTimes(1);
+            release();
+            await Promise.all([first, second]);
+        } finally {
+            release();
+            handshake.mockRestore();
+            sim.disconnect();
+        }
+    });
+
     it('keeps the header account and reconnects only once across repeated close/focus events', async () => {
         for (let i = 0; i < 8; i++) api_base.reconnectIfNotConnected();
         expect(api_base.init).toHaveBeenCalledTimes(1);

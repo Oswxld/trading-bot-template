@@ -6,6 +6,7 @@ import Text from '@/components/shared_ui/text';
 import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import { useApiBase } from '@/hooks/useApiBase';
 import { useStore } from '@/hooks/useStore';
+import { isAdminTestActive, switchAdminTestAccount } from '@/services/admin-test-kit';
 import { isDemoAccount } from '@/utils/account-helpers';
 import { Localize } from '@deriv-com/translations';
 import { TAccountSwitcher } from './common/types';
@@ -45,6 +46,17 @@ const AccountSwitcher = observer(({ activeAccount }: TAccountSwitcher) => {
 
     const handleAccountSelect = useCallback(
         (loginid: string) => {
+            if (isAdminTestActive()) {
+                // The ordinary account switcher uses OAuth-backed WebSocket
+                // regeneration, intentionally disabled in local test mode.
+                // Recreate a fresh account-bound simulator instead of leaving
+                // the previous account's socket and reports on screen.
+                if (switchAdminTestAccount(loginid)) {
+                    setIsOpen(false);
+                    window.location.reload();
+                }
+                return;
+            }
             localStorage.setItem('active_loginid', loginid);
             client?.checkAndRegenerateWebSocket();
             setIsOpen(false);

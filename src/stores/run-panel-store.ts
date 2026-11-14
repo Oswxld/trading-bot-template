@@ -7,7 +7,8 @@ import { run_panel } from '@/constants/run-panel';
 import { ErrorTypes, MessageTypes, observer, unrecoverable_errors } from '@/external/bot-skeleton';
 import { getSelectedTradeType } from '@/external/bot-skeleton/scratch/utils';
 import { api_base } from '@/external/bot-skeleton/services/api/api-base';
-import { isAdminTestActive, isAdminTestTransportReady, isAdminTestSessionReady } from '@/services/admin-test-kit';
+import { isAdminTestActive, isAdminTestTransportReady, isAdminTestSessionReady, getAdminTestExecutionMode } from '@/services/admin-test-kit';
+import { createAdminTestDemoRunner } from '@/services/admin-test-demonstration';
 import { handleBackendError, isBackendError } from '@/utils/error-handler';
 // import { journalError, switch_account_notification } from '@/utils/bot-notifications';
 import GTM from '@/utils/gtm';
@@ -112,6 +113,7 @@ export default class RunPanelStore {
     is_contract_buying_in_progress = false;
 
     run_id = '';
+    demo_runner: { start: () => Promise<void>; stop: () => void } | null = null;
     onOkButtonClick: (() => void) | null = null;
     onCancelButtonClick: (() => void) | null = null;
 
@@ -213,6 +215,7 @@ export default class RunPanelStore {
         if (is_ios || isSafari()) this.preloadAudio();
 
         const is_simulated = isAdminTestActive();
+        const is_presentation = is_simulated && getAdminTestExecutionMode() === 'presentation';
         // Keep the original live Run-button path unchanged. In simulation,
         // rebuilding an old interpreter emits bot.stop; register the new
         // run's event listeners AFTER that teardown, not before it.
@@ -222,11 +225,25 @@ export default class RunPanelStore {
             if (!is_simulated) this.unregisterBotListeners();
             return;
         }
-        if (is_simulated) {
-            // Always rebuild the Blockly interpreter against the CURRENT
-            // simulator socket before Run. Its TicksService/TradeEngine
-            // listeners otherwise remain bound to a previously closed socket
-            // after tab navigation or a local reconnection.
+        if (is_presentation) {
+            // Presentation is an explicitly labelled, localhost-only paper
+            // executor. It shares the synthetic API/ledger with Bulk Trader
+            // but never enters the real Blockly interpreter or Deriv socket.
+            try {
+                const { quick_strategy } = this.root_store;
+                this.demo_runner = createAdminTestDemoRunner({
+                    workspace: this.dbot.workspace,
+                    formData: quick_strategy.demo_form_data || {},
+                    strategy: quick_strategy.selected_strategy_for_notofy,
+                    onFinished: () => { this.demo_runner = null; },
+                });
+            } catch (error) {
+                this.showErrorMessage((error as Error).message);
+                return;
+            }
+            this.registerBotListeners();
+        } else if (is_simulated) {
+            // Engine-test mode still runs actual compiled Blockly logic.
             try {
                 await this.dbot.initializeInterpreter();
             } catch (error) {
@@ -249,7 +266,14 @@ export default class RunPanelStore {
 
             summary_card.clear();
             this.setContractStage(contract_stages.STARTING);
-            this.dbot.runBot();
+            if (is_presentation) {
+                void this.demo_runner?.start().catch(error => {
+                    this.showErrorMessage((error as Error).message || 'Presentation simulation failed to start.');
+                    this.demo_runner?.stop();
+                });
+            } else {
+                this.dbot.runBot();
+            }
         });
         this.setShowBotStopMessage(false);
     };
@@ -283,7 +307,8 @@ export default class RunPanelStore {
     stopBot = () => {
         const { ui } = this.core;
 
-        this.dbot.stopBot();
+        if (this.demo_runner) this.demo_runner.stop();
+        else this.dbot.stopBot();
 
         ui.setPromptHandler(false);
 
@@ -354,7 +379,8 @@ export default class RunPanelStore {
         const { toggleStopBotDialog } = quick_strategy;
 
         ui.setPromptHandler(false);
-        this.dbot.terminateBot();
+        if (this.demo_runner) this.demo_runner.stop();
+        else this.dbot.terminateBot();
         this.onCloseDialog();
         summary_card.clear();
         toggleStopBotDialog();
@@ -383,7 +409,8 @@ export default class RunPanelStore {
 
         this.onOkButtonClick = () => {
             ui.setPromptHandler(false);
-            this.dbot.terminateBot();
+            if (this.demo_runner) this.demo_runner.stop();
+            else this.dbot.terminateBot();
             if (this.timer) {
                 clearInterval(this.timer);
             }
@@ -563,6 +590,7 @@ export default class RunPanelStore {
     };
 
     onBotStopEvent = () => {
+        const normal_simulated_stop = isAdminTestActive() && !this.error_type;
         const { summary_card } = this.root_store;
         const { ui } = this.core;
         const indicateBotStopped = () => {
@@ -600,6 +628,12 @@ export default class RunPanelStore {
             this.unregisterBotListeners();
         }
 
+        // A normal interpreter termination in the local simulator must also
+        // reset the Run/Stop state. The existing live Deriv behavior is intact.
+        if (normal_simulated_stop) {
+            this.setIsRunning(false);
+            if (!this.has_open_contract) indicateBotStopped();
+        }
         this.setHasOpenContract(false);
 
         summary_card.clearContractUpdateConfigValues();
@@ -610,7 +644,10 @@ export default class RunPanelStore {
     };
 
     onBotReadyEvent = () => {
-        this.setIsRunning(false);
+        // Tick-monitor readiness is NOT a stop signal. During an Admin Test
+        // Kit run, watchTicks may complete after the Run button was pressed.
+        // Keep live Deriv's original readiness handling unchanged.
+        if (!isAdminTestActive() || !this.is_running) this.setIsRunning(false);
         observer.unregisterAll('bot.bot_ready');
     };
 
@@ -880,6 +917,8 @@ export default class RunPanelStore {
     };
 
     onUnmount = () => {
+        // Unmounting a client demo must not place any further paper buys.
+        this.demo_runner?.stop();
         const { journal, summary_card, transactions } = this.root_store;
 
         if (!this.is_running) {

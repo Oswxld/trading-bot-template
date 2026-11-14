@@ -254,14 +254,10 @@ const CONTRACT_TYPES = ['DIGITDIFF', 'DIGITMATCH', 'DIGITOVER', 'DIGITUNDER', 'D
 // while the adjustable probability controls whether each trade wins.
 const simulatedPayoutFactor = (type, barrier, growthRate = 0.03, duration = 1) => {
     if (type === 'DIGITMATCH') return 8.4;
-    if (type === 'DIGITDIFF') return 1.08;
-    if (type === 'DIGITEVEN' || type === 'DIGITODD') return 1.9;
-    if (type === 'DIGITOVER' || type === 'DIGITUNDER') {
-        const prediction = Number(barrier);
-        const matchingDigits = type === 'DIGITOVER' ? 9 - prediction : prediction;
-        return matchingDigits >= 1 && matchingDigits <= 9 ? Number((9 / matchingDigits).toFixed(2)) : null;
-    }
     if (type === 'ACCU') return Number(Math.pow(1 + Number(growthRate || 0.03), duration).toFixed(4));
+    // Preserve the existing test kit's uniform illustrative 80% payout for
+    // other contracts; the selected family/market is still represented in
+    // the contract metadata and synthetic entry/exit ticks.
     return 1.8;
 };
 const SYMBOLS = [

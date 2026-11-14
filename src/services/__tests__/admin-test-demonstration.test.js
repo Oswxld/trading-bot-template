@@ -2,7 +2,7 @@ import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import { observer } from '@/external/bot-skeleton/utils/observer';
 import {
     createAdminTestApi, enterAdminTest, exitAdminTest, getAdminTestBalances,
-    getAdminTestContracts, setAdminTestWinProbability, TEST_DEMO_ID,
+    getAdminTestContracts, setAdminTestWinProbability, switchAdminTestAccount, TEST_DEMO_ID, TEST_REAL_ID,
 } from '../admin-test-kit';
 import { createAdminTestDemoRunner, readAdminDemoConfig, nextAdminDemoStake } from '../admin-test-demonstration';
 
@@ -124,4 +124,30 @@ describe('local-only Bot Builder presentation runner', () => {
         expect(nextAdminDemoStake(config, { stake: 2, seriesProfit: -2 }, false)).toBe(3);
         expect(nextAdminDemoStake(config, { stake: 3, seriesProfit: 1 }, true)).toBe(1);
     });
+
+    it('keeps the simulated Real-labelled account ledger separate from Demo', async () => {
+        api.disconnect();
+        switchAdminTestAccount(TEST_REAL_ID);
+        api = createAdminTestApi();
+        await ready(api);
+        api_base.api = api;
+        api_base.account_id = TEST_REAL_ID;
+        api_base.account_info = { loginid: TEST_REAL_ID };
+        setAdminTestWinProbability(0);
+        const runner = createAdminTestDemoRunner({
+            workspace: workspace('R_50', 'PUT', 2),
+            formData: { stake: '2', size: '2', loss: '1', profit: '1000' },
+            strategy: 'MARTINGALE',
+        });
+        await runner.start();
+        const paper = getAdminTestContracts(TEST_REAL_ID, { source: 'bot_builder' });
+        expect(paper).toHaveLength(1);
+        expect(paper[0]).toMatchObject({
+            underlying_symbol: 'R_50', contract_type: 'PUT', buy_price: 2,
+            status: 'lost', profit: -2,
+        });
+        expect(getAdminTestBalances()[TEST_REAL_ID]).toBe(498);
+        expect(getAdminTestBalances()[TEST_DEMO_ID]).toBe(10000);
+    }, 9000);
+
 });

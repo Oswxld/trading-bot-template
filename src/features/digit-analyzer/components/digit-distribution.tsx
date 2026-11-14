@@ -22,7 +22,7 @@ const DigitDistribution = ({ counts, totalTicks, latestDigit }: DigitDistributio
                 <span className='digit-analyzer__panel-chip'>Digits 0–9</span>
             </div>
             <div className='digit-analyzer__distribution-scroll'>
-                <div className='digit-analyzer__distribution' aria-label='Last-digit frequency chart'>
+                <div className='digit-analyzer__distribution' role='group' aria-label='Last-digit frequency chart'>
                     {DIGITS.map(digit => {
                         const count = counts[digit] ?? 0;
                         const percent = totalTicks > 0 ? (100 * count) / totalTicks : 0;
@@ -31,7 +31,10 @@ const DigitDistribution = ({ counts, totalTicks, latestDigit }: DigitDistributio
                             <div
                                 className='digit-analyzer__bar-column'
                                 key={digit}
-                                aria-label={`Digit ${digit}`}
+                                role='group'
+                                aria-label={totalTicks > 0
+                                    ? `Digit ${digit}: ${count} of ${totalTicks} ticks (${percent.toFixed(1)}%)`
+                                    : `Digit ${digit}: awaiting market data`}
                                 title={totalTicks > 0
                                     ? `Digit ${digit}: ${count} of ${totalTicks} ticks (${percent.toFixed(1)}%)`
                                     : `Digit ${digit}: awaiting market data`}
@@ -59,7 +62,7 @@ const DigitDistribution = ({ counts, totalTicks, latestDigit }: DigitDistributio
             </div>
             {totalTicks === 0 && <p className='digit-analyzer__panel-empty'>Awaiting market data</p>}
             <div className='digit-analyzer__panel-footnote'>
-                Bars are scaled to the most frequent digit. The highlighted bar marks the latest digit. Percentages use the actual tick count.
+                Bars are scaled to the most frequent digit. The highlighted bar marks the latest digit. Phone labels are rounded; full percentages are available for each digit.
             </div>
         </section>
     );

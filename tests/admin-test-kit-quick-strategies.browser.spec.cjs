@@ -31,11 +31,14 @@ async function enterLocalMode(page) {
     await page.getByRole('button', { name: 'Enter simulated admin mode' }).click({ timeout: 15000 });
     await expect.poll(() => page.evaluate(() => sessionStorage.getItem('yolo:local-admin-test')),
         { timeout: 20000 }).toBe('active');
+    // Existing 6B cases are interpreter regression tests, not presentation.
+    await page.evaluate(() => sessionStorage.setItem('yolo:local-admin-execution', 'engine'));
 }
 
-async function launchQuickStrategy(page, matcher, winProbability = 0, settingsOverrides = {}) {
+async function launchQuickStrategy(page, matcher, winProbability = 0, settingsOverrides = {}, executionMode = 'engine') {
     await enterLocalMode(page);
-    await page.evaluate(({ winProbability, settingsOverrides }) => {
+    await page.evaluate(({ winProbability, settingsOverrides, executionMode }) => {
+        sessionStorage.setItem('yolo:local-admin-execution', executionMode);
         localStorage.setItem('qs-fields', JSON.stringify({
             symbol: 'R_100', tradetype: 'callput', type: 'CALL',
             durationtype: 't', duration: '1', stake: '1',
@@ -49,7 +52,7 @@ async function launchQuickStrategy(page, matcher, winProbability = 0, settingsOv
         // Force losses so stake recovery is deterministic and loss-threshold
         // behavior cannot be mistaken for a healthy Stop-button flow.
         sessionStorage.setItem('yolo:local-admin-win-probability', String(winProbability));
-    }, { winProbability, settingsOverrides });
+    }, { winProbability, settingsOverrides, executionMode });
     await page.reload({ waitUntil: 'domcontentloaded' });
     await expect(page.locator('#quick-strategy')).toBeVisible({ timeout: 35000 });
     await dismissTour(page);
@@ -291,5 +294,51 @@ test('6B regression: Martingale continues buying after stopping and starting aga
     await page.locator('#db-animation__stop-button').click();
     console.log('Martingale local session restart:', JSON.stringify({
         previousCount, totalCount: (await ledger(page)).length,
+    }));
+});
+
+
+test('presentation: Martingale paper results update Summary, Transactions, Journal and account balance', async ({ page }) => {
+    page.on('dialog', async dialog => {
+        if (dialog.type() === 'confirm') await dialog.accept();
+        else await dialog.dismiss();
+    });
+    await launchQuickStrategy(page, /^Martingale$/, 0, {
+        symbol: 'R_100', tradetype: 'callput', type: 'CALL',
+        stake: '1', size: '2', profit: '1000', loss: '1000',
+    }, 'presentation');
+    await expect.poll(async () => (await ledger(page)).filter(c => c.is_sold).length,
+        { timeout: 30000, intervals: [300, 600, 1000] }).toBeGreaterThanOrEqual(3);
+
+    const stop = page.locator('#db-animation__stop-button');
+    await expect(stop).toBeVisible();
+    await stop.click();
+    await expect(page.locator('#db-animation__run-button')).toBeVisible({ timeout: 15000 });
+    const contracts = await ledger(page);
+    expect(contracts.length).toBeGreaterThanOrEqual(3);
+    expect(contracts.slice(0, 3).map(c => c.buy_price)).toEqual([1, 2, 4]);
+    expect(contracts.every(c => c.is_sold && c.status === 'lost' &&
+        c.underlying_symbol === 'R_100' && c.contract_type === 'CALL')).toBe(true);
+
+    const records = await page.evaluate(() => {
+        const account = localStorage.getItem('active_loginid');
+        const journal = JSON.parse(sessionStorage.getItem('journal_cache') || '{}');
+        const transactions = JSON.parse(sessionStorage.getItem('transaction_cache') || '{}');
+        const balances = JSON.parse(sessionStorage.getItem('yolo:local-admin-balances') || '{}');
+        return {
+            journal: journal[account] || [],
+            transactions: transactions[account] || [],
+            balance: balances[account],
+        };
+    });
+    expect(records.journal.some(x => x.message === 'purchase')).toBe(true);
+    expect(records.journal.some(x => x.message === 'lost')).toBe(true);
+    expect(records.transactions.filter(x => x.type === 'contract').length)
+        .toBeGreaterThanOrEqual(3);
+    const stakes = contracts.reduce((sum, row) => sum + row.buy_price, 0);
+    expect(records.balance).toBeCloseTo(10000 - stakes, 2);
+    console.log('Presentation paper Martingale:', JSON.stringify({
+        count: contracts.length, market: contracts[0].underlying_symbol,
+        type: contracts[0].contract_type, balance: records.balance,
     }));
 });

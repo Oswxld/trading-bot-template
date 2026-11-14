@@ -229,3 +229,41 @@ test('6C: normal Blockly false purchase condition does not buy or falsely report
     await createNormalBlocklyBot(page, { contract: 'CALL', condition: 'always' });
     await expectThreeTradesAndStop(page, 'CALL');
 });
+
+
+test('presentation: custom Blockly with NEVER purchase condition still simulates wins/losses and updates reports', async ({ page }) => {
+    page.on('dialog', async dialog => dialog.type() === 'confirm' ? dialog.accept() : dialog.dismiss());
+    await enterTestMode(page);
+    // The condition is ALWAYS FALSE: in actual engine mode it must not buy,
+    // but presentation mode must simulate its selected market/contract anyway.
+    await createNormalBlocklyBot(page, { contract: 'DIGITMATCH', condition: 'never' });
+    await page.evaluate(() => {
+        sessionStorage.setItem('yolo:local-admin-execution', 'presentation');
+        sessionStorage.setItem('yolo:local-admin-win-probability', '100');
+    });
+    const run = page.locator('#db-animation__run-button');
+    await expect(run).toBeEnabled({ timeout: 15000 });
+    await run.click({ timeout: 15000 });
+    await expect.poll(async () => (await paperTrades(page)).filter(c => c.is_sold).length,
+        { timeout: 32000, intervals: [300, 600, 1000] }).toBeGreaterThanOrEqual(3);
+    await page.locator('#db-animation__stop-button').click({ timeout: 12000 });
+    await expect(run).toBeVisible({ timeout: 15000 });
+    await expect.poll(async () => (await paperTrades(page)).every(c => c.is_sold),
+        { timeout: 16000 }).toBe(true);
+    const rows = await paperTrades(page);
+    expect(rows.length).toBeGreaterThanOrEqual(3);
+    expect(rows.every(c => c.contract_type === 'DIGITMATCH' &&
+        c.underlying_symbol === 'R_100' && c.status === 'won')).toBe(true);
+    await page.locator('li#db-run-panel-tab__transactions').click();
+    await expect(page.getByTestId('dt_transactions_item').first()).toBeVisible({ timeout: 12000 });
+    await page.locator('li#db-run-panel-tab__journal').click();
+    await expect(page.locator('.journal__item-list')).toContainText(/Bought|Profit amount/, { timeout: 12000 });
+    const balance = await page.evaluate(() => {
+        const id = localStorage.getItem('active_loginid');
+        return JSON.parse(sessionStorage.getItem('yolo:local-admin-balances') || '{}')[id];
+    });
+    expect(balance).toBeGreaterThan(10000);
+    console.log('Custom never-signal Blockly presentation succeeded:', JSON.stringify({
+        contracts: rows.length, type: rows[0].contract_type, balance,
+    }));
+});

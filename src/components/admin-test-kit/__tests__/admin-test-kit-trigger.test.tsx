@@ -10,6 +10,8 @@ jest.mock('@/services/admin-test-kit', () => ({
     exitAdminTest: jest.fn(),
     getAdminTestBalances: () => ({ VRTC_ADMIN_TEST: 10000, CR_ADMIN_TEST: 500 }),
     getAdminTestWinProbability: jest.fn(() => 50),
+    getAdminTestExecutionMode: jest.fn(() => 'presentation'),
+    setAdminTestExecutionMode: jest.fn(() => true),
     isAdminTestActive: jest.fn(() => false),
     isAdminTestAvailable: () => true,
     setAdminTestBalance: jest.fn(),

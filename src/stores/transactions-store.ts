@@ -37,6 +37,7 @@ export default class TransactionsStore {
             is_called_proposal_open_contract: observable,
             is_transaction_details_modal_open: observable,
             transactions: computed,
+            active_report_account: computed,
             onBotContractEvent: action.bound,
             pushTransaction: action.bound,
             recoverAdminTestReports: action.bound,
@@ -59,9 +60,18 @@ export default class TransactionsStore {
     is_called_proposal_open_contract = false;
     is_transaction_details_modal_open = false;
 
+    // OAuth-backed client state can be populated AFTER a local simulator
+    // purchase. In Admin Test Mode the validated local active account is the
+    // reporting key; do not rely on the asynchronous OAuth-style client store.
+    get active_report_account(): string {
+        return (isAdminTestActive()
+            ? localStorage.getItem('active_loginid')
+            : this.core?.client?.loginid) || '';
+    }
+
     get transactions(): TTransaction[] {
-        if (this.core?.client?.loginid) return this.elements[this.core?.client?.loginid] ?? [];
-        return [];
+        const account = this.active_report_account;
+        return account ? this.elements[account] ?? [] : [];
     }
 
     get statistics() {
@@ -118,7 +128,7 @@ export default class TransactionsStore {
     pushTransaction(data: TContractInfo) {
         const is_completed = isEnded(data as ProposalOpenContract);
         const { run_id } = this.root_store.run_panel;
-        const current_account = this.core?.client?.loginid as string;
+        const current_account = this.active_report_account;
 
         const contract: TContractInfo = {
             ...data,
@@ -191,7 +201,7 @@ export default class TransactionsStore {
 
     clear() {
         if (isAdminTestActive()) {
-            const account = this.core?.client?.loginid as string;
+            const account = this.active_report_account;
             markAdminTestBotReportCleared(account);
             this.elements = { ...this.elements, [account]: [] };
             const cached = getStoredItemsByKey(this.TRANSACTION_CACHE, {});
@@ -210,10 +220,12 @@ export default class TransactionsStore {
 
         // Write transactions to session storage on each change in transaction elements.
         const disposeTransactionElementsListener = reaction(
-            () => this.elements[client?.loginid as string],
+            () => this.elements[this.active_report_account],
             elements => {
                 const stored_transactions = getStoredItemsByKey(this.TRANSACTION_CACHE, {});
-                stored_transactions[client.loginid as string] = elements?.slice(0, 5000) ?? [];
+                const currentAccount = this.active_report_account;
+                if (!currentAccount) return;
+                stored_transactions[currentAccount] = elements?.slice(0, 5000) ?? [];
                 setStoredItemsByKey(this.TRANSACTION_CACHE, stored_transactions);
             }
         );
@@ -234,7 +246,7 @@ export default class TransactionsStore {
 
     recoverAdminTestReports() {
         if (!isAdminTestActive()) return;
-        const account = this.core?.client?.loginid as string;
+        const account = this.active_report_account;
         if (!account || localStorage.getItem('active_loginid') !== account) return;
         const paperContracts = getAdminTestContracts(account, {
             source: 'bot_builder', sinceReportReset: true,

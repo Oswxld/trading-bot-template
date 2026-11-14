@@ -58,6 +58,27 @@ describe('Bot Builder: local report recovery from the simulated trade ledger', (
         localStorage.clear();
     });
 
+    it('uses the local active account when the OAuth-style client store has not received authorize yet', async () => {
+        setAdminTestWinProbability(0);
+        const api = createAdminTestApi();
+        await open(api);
+        const purchase = await directBuy(api);
+        await wait(1200);
+        const { store, client } = makeStore();
+        client.loginid = ''; // OAuth-style client authorization still pending
+        try {
+            store.recoverPendingContracts();
+            expect(contractRows(store)).toHaveLength(1);
+            expect(contractRows(store)[0].data.contract_id).toBe(purchase.contract_id);
+            expect(store.statistics.number_of_runs).toBe(1);
+            expect(store.elements[TEST_DEMO_ID]).toHaveLength(1);
+            expect(store.elements['']).toBeUndefined();
+        } finally {
+            store.disposeReactionsFn();
+            api.disconnect();
+        }
+    }, 7000);
+
     it('recovers a missed winning trade once, with complete rows and realized summary statistics', async () => {
         setAdminTestWinProbability(100);
         const api = createAdminTestApi();

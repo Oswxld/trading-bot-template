@@ -2,6 +2,7 @@ import { action, computed, makeObservable, observable, reaction, when } from 'mo
 import { v4 as uuidv4 } from 'uuid';
 /* [AI] - Analytics removed - utility functions moved to @/utils/account-helpers */
 import { isVirtualAccount } from '@/utils/account-helpers';
+import { isAdminTestActive } from '@/services/admin-test-kit';
 /* [/AI] */
 import { formatDate } from '@/components/shared';
 import { run_panel } from '@/constants/run-panel';
@@ -115,7 +116,9 @@ export default class JournalStore {
 
     restoreStoredJournals() {
         const client = this.core.client as RootStore['client'];
-        const { loginid } = client;
+        const loginid = isAdminTestActive()
+            ? localStorage.getItem('active_loginid') || client.loginid
+            : client.loginid;
         this.journal_filters = getSetting('journal_filter') ?? this.filters.map(filter => filter.id);
         this.unfiltered_messages = getStoredItemsByUser(this.JOURNAL_CACHE, loginid, []);
     }
@@ -250,7 +253,10 @@ export default class JournalStore {
         extra: { current_currency?: string; currency?: string } = {}
     ) {
         const { client } = this.core;
-        const { loginid, account_list } = client as RootStore['client'];
+        const { account_list } = client as RootStore['client'];
+        const loginid = isAdminTestActive()
+            ? localStorage.getItem('active_loginid') || client.loginid
+            : client.loginid;
 
         if (loginid) {
             const current_account = account_list?.find(account => account?.loginid === loginid);
@@ -338,7 +344,11 @@ export default class JournalStore {
             () => this.unfiltered_messages,
             unfiltered_messages => {
                 const stored_journals = getStoredItemsByKey(this.JOURNAL_CACHE, {});
-                stored_journals[client.loginid as string] = unfiltered_messages?.slice(0, 5000);
+                const account = isAdminTestActive()
+                    ? localStorage.getItem('active_loginid') || client.loginid
+                    : client.loginid;
+                if (!account) return;
+                stored_journals[account] = unfiltered_messages?.slice(0, 5000);
                 setStoredItemsByKey(this.JOURNAL_CACHE, stored_journals);
             }
         );

@@ -1,5 +1,6 @@
 import TradeEngine from '../index';
 import { createScope } from '../../utils/cliTools';
+import { start, purchaseSuccessful, sell } from '../state/actions';
 import { api_base } from '../../../api/api-base';
 import {
     enterAdminTest,
@@ -151,4 +152,106 @@ describe('real Bot Builder trading engine against local simulated account', () =
             observer.unsubscribe();
         }
     }, 14000);
+
+    it('does not starve a new Martingale watch when an older engine receives the same tick first', async () => {
+        const api = createAdminTestApi();
+        api_base.api = api;
+        api_base.account_info = { loginid: TEST_DEMO_ID, currency: 'USD' };
+        api_base.token = TEST_DEMO_ID;
+        await opened(api);
+
+        const first = new TradeEngine(createScope());
+        const second = new TradeEngine(createScope());
+        const options = {
+            symbol: 'R_100',
+            contractTypes: ['CALL', 'PUT'],
+            shouldRestartOnError: false,
+            timeMachineEnabled: false,
+        };
+        const tradeOptions = {
+            amount: 1,
+            basis: 'stake',
+            currency: 'USD',
+            contractTypes: ['CALL', 'PUT'],
+            duration: 1,
+            duration_unit: 't',
+            limit_order: {},
+        };
+        // Simulates a stale old engine still watching when a newly launched
+        // Martingale subscribes on the same market. Both see the SAME epoch.
+        first.init(TEST_DEMO_ID, options);
+        second.init(TEST_DEMO_ID, options);
+        first.start(tradeOptions);
+        second.start(tradeOptions);
+
+        const [firstReady, secondReady] = await Promise.race([
+            Promise.all([first.watch('before'), second.watch('before')]),
+            timeout(5000),
+        ]);
+        expect(firstReady).toBe(true);
+        expect(secondReady).toBe(true);
+
+        await Promise.race([
+            Promise.all([first.purchase('CALL'), second.purchase('CALL')]),
+            timeout(5000),
+        ]);
+        expect(first.contractId).toEqual(expect.any(Number));
+        expect(second.contractId).toEqual(expect.any(Number));
+        expect(second.contractId).not.toBe(first.contractId);
+    }, 14000);
+
+    it('exits the post-purchase watcher on settlement even without another tick', async () => {
+        const api = createAdminTestApi();
+        api_base.api = api;
+        await opened(api);
+        const engine = new TradeEngine(createScope());
+        engine.store.dispatch(start());
+        engine.store.dispatch(purchaseSuccessful());
+        expect(engine.store.getState().scope).toBe('DURING_PURCHASE');
+        const waitingForSettlement = engine.watch('during');
+        // The simulator may stop the synthetic market clock at the last
+        // contract settlement. The STOP transition itself must release
+        // the interpreter, not require one more price tick to arrive.
+        engine.store.dispatch(sell());
+        expect(await Promise.race([waitingForSettlement, timeout(800)])).toBe(false);
+    }, 4000);
+
+    it('recovers local Martingale purchase conditions after its tick subscription is lost', async () => {
+        const api = createAdminTestApi();
+        api_base.api = api;
+        api_base.account_info = { loginid: TEST_DEMO_ID, currency: 'USD' };
+        api_base.token = TEST_DEMO_ID;
+        await opened(api);
+
+        const engine = new TradeEngine(createScope());
+        engine.init(TEST_DEMO_ID, {
+            symbol: 'R_100', contractTypes: ['CALL', 'PUT'],
+            shouldRestartOnError: false, timeMachineEnabled: false,
+        });
+        engine.start({
+            amount: 1, basis: 'stake', currency: 'USD',
+            contractTypes: ['CALL', 'PUT'],
+            duration: 1, duration_unit: 't', limit_order: {},
+        });
+        // watchTicks() is async; allow its initial stopMonitor() await to
+        // complete before inspecting the newly created history promise.
+        const pendingStarted = Date.now();
+        while (!engine.$scope.ticksService.ticks_history_promise &&
+            Date.now() - pendingStarted < 1500) {
+            await new Promise(resolve => setTimeout(resolve, 10));
+        }
+        const stream = engine.$scope.ticksService.ticks_history_promise;
+        expect(stream).toBeTruthy();
+        await stream.promise;
+        // Reproduce the genuine "Bot running, waiting for a signal" stall:
+        // a prior cleanup forgot the only subscription on the simulated
+        // socket. Without a rearm there will NEVER be another NEW_TICK.
+        const removed = await api.forgetAll('ticks');
+        expect(removed.forget_all.length).toBeGreaterThan(0);
+        const buyReady = await Promise.race([engine.watch('before'), timeout(8500)]);
+        expect(buyReady).toBe(true);
+        await Promise.race([engine.purchase('CALL'), timeout(4000)]);
+        expect(engine.contractId).toEqual(expect.any(Number));
+    }, 13000);
+
 });

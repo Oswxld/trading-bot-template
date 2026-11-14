@@ -44,41 +44,14 @@
     }
 }
 
-.yolo-brand-logo {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.8rem;
+.pitprinter-brand-logo {
+    display: block;
     max-width: 100%;
-    min-width: 0;
-    vertical-align: middle;
-    white-space: nowrap;
-
-    &__mark {
-        display: block;
-        width: auto;
-        height: 100%;
-        aspect-ratio: 1;
-        flex: none;
-        object-fit: contain;
-        background: #000;
-        border-radius: 3px;
-    }
-
-    &__text {
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
-        font-size: 1.45rem;
-        line-height: 1.15;
-        font-weight: 800;
-        letter-spacing: 0.015em;
-        color: var(--text-general, #222);
-        text-transform: uppercase;
-    }
+    flex: 0 0 auto;
+    object-fit: contain;
+    border-radius: 3px;
 }
 
-.mobile-menu__header .yolo-brand-logo {
-    gap: 0.6rem;
-
-    &__text {
-        font-size: 1.2rem;
-    }
+.mobile-menu__header .pitprinter-brand-logo {
+    max-width: min(185px, 100%);
 }

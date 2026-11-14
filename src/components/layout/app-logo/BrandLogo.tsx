@@ -1,6 +1,6 @@
 /**
- * Client-provided Yolo Traders bull illustration, optimized for the header.
- * Rendering the wordmark as text keeps it crisp and readable.
+ * Compact rendering of the client's supplied Pitprinter artwork.
+ * The original mark and lettering are preserved in /pitprinter-logo.webp.
  */
 type TBrandLogoProps = {
     width?: number;
@@ -10,19 +10,17 @@ type TBrandLogoProps = {
 };
 
 export const BrandLogo = ({
-    width = 180,
-    height = 36,
+    width = 210,
+    height = 42,
     className = '',
 }: TBrandLogoProps) => (
-    <span className={`yolo-brand-logo ${className}`} style={{ width, height }} aria-label='Yolo Traders'>
-        <img
-            className='yolo-brand-logo__mark'
-            src='/yolo-traders-mark.png'
-            alt=''
-            width={height}
-            height={height}
-            decoding='async'
-        />
-        <span className='yolo-brand-logo__text'>Yolo Traders</span>
-    </span>
+    <img
+        className={`pitprinter-brand-logo ${className}`}
+        src='/pitprinter-logo.webp'
+        alt='Pitprinter'
+        width={width}
+        height={height}
+        decoding='async'
+        style={{ width, height }}
+    />
 );

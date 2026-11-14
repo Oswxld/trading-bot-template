@@ -1,11 +1,11 @@
 {
-    "brand_name": "Yolo Traders",
+    "brand_name": "Pitprinter",
     "brand_domain": "yourbrand.com",
     "brand_hostname": {
         "staging": "staging.yourbrand.com/dashboard",
         "production": "yourbrand.com/dashboard"
     },
-    "domain_name": "Yolo Traders",
+    "domain_name": "Pitprinter",
     "colors": {
         "primary": "#3b82f6",
         "secondary": "#64748b",
@@ -79,14 +79,14 @@
         "css_variable_prefix": "--brand"
     },
     "platform": {
-        "name": "Yolo Traders",
+        "name": "Pitprinter",
         "logo": {
             "type": "component",
             "component_name": "BrandLogo",
-            "alt_text": "Yolo Traders",
+            "alt_text": "Pitprinter",
             "link_url": "/",
             "show_text": false,
-            "text": "Yolo Traders"
+            "text": "Pitprinter"
         },
         "footer": {
             "enable_language_settings": false,

@@ -13,6 +13,7 @@ export const TEST_DEMO_ID = 'VRTC_ADMIN_TEST';
 export const TEST_REAL_ID = 'CR_ADMIN_TEST';
 const STATE_KEY = 'yolo:local-admin-balances';
 const WIN_PROBABILITY_KEY = 'yolo:local-admin-win-probability';
+const ADMIN_EXECUTION_KEY = 'yolo:local-admin-execution';
 const CONTRACT_LEDGER_KEY = 'yolo:local-admin-contracts';
 const CONTRACT_SERIAL_KEY = 'yolo:local-admin-contract-serial';
 const REPORT_CLEAR_KEY = 'yolo:local-admin-report-clear';
@@ -54,6 +55,22 @@ export const getAdminTestWinProbability = () => {
 export const setAdminTestWinProbability = value => {
     if (!isAdminTestActive() || !Number.isInteger(value) || value < 0 || value > 100) return false;
     sessionStorage.setItem(WIN_PROBABILITY_KEY, String(value));
+    return true;
+};
+
+/**
+ * In presentation mode, only the local Admin Test Kit runs scripted paper
+ * contracts for UI demonstrations. Engine mode keeps the original Blockly
+ * execution against the fake API for testing actual strategy logic.
+ * Neither mode is accessible on deployed domains.
+ */
+export const getAdminTestExecutionMode = () => {
+    if (!isAdminTestActive()) return 'engine';
+    return sessionStorage.getItem(ADMIN_EXECUTION_KEY) === 'engine' ? 'engine' : 'presentation';
+};
+export const setAdminTestExecutionMode = value => {
+    if (!isAdminTestActive() || !['presentation', 'engine'].includes(value)) return false;
+    sessionStorage.setItem(ADMIN_EXECUTION_KEY, value);
     return true;
 };
 
@@ -190,6 +207,7 @@ export const enterAdminTest = () => {
     sessionStorage.setItem(ADMIN_TEST_BACKUP, JSON.stringify(original));
     sessionStorage.setItem(STATE_KEY, JSON.stringify(DEFAULT_BALANCES));
     sessionStorage.setItem(WIN_PROBABILITY_KEY, String(DEFAULT_WIN_PROBABILITY));
+    sessionStorage.setItem(ADMIN_EXECUTION_KEY, 'presentation');
     sessionStorage.removeItem(CONTRACT_SERIAL_KEY);
     for (const accountId of Object.keys(DEFAULT_BALANCES)) {
         sessionStorage.removeItem(`${CONTRACT_LEDGER_KEY}:${accountId}`);
@@ -210,6 +228,7 @@ export const exitAdminTest = () => {
     sessionStorage.removeItem(ADMIN_TEST_BACKUP);
     sessionStorage.removeItem(STATE_KEY);
     sessionStorage.removeItem(WIN_PROBABILITY_KEY);
+    sessionStorage.removeItem(ADMIN_EXECUTION_KEY);
     sessionStorage.removeItem(CONTRACT_SERIAL_KEY);
     for (const accountId of Object.keys(DEFAULT_BALANCES)) {
         sessionStorage.removeItem(`${CONTRACT_LEDGER_KEY}:${accountId}`);

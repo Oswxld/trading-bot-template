@@ -265,3 +265,31 @@ test('6B regression: Martingale ends naturally after a one-trade profit limit an
         contracts: settled.length, profit: settled[0].profit, running: false,
     }));
 });
+
+
+test('6B regression: Martingale continues buying after stopping and starting again in the same simulated session', async ({ page }) => {
+    page.on('dialog', async dialog => {
+        if (dialog.type() === 'confirm') await dialog.accept();
+        else await dialog.dismiss();
+    });
+    await launchQuickStrategy(page, /^Martingale$/, 0);
+    await expect.poll(async () => (await ledger(page)).filter(c => c.is_sold).length,
+        { timeout: 40000, intervals: [500, 1000] }).toBeGreaterThanOrEqual(2);
+    const stop = page.locator('#db-animation__stop-button');
+    await expect(stop).toBeVisible({ timeout: 10000 });
+    await stop.click();
+    await expect(page.locator('#db-animation__run-button')).toBeVisible({ timeout: 12000 });
+    await expect.poll(async () => (await ledger(page)).every(c => c.is_sold),
+        { timeout: 12000 }).toBe(true);
+    const previousCount = (await ledger(page)).length;
+    // The old trading engine has already processed the same symbol, and
+    // any surviving older event observer must not starve the next interpreter.
+    await page.locator('#db-animation__run-button').click();
+    await expect.poll(async () => (await ledger(page)).filter(c => c.is_sold).length,
+        { timeout: 45000, intervals: [500, 1000] })
+        .toBeGreaterThanOrEqual(previousCount + 2);
+    await page.locator('#db-animation__stop-button').click();
+    console.log('Martingale local session restart:', JSON.stringify({
+        previousCount, totalCount: (await ledger(page)).length,
+    }));
+});

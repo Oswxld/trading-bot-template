@@ -7,6 +7,7 @@ import useActiveAccount from '@/hooks/api/account/useActiveAccount';
 import { useApiBase } from '@/hooks/useApiBase';
 import { useLogout } from '@/hooks/useLogout';
 import { useStore } from '@/hooks/useStore';
+import { isAdminTestActive } from '@/services/admin-test-kit';
 import { navigateToTransfer } from '@/utils/transfer-utils';
 import { Localize } from '@deriv-com/translations';
 import { Header, useDevice, Wrapper } from '@deriv-com/ui';
@@ -121,14 +122,27 @@ const AppHeader = observer(() => {
         }
     }, [setIsAuthorizing]);
 
+    // Deriv's official transfer screen handles REAL funds. The account shown in
+    // our header must be the currently authorized account: never use stale
+    // authData.currency after a switch, and never treat local "Real" test funds
+    // or Demo funds as eligible for a real-money transfer.
+    const is_transfer_available =
+        !isAdminTestActive() &&
+        !!client?.is_logged_in &&
+        !!activeLoginid &&
+        activeAccount?.loginid === activeLoginid &&
+        !activeAccount?.isVirtual &&
+        !!activeAccount?.currency &&
+        /^[a-zA-Z0-9]{2,12}$/.test(activeAccount.currency) &&
+        !client?.is_logging_out &&
+        !is_account_regenerating;
+
     const handleTransfer = useCallback(() => {
-        const transferCurrency = authData?.currency;
-        if (!transferCurrency) {
-            console.error('No currency available for transfer');
-            return;
-        }
-        navigateToTransfer(transferCurrency);
-    }, [authData?.currency]);
+        if (!is_transfer_available || !activeAccount?.currency) return;
+        // Do not pass OAuth credentials or a claimed Deriv login to the URL.
+        // The user must confirm the correct account in Deriv's own session.
+        navigateToTransfer(activeAccount.currency);
+    }, [activeAccount?.currency, is_transfer_available]);
 
     const renderAccountSection = useCallback(
         (position: 'left' | 'right' = 'right') => {
@@ -154,8 +168,16 @@ const AppHeader = observer(() => {
                             )}
                             <Button
                                 primary
-                                disabled={client?.is_logging_out || !authData?.currency}
+                                type='button'
+                                disabled={!is_transfer_available}
                                 onClick={handleTransfer}
+                                title={
+                                    isAdminTestActive()
+                                        ? 'Real fund transfers are unavailable in the local Admin Test Kit.'
+                                        : activeAccount?.isVirtual
+                                          ? 'Switch to a real account to transfer funds.'
+                                          : 'Opens Deriv to transfer funds. Verify the signed-in account on Deriv.'
+                                }
                             >
                                 <Localize i18n_default_text='Transfer' />
                             </Button>
@@ -217,6 +239,7 @@ const AppHeader = observer(() => {
             is_account_regenerating,
             isOAuthPending,
             authData,
+            is_transfer_available,
             handleLogin,
             handleSignup,
             handleTransfer,

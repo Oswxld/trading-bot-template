@@ -407,3 +407,37 @@ test('presentation: Bot Builder Rise/Fall Put on selected Volatility 75 updates 
     await expect(page.getByTestId('dt_transactions_item').first()).toBeVisible({ timeout: 12000 });
     console.log('Bot presentation Put on volatility 75:', JSON.stringify({ selected, profit: trades[0].profit }));
 });
+
+
+for (const { name, matcher } of [
+    { name: "D'Alembert", matcher: /Alembert/i },
+    { name: "Oscar's Grind", matcher: /Oscar.*Grind/i },
+]) {
+    test('presentation: ' + name + ' generates paper losses without waiting for strategy signals',
+        async ({ page }) => {
+            page.on('dialog', async dialog =>
+                dialog.type() === 'confirm' ? dialog.accept() : dialog.dismiss());
+            await launchQuickStrategy(page, matcher, 0, {
+                symbol: 'R_100', tradetype: 'callput', type: 'CALL',
+                stake: '1', duration: '1', profit: '1000', loss: '1000',
+            }, 'presentation');
+            await expect.poll(async () => (await ledger(page)).filter(c => c.is_sold).length,
+                { timeout: 30000, intervals: [300, 600, 1000] })
+                .toBeGreaterThanOrEqual(3);
+            await page.locator('#db-animation__stop-button').click({ timeout: 12000 });
+            await expect(page.locator('#db-animation__run-button')).toBeVisible({ timeout: 15000 });
+            await expect.poll(async () => (await ledger(page)).every(c => c.is_sold),
+                { timeout: 16000 }).toBe(true);
+            const contracts = await ledger(page);
+            expect(contracts.every(c => c.status === 'lost' && c.contract_type === 'CALL' &&
+                c.underlying_symbol === 'R_100')).toBe(true);
+            await page.locator('li#db-run-panel-tab__transactions').click();
+            await expect(page.getByTestId('dt_transactions_item').first()).toBeVisible({ timeout: 12000 });
+            await page.locator('li#db-run-panel-tab__journal').click();
+            await expect(page.locator('.journal__item-list')).toContainText(/Bought|Loss amount/, { timeout: 12000 });
+            console.log('Generic simulated ' + name + ' presentation:', JSON.stringify({
+                settled: contracts.length, stakes: contracts.map(c => c.buy_price),
+            }));
+        }
+    );
+}

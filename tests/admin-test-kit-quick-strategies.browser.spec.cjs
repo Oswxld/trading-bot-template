@@ -320,25 +320,33 @@ test('presentation: Martingale paper results update Summary, Transactions, Journ
     expect(contracts.every(c => c.is_sold && c.status === 'lost' &&
         c.underlying_symbol === 'R_100' && c.contract_type === 'CALL')).toBe(true);
 
-    const records = await page.evaluate(() => {
-        const account = localStorage.getItem('active_loginid');
-        const journal = JSON.parse(sessionStorage.getItem('journal_cache') || '{}');
-        const transactions = JSON.parse(sessionStorage.getItem('transaction_cache') || '{}');
-        const balances = JSON.parse(sessionStorage.getItem('yolo:local-admin-balances') || '{}');
-        return {
-            journal: journal[account] || [],
-            transactions: transactions[account] || [],
-            balance: balances[account],
-        };
-    });
-    expect(records.journal.some(x => x.message === 'purchase')).toBe(true);
-    expect(records.journal.some(x => x.message === 'lost')).toBe(true);
-    expect(records.transactions.filter(x => x.type === 'contract').length)
+    // Journal and Transactions are LZ-compressed in session storage.
+    // Verify the REAL rendered report tabs rather than pretending their
+    // underlying compressed storage is ordinary JSON.
+    await page.locator('li#db-run-panel-tab__transactions').click();
+    await expect(page.getByTestId('dt_transactions_item').first())
+        .toBeVisible({ timeout: 15000 });
+    expect(await page.getByTestId('dt_transactions_item').count())
         .toBeGreaterThanOrEqual(3);
+    await page.locator('li#db-run-panel-tab__journal').click();
+    await expect(page.locator('.journal__item-list'))
+        .toContainText(/Bought|Loss amount|Profit amount/, { timeout: 15000 });
+    await page.locator('li#db-run-panel-tab__summary').click();
+    await expect(page.getByTestId('mock-summary')).toBeVisible();
+    const numberOfRuns = page.locator('.run-panel__tile')
+        .filter({ hasText: 'No. of runs' })
+        .locator('.run-panel__tile-content');
+    await expect.poll(async () => Number(await numberOfRuns.textContent()),
+        { timeout: 12000 }).toBeGreaterThanOrEqual(3);
+    const balance = await page.evaluate(() => {
+        const account = localStorage.getItem('active_loginid');
+        const balances = JSON.parse(sessionStorage.getItem('yolo:local-admin-balances') || '{}');
+        return balances[account];
+    });
     const stakes = contracts.reduce((sum, row) => sum + row.buy_price, 0);
-    expect(records.balance).toBeCloseTo(10000 - stakes, 2);
+    expect(balance).toBeCloseTo(10000 - stakes, 2);
     console.log('Presentation paper Martingale:', JSON.stringify({
         count: contracts.length, market: contracts[0].underlying_symbol,
-        type: contracts[0].contract_type, balance: records.balance,
+        type: contracts[0].contract_type, balance,
     }));
 });

@@ -133,7 +133,7 @@ const AppHeader = observer(() => {
         activeAccount?.loginid === activeLoginid &&
         !activeAccount?.isVirtual &&
         !!activeAccount?.currency &&
-        /^[a-zA-Z0-9]{2,12}$/.test(activeAccount.currency) &&
+        /^[a-zA-Z0-9]{2,12}$/.test(activeAccount?.currency ?? '') &&
         !client?.is_logging_out &&
         !is_account_regenerating;
 

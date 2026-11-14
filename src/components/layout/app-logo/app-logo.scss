@@ -45,13 +45,55 @@
 }
 
 .pitprinter-brand-logo {
-    display: block;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.8rem;
+    width: max-content;
+    min-width: 0;
     max-width: 100%;
     flex: 0 0 auto;
-    object-fit: contain;
-    border-radius: 3px;
+    white-space: nowrap;
+    vertical-align: middle;
+
+    &__mark {
+        display: block;
+        width: 36px;
+        height: 36px;
+        max-width: 36px;
+        max-height: 36px;
+        flex: 0 0 36px;
+        object-fit: contain;
+        border-radius: 3px;
+        background-color: #000;
+    }
+
+    &__name {
+        display: inline-block;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+        font-size: 1.65rem;
+        line-height: 1.15;
+        font-weight: 800;
+        font-style: italic;
+        letter-spacing: -0.02em;
+        color: var(--text-prominent, #171717);
+    }
+
+    &__accent {
+        color: #218d00;
+    }
 }
 
 .mobile-menu__header .pitprinter-brand-logo {
+    gap: 0.6rem;
     max-width: min(185px, 100%);
+
+    &__mark {
+        width: 32px;
+        height: 32px;
+        flex-basis: 32px;
+    }
+
+    &__name {
+        font-size: 1.45rem;
+    }
 }

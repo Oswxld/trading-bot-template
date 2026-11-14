@@ -51,7 +51,10 @@ jobs:
             if curl -fsS http://localhost:4173/ > /dev/null; then break; fi
             sleep 1
           done
-          npx playwright test tests/admin-test-kit-quick-strategies.browser.spec.cjs tests/admin-test-kit-bulk-trader.browser.spec.cjs tests/admin-test-kit-normal-blockly.browser.spec.cjs tests/admin-test-kit-ready-bots.browser.spec.cjs --grep 'presentation:|ready bots:' --reporter=line --workers=1 --timeout=90000
+          # Verify the restored six-bot library first so import regressions
+          # fail fast rather than after the unrelated existing smoke suite.
+          npx playwright test tests/admin-test-kit-ready-bots.browser.spec.cjs --reporter=line --workers=1 --timeout=90000
+          npx playwright test tests/admin-test-kit-quick-strategies.browser.spec.cjs tests/admin-test-kit-bulk-trader.browser.spec.cjs tests/admin-test-kit-normal-blockly.browser.spec.cjs --grep 'presentation:' --reporter=line --workers=1 --timeout=90000
         env:
           CI: 'true'
       - name: Save error details on failure

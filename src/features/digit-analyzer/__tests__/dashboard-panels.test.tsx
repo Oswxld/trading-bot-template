@@ -53,6 +53,7 @@ describe('Digit Analyzer presentational panels (controlled test fixtures only)',
                 markets={[
                     { symbol: 'R_75', displayName: 'Volatility 75 Index', isOpen: true },
                     { symbol: 'R_50', displayName: 'Volatility 50 Index', isOpen: false },
+                    { symbol: 'R_25', displayName: 'Volatility 25 Index', isOpen: true },
                 ]}
                 selectedSymbol='R_75'
                 onSelect={handleSelect}
@@ -61,7 +62,7 @@ describe('Digit Analyzer presentational panels (controlled test fixtures only)',
 
         expect(screen.getByRole('combobox', { name: 'Market' })).toHaveValue('R_75');
         expect(screen.getByRole('option', { name: 'Volatility 50 Index (closed)' })).toBeDisabled();
-        fireEvent.change(screen.getByRole('combobox', { name: 'Market' }), { target: { value: 'R_75' } });
-        expect(handleSelect).toHaveBeenCalledWith('R_75');
+        fireEvent.change(screen.getByRole('combobox', { name: 'Market' }), { target: { value: 'R_25' } });
+        expect(handleSelect).toHaveBeenCalledWith('R_25');
     });
 });

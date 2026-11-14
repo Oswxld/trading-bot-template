@@ -15,7 +15,7 @@ export const buildDerivTransferUrl = (currency: string): string | null => {
     try {
         const url = new URL(standalone_routes.transfer);
         // A funds-related redirect may only go to Deriv over HTTPS.
-        if (url.protocol !== 'https:' || !/(^|\\.)deriv\\.(com|me|be)$/.test(url.hostname)) return null;
+        if (url.protocol !== 'https:' || !/(^|\.)deriv\.(com|me|be)$/.test(url.hostname)) return null;
         url.searchParams.set('curr', code);
 
         const language = getInitialLanguage();

@@ -267,7 +267,10 @@ export default class RunPanelStore {
             summary_card.clear();
             this.setContractStage(contract_stages.STARTING);
             if (is_presentation) {
-                void this.demo_runner?.start();
+                void this.demo_runner?.start().catch(error => {
+                    this.showErrorMessage((error as Error).message || 'Presentation simulation failed to start.');
+                    this.demo_runner?.stop();
+                });
             } else {
                 this.dbot.runBot();
             }

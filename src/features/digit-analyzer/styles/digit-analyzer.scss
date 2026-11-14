@@ -545,7 +545,16 @@
 
 }
 
-// Tablet navigation shares the application's mobile tab-content height.
+// The app switches to its mobile/tablet layout below 1280px.
+@media (max-width: 1279px) {
+    .digit-analyzer {
+        height: var(--tab-content-height-mobile, calc(100dvh - 12rem));
+        min-height: 0;
+        overscroll-behavior-y: contain;
+        -webkit-overflow-scrolling: touch;
+    }
+}
+
 @media (max-width: 1199px) {
     .digit-analyzer {
         &__toolbar {
@@ -566,11 +575,6 @@
 // Switch the market dashboard to two columns before its cards can be squeezed.
 @media (max-width: 1023px) {
     .digit-analyzer {
-        height: var(--tab-content-height-mobile, calc(100dvh - 12rem));
-        min-height: 0;
-        overscroll-behavior-y: contain;
-        -webkit-overflow-scrolling: touch;
-
         &__grid {
             grid-template-columns: repeat(2, minmax(0, 1fr));
         }

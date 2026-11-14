@@ -162,10 +162,44 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
     }
 
     watch(watchName) {
-        if (watchName === 'before') {
-            return watchBefore(this.store);
-        }
-        return watchDuring(this.store);
+        const pending = watchName === 'before'
+            ? watchBefore(this.store)
+            : watchDuring(this.store);
+
+        if (watchName !== 'before' || !api_base.api?.isAdminSimulation) return pending;
+
+        // If a previous run's cleanup or a simulated reconnection removed
+        // the tick subscription, the interpreter used to wait for a buy
+        // signal forever. Only in local Admin Test Mode, detect a genuinely
+        // idle feed and reattach the EXISTING price-driven purchase logic.
+        // Never manufacture a buy, bypass Blockly conditions, or alter the
+        // live Deriv API path.
+        let previousEpoch = this.store.getState().newTick;
+        let recovering = false;
+        const recoveryTimer = setInterval(() => {
+            if (this.$scope.stopped) {
+                clearInterval(recoveryTimer);
+                return;
+            }
+            const state = this.store.getState();
+            if (state.newTick !== previousEpoch) {
+                previousEpoch = state.newTick;
+                return;
+            }
+            if (state.scope !== constants.BEFORE_PURCHASE ||
+                recovering || !this.symbol || !api_base.api?.isAdminSimulation ||
+                api_base.api.connection?.readyState !== 1) {
+                return;
+            }
+            recovering = true;
+            const ticksService = this.$scope.ticksService;
+            ticksService.observe();
+            void ticksService.requestTicks({ symbol: this.symbol, style: 'ticks' })
+                .catch(error => globalObserver.emit('Error', error))
+                .finally(() => { recovering = false; });
+        }, 4000);
+
+        return pending.finally(() => clearInterval(recoveryTimer));
     }
 
     makeDirectPurchaseDecision() {

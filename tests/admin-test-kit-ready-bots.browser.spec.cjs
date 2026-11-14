@@ -40,8 +40,8 @@ test('ready bots: Trading Bots tab is next to Bulk Trader and loads all six temp
     test.setTimeout(145000);
     page.on('dialog', async d => d.type() === 'confirm' ? d.accept() : d.dismiss());
     await enterLocalMode(page);
-    const names = await page.locator('ul.main__tabs, .main__tabs .dc-tabs__list').first()
-        .locator('li[id]').evaluateAll(items => items.map(node => node.id));
+    const names = await page.locator('.dc-tabs__list--main__tabs li[id]')
+        .evaluateAll(items => items.map(node => node.id));
     const bulkIndex = names.indexOf('id-bulk-trader');
     expect(bulkIndex).toBeGreaterThan(-1);
     expect(names[bulkIndex + 1]).toBe('id-trading-bots');

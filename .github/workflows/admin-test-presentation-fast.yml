@@ -12,6 +12,11 @@ on:
       - 'tests/admin-test-kit-quick-strategies.browser.spec.cjs'
       - 'tests/admin-test-kit-bulk-trader.browser.spec.cjs'
       - 'tests/admin-test-kit-normal-blockly.browser.spec.cjs'
+      - 'tests/admin-test-kit-ready-bots.browser.spec.cjs'
+      - 'src/pages/trading-bots/**'
+      - 'src/xml/ready-bots/**'
+      - 'src/pages/main/main.tsx'
+      - 'src/constants/bot-contents.ts'
   workflow_dispatch:
 
 permissions:
@@ -46,7 +51,7 @@ jobs:
             if curl -fsS http://localhost:4173/ > /dev/null; then break; fi
             sleep 1
           done
-          npx playwright test tests/admin-test-kit-quick-strategies.browser.spec.cjs tests/admin-test-kit-bulk-trader.browser.spec.cjs tests/admin-test-kit-normal-blockly.browser.spec.cjs --grep 'presentation:' --reporter=line --workers=1 --timeout=90000
+          npx playwright test tests/admin-test-kit-quick-strategies.browser.spec.cjs tests/admin-test-kit-bulk-trader.browser.spec.cjs tests/admin-test-kit-normal-blockly.browser.spec.cjs tests/admin-test-kit-ready-bots.browser.spec.cjs --grep 'presentation:|ready bots:' --reporter=line --workers=1 --timeout=90000
         env:
           CI: 'true'
       - name: Save error details on failure

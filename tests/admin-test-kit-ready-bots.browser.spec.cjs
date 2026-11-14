@@ -19,6 +19,16 @@ async function dismissTour(page) {
     }
 }
 
+async function dismissDelayedBotTour(page) {
+    // Importing a ready-made bot switches to the Bot Builder tab, whose
+    // onboarding tour mounts asynchronously and intercepts clicks.
+    // Dismiss it through the actual Skip button, never force clicks.
+    const modal = page.locator('.tour-dialog').first();
+    if (await modal.waitFor({ state: 'visible', timeout: 5500 }).then(() => true, () => false)) {
+        await dismissTour(page);
+    }
+}
+
 async function enterLocalMode(page) {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
     const dot = page.getByRole('button', { name: /Press and hold for 3 seconds to open local Admin Test Kit/i });
@@ -70,7 +80,8 @@ test('ready bots: Trading Bots tab is next to Bulk Trader and loads all six temp
         expect(selected.market).toBe('R_100');
         expect(selected.contracts.length).toBeGreaterThan(0);
         console.log('Ready bot imported:', JSON.stringify({ name: bot.name, ...selected }));
-        await page.locator('#id-trading-bots').click();
+        await dismissDelayedBotTour(page);
+        await page.locator('#id-trading-bots').click({ timeout: 12000 });
         await expect(page.locator('.trading-bots__card')).toHaveCount(6);
     }
 });
@@ -84,6 +95,7 @@ test('ready bots: importing Digit Differs allows simulated presentation to settl
         .filter({ has: page.getByRole('heading', { name: 'Digit Differs', exact: true }) });
     await card.getByRole('button', { name: /LOAD BOT INTO BUILDER/i }).click();
     await expect(page.locator('#id-bot-builder')).toHaveClass(/active/i, { timeout: 12000 });
+    await dismissDelayedBotTour(page);
     await page.evaluate(() => {
         sessionStorage.setItem('yolo:local-admin-win-probability', '100');
         sessionStorage.setItem('yolo:local-admin-execution', 'presentation');

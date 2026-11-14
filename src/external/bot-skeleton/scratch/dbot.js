@@ -280,10 +280,32 @@ class DBot {
             this.is_bot_running = true;
 
             api_base.setIsRunning(true);
-            this.interpreter.run(code).catch(error => {
-                globalObserver.emit('Error', error);
-                this.stopBot();
-            });
+            const runningInterpreter = this.interpreter;
+            runningInterpreter.run(code)
+                .then(() => {
+                    // A Quick Strategy can legitimately finish after one
+                    // contract when its profit/loss condition says "do not
+                    // trade again". The interpreter then resolves normally;
+                    // without cleanup, the UI remains stuck on "Bot running"
+                    // even though no strategy code is executing.
+                    //
+                    // Keep the live Deriv execution path unchanged, and only
+                    // terminate the current local simulator run. A late
+                    // completion from a replaced or stopped interpreter must
+                    // not terminate a newer bot run.
+                    if (
+                        api_base.api?.isAdminSimulation &&
+                        this.interpreter === runningInterpreter &&
+                        this.is_bot_running &&
+                        !api_base.is_stopping
+                    ) {
+                        void this.stopBot().catch(error => globalObserver.emit('Error', error));
+                    }
+                })
+                .catch(error => {
+                    globalObserver.emit('Error', error);
+                    this.stopBot();
+                });
         } catch (error) {
             globalObserver.emit('Error', error);
 

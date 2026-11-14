@@ -1,0 +1,443 @@
+const { test, expect } = require('@playwright/test');
+
+test.use({ viewport: { width: 1440, height: 900 }, baseURL: 'http://localhost:4173' });
+
+const ledger = page => page.evaluate(() => {
+    const account = localStorage.getItem('active_loginid');
+    return JSON.parse(sessionStorage.getItem('yolo:local-admin-contracts:' + account) || '[]')
+        .filter(contract => contract.source === 'bot_builder')
+        .sort((a, b) => a.contract_id - b.contract_id);
+});
+
+async function dismissTour(page) {
+    const dialog = page.locator('.tour-dialog').first();
+    if (await dialog.isVisible().catch(() => false)) {
+        await dialog.getByRole('button', { name: /Skip/i }).click({ timeout: 10000 });
+        await expect(dialog).toBeHidden({ timeout: 10000 });
+    }
+}
+
+async function enterLocalMode(page) {
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    const dot = page.getByRole('button', { name: /Press and hold for 3 seconds to open local Admin Test Kit/i });
+    await expect(dot).toBeVisible({ timeout: 35000 });
+    await page.waitForTimeout(1500);
+    await dismissTour(page);
+    await dot.dispatchEvent('pointerdown', { pointerType: 'mouse', button: 0 });
+    await page.waitForTimeout(3300);
+    await expect(page.getByRole('dialog', { name: 'Local Admin Test Kit' })).toBeVisible({ timeout: 10000 });
+    await dot.dispatchEvent('pointerup', { pointerType: 'mouse', button: 0 });
+    await dismissTour(page);
+    await page.getByRole('button', { name: 'Enter simulated admin mode' }).click({ timeout: 15000 });
+    await expect.poll(() => page.evaluate(() => sessionStorage.getItem('yolo:local-admin-test')),
+        { timeout: 20000 }).toBe('active');
+    // Existing 6B cases are interpreter regression tests, not presentation.
+    await page.evaluate(() => sessionStorage.setItem('yolo:local-admin-execution', 'engine'));
+}
+
+async function launchQuickStrategy(page, matcher, winProbability = 0, settingsOverrides = {}, executionMode = 'engine') {
+    await enterLocalMode(page);
+    await page.evaluate(({ winProbability, settingsOverrides, executionMode }) => {
+        sessionStorage.setItem('yolo:local-admin-execution', executionMode);
+        localStorage.setItem('qs-fields', JSON.stringify({
+            symbol: 'R_100', tradetype: 'callput', type: 'CALL',
+            durationtype: 't', duration: '1', stake: '1',
+            // Do not let the first losing trade hit the strategies' built-in
+            // stop threshold; the test controls when trading stops.
+            profit: '1000', loss: '1000', size: '2', unit: '1',
+            action: 'RUN', max_stake: 200, boolean_max_stake: false,
+            last_digit_prediction: 5,
+            ...settingsOverrides,
+        }));
+        // Force losses so stake recovery is deterministic and loss-threshold
+        // behavior cannot be mistaken for a healthy Stop-button flow.
+        sessionStorage.setItem('yolo:local-admin-win-probability', String(winProbability));
+    }, { winProbability, settingsOverrides, executionMode });
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.locator('#quick-strategy')).toBeVisible({ timeout: 35000 });
+    await dismissTour(page);
+    await page.locator('#quick-strategy').click({ timeout: 12000 });
+    await expect(page.locator('.strategy-template-picker__panel')).toBeVisible({ timeout: 15000 });
+    const tour = page.locator('.tour-dialog').first();
+    if (await tour.waitFor({ state: 'visible', timeout: 5000 })
+        .then(() => true, () => false)) {
+        await dismissTour(page);
+    }
+    const options = page.locator('.strategy-template-picker__strategy')
+        .filter({ has: page.locator('.strategy-template-picker__title').getByText('Options', { exact: true }) });
+    const select = options.locator('.strategy-template-picker__links')
+        .filter({ hasText: matcher }).first();
+    await expect(select).toBeVisible({ timeout: 15000 });
+    await select.click({ timeout: 15000 });
+    // Strategy selection intentionally resets Formik stake to $1. Apply a
+    // requested override through the visible form, as a real user would.
+    if (settingsOverrides.stake && String(settingsOverrides.stake) !== '1') {
+        await page.locator('input[name="stake"]').fill(String(settingsOverrides.stake));
+    }
+    const run = page.getByTestId('qs-run-button');
+    await expect(run).toBeEnabled({ timeout: 20000 });
+    await run.click({ timeout: 15000 });
+}
+
+for (const { name, matcher } of [
+    { name: 'Martingale', matcher: /^Martingale$/ },
+    { name: "D'Alembert", matcher: /Alembert/i },
+    { name: "Oscar's Grind", matcher: /Oscar.*Grind/i },
+]) {
+    test('6B: ' + name + ' repeats three settled trades, advances stake and stops without another buy',
+        async ({ page }) => {
+            page.on('dialog', async dialog => {
+                if (dialog.type() === 'confirm') await dialog.accept();
+                else await dialog.dismiss();
+            });
+            await launchQuickStrategy(page, matcher);
+            // Repeating is not the same as an API accepting one purchase.
+            await expect.poll(async () => (await ledger(page)).filter(c => c.is_sold).length,
+                { timeout: 45000, intervals: [500, 800, 1000] }).toBeGreaterThanOrEqual(3);
+
+            const executed = await ledger(page);
+            const firstThree = executed.filter(c => c.is_sold).slice(0, 3);
+            expect(new Set(firstThree.map(c => c.contract_id)).size).toBe(3);
+            expect(new Set(firstThree.map(c => c.transaction_ids.buy)).size).toBe(3);
+            for (let i = 0; i < 3; i++) {
+                const contract = firstThree[i];
+                expect(contract.status).toBe('lost');
+                expect(contract.is_expired).toBe(1);
+                expect(contract.tick_count).toBe(1);
+                expect(contract.profit).toBeCloseTo(-contract.buy_price, 2);
+                expect(contract.balance_after_sell).toEqual(expect.any(Number));
+                expect(contract.transaction_ids.sell).toEqual(expect.any(Number));
+                if (i > 0) {
+                    // Trading loops in sequence; a new buy may share the
+                    // settlement's whole-second timestamp, but not precede it.
+                    expect(contract.purchase_time).toBeGreaterThanOrEqual(firstThree[i - 1].sell_time);
+                }
+            }
+            const stakes = firstThree.map(c => c.buy_price);
+            if (name === 'Martingale' || name === "D'Alembert") {
+                expect(stakes[1]).toBeGreaterThan(stakes[0]);
+                expect(stakes[2]).toBeGreaterThan(stakes[1]);
+            } else {
+                // Oscar's Grind increases after wins, not on a loss streak.
+                expect(stakes[1]).toBe(stakes[0]);
+                expect(stakes[2]).toBe(stakes[0]);
+            }
+
+            const stop = page.locator('#db-animation__stop-button');
+            await expect(stop).toBeVisible({ timeout: 12000 });
+            await stop.click({ timeout: 10000 });
+            // Stopping should prevent new buys, but let an already open
+            // contract settle. We assert both with the same ledger.
+            const purchasedAtStop = (await ledger(page)).length;
+            await expect.poll(async () => (await ledger(page)).every(c => c.is_sold),
+                { timeout: 12000 }).toBe(true);
+            await page.waitForTimeout(3000);
+            const afterStop = await ledger(page);
+            expect(afterStop).toHaveLength(purchasedAtStop);
+            await expect(page.locator('#db-animation__run-button'))
+                .toBeVisible({ timeout: 10000 });
+            expect(afterStop.reduce((sum, contract) => sum + contract.buy_price, 0))
+                .toBeGreaterThan(0);
+            console.log('Step 6B ' + name + ': ' + JSON.stringify({
+                settled: afterStop.length,
+                stakes: afterStop.map(c => c.buy_price),
+                stoppedWithoutNewBuys: true,
+            }));
+        }
+    );
+}
+
+for (const { name, matcher } of [
+    { name: 'Martingale', matcher: /^Martingale$/ },
+    { name: "D'Alembert", matcher: /Alembert/i },
+    { name: "Oscar's Grind", matcher: /Oscar.*Grind/i },
+]) {
+    test('6B: ' + name + ' continues after wins, credits payouts and stops cleanly',
+        async ({ page }) => {
+            page.on('dialog', async dialog => {
+                if (dialog.type() === 'confirm') await dialog.accept();
+                else await dialog.dismiss();
+            });
+            await launchQuickStrategy(page, matcher, 100);
+            await expect.poll(async () => (await ledger(page)).filter(c => c.is_sold).length,
+                { timeout: 45000, intervals: [500, 800, 1000] }).toBeGreaterThanOrEqual(3);
+
+            const firstThree = (await ledger(page)).filter(c => c.is_sold).slice(0, 3);
+            expect(new Set(firstThree.map(c => c.contract_id)).size).toBe(3);
+            for (const contract of firstThree) {
+                expect(contract.status).toBe('won');
+                expect(contract.is_sold).toBe(1);
+                expect(contract.sell_price).toBeGreaterThan(contract.buy_price);
+                expect(contract.profit).toBeGreaterThan(0);
+                expect(contract.balance_after_sell).toEqual(expect.any(Number));
+                expect(contract.transaction_ids.sell).toEqual(expect.any(Number));
+            }
+
+            const stop = page.locator('#db-animation__stop-button');
+            await expect(stop).toBeVisible({ timeout: 12000 });
+            await stop.click({ timeout: 10000 });
+            const countWhenStopped = (await ledger(page)).length;
+            await expect.poll(async () => (await ledger(page)).every(c => c.is_sold),
+                { timeout: 12000 }).toBe(true);
+            await page.waitForTimeout(2500);
+            expect(await ledger(page)).toHaveLength(countWhenStopped);
+            await expect(page.locator('#db-animation__run-button'))
+                .toBeVisible({ timeout: 10000 });
+
+            console.log('Step 6B winning ' + name + ': ' + JSON.stringify({
+                tradeCount: countWhenStopped,
+                firstStakes: firstThree.map(c => c.buy_price),
+                profits: firstThree.map(c => c.profit),
+                stoppedWithoutNewBuys: true,
+            }));
+        }
+    );
+}
+
+
+test('6B regression: Martingale with ordinary fresh form values buys on 50% local simulation', async ({ page }) => {
+    page.on('dialog', async dialog => {
+        if (dialog.type() === 'confirm') await dialog.accept();
+        else await dialog.dismiss();
+    });
+    // Unlike other 6B tests, this leaves qs-fields UNSEEDED and uses the
+    // actual form defaults and user-entered P/L thresholds.
+    await enterLocalMode(page);
+    await expect(page.locator('#quick-strategy')).toBeVisible({ timeout: 35000 });
+    await dismissTour(page);
+    await page.locator('#quick-strategy').click({ timeout: 12000 });
+    await expect(page.locator('.strategy-template-picker__panel')).toBeVisible({ timeout: 15000 });
+    const botTour = page.locator('.tour-dialog').first();
+    if (await botTour.waitFor({ state: 'visible', timeout: 5000 }).then(() => true, () => false)) {
+        await dismissTour(page);
+    }
+    const options = page.locator('.strategy-template-picker__strategy')
+        .filter({ has: page.locator('.strategy-template-picker__title').getByText('Options', { exact: true }) });
+    await options.locator('.strategy-template-picker__links').filter({ hasText: /^Martingale$/ }).first().click();
+    const settings = await page.evaluate(() => ({
+        active: localStorage.getItem('active_loginid'),
+        qs: localStorage.getItem('qs-fields'),
+        simulator: sessionStorage.getItem('yolo:local-admin-test'),
+    }));
+    expect(settings.simulator).toBe('active');
+    expect(settings.qs).toBeNull();
+
+    await page.locator('input[name="profit"]').fill('100');
+    await page.locator('input[name="loss"]').fill('100');
+    const run = page.getByTestId('qs-run-button');
+    await expect(run).toBeEnabled({ timeout: 20000 });
+    await run.click();
+    await expect.poll(async () => (await ledger(page)).length,
+        { timeout: 30000, intervals: [500, 1000] }).toBeGreaterThan(0);
+    // A completed first contract is not sufficient: Martingale must
+    // re-enter Before Purchase and purchase new simulated contracts.
+    await expect.poll(async () => (await ledger(page)).filter(c => c.is_sold).length,
+        { timeout: 45000, intervals: [500, 1000] }).toBeGreaterThanOrEqual(3);
+    await expect(page.locator('#db-animation__stop-button')).toBeVisible();
+    await page.locator('#db-animation__stop-button').click();
+    console.log('Fresh Martingale form purchases:', JSON.stringify({
+        settings, trades: (await ledger(page)).length,
+    }));
+});
+
+test('6B regression: Martingale ends naturally after a one-trade profit limit and resets Run UI', async ({ page }) => {
+    page.on('dialog', async dialog => {
+        if (dialog.type() === 'confirm') await dialog.accept();
+        else await dialog.dismiss();
+    });
+    // A $2 stake settles with $1.60 profit at 100% wins. The configured
+    // $1 threshold intentionally ends the generated XML after one trade.
+    // This used to leave the UI stuck on "Bot running" forever because the
+    // interpreter resolved normally without emitting bot.stop.
+    await launchQuickStrategy(page, /^Martingale$/, 100, {
+        // Keep loss at twice the profit limit so the Quick Strategy's
+        // warning dialog does not interrupt the intended one-win test.
+        stake: '2', profit: '1', loss: '2',
+    });
+    await expect.poll(async () => (await ledger(page)).filter(c => c.is_sold).length,
+        { timeout: 25000, intervals: [500, 1000] }).toBe(1);
+    await expect(page.locator('#db-animation__run-button'))
+        .toBeVisible({ timeout: 12000 });
+    await expect(page.locator('.animation__text'))
+        .toHaveText(/Bot is not running/, { timeout: 12000 });
+    await page.waitForTimeout(2500);
+    const settled = await ledger(page);
+    expect(settled).toHaveLength(1);
+    expect(settled[0].profit).toBeCloseTo(1.6, 2);
+    console.log('Martingale natural completion resets UI:', JSON.stringify({
+        contracts: settled.length, profit: settled[0].profit, running: false,
+    }));
+});
+
+
+test('6B regression: Martingale continues buying after stopping and starting again in the same simulated session', async ({ page }) => {
+    page.on('dialog', async dialog => {
+        if (dialog.type() === 'confirm') await dialog.accept();
+        else await dialog.dismiss();
+    });
+    await launchQuickStrategy(page, /^Martingale$/, 0);
+    await expect.poll(async () => (await ledger(page)).filter(c => c.is_sold).length,
+        { timeout: 40000, intervals: [500, 1000] }).toBeGreaterThanOrEqual(2);
+    const stop = page.locator('#db-animation__stop-button');
+    await expect(stop).toBeVisible({ timeout: 10000 });
+    await stop.click();
+    await expect(page.locator('#db-animation__run-button')).toBeVisible({ timeout: 12000 });
+    await expect.poll(async () => (await ledger(page)).every(c => c.is_sold),
+        { timeout: 12000 }).toBe(true);
+    const previousCount = (await ledger(page)).length;
+    // The old trading engine has already processed the same symbol, and
+    // any surviving older event observer must not starve the next interpreter.
+    await page.locator('#db-animation__run-button').click();
+    await expect.poll(async () => (await ledger(page)).filter(c => c.is_sold).length,
+        { timeout: 45000, intervals: [500, 1000] })
+        .toBeGreaterThanOrEqual(previousCount + 2);
+    await page.locator('#db-animation__stop-button').click();
+    console.log('Martingale local session restart:', JSON.stringify({
+        previousCount, totalCount: (await ledger(page)).length,
+    }));
+});
+
+
+test('presentation: Martingale paper results update Summary, Transactions, Journal and account balance', async ({ page }) => {
+    page.on('dialog', async dialog => {
+        if (dialog.type() === 'confirm') await dialog.accept();
+        else await dialog.dismiss();
+    });
+    await launchQuickStrategy(page, /^Martingale$/, 0, {
+        symbol: 'R_100', tradetype: 'callput', type: 'CALL',
+        stake: '1', size: '2', profit: '1000', loss: '1000',
+    }, 'presentation');
+    await expect.poll(async () => (await ledger(page)).filter(c => c.is_sold).length,
+        { timeout: 30000, intervals: [300, 600, 1000] }).toBeGreaterThanOrEqual(3);
+
+    const stop = page.locator('#db-animation__stop-button');
+    await expect(stop).toBeVisible();
+    await stop.click();
+    await expect(page.locator('#db-animation__run-button')).toBeVisible({ timeout: 15000 });
+    // Stop can occur while a fourth contract is already purchased. All
+    // previously purchased paper contracts still settle via the market clock.
+    await expect.poll(async () => (await ledger(page)).every(contract => contract.is_sold),
+        { timeout: 18000, intervals: [350, 700, 1000] }).toBe(true);
+    const contracts = await ledger(page);
+    expect(contracts.length).toBeGreaterThanOrEqual(3);
+    expect(contracts.slice(0, 3).map(c => c.buy_price)).toEqual([1, 2, 4]);
+    const selected = await page.evaluate(() => {
+        const blocks = window.Blockly.derivWorkspace.getAllBlocks(true);
+        const get = (type, field) =>
+            blocks.find(block => block.type === type)?.getFieldValue(field);
+        return {
+            symbol: get('trade_definition_market', 'SYMBOL_LIST'),
+            contractType: get('purchase', 'PURCHASE_LIST'),
+        };
+    });
+    console.log('Presentation contract vs selected Blockly blocks:', JSON.stringify({
+        selected,
+        actual: contracts.slice(0, 5).map(c => ({
+            symbol: c.underlying_symbol, type: c.contract_type,
+            status: c.status, sold: c.is_sold, stake: c.buy_price,
+        })),
+    }));
+    // The Blockly workspace (not seeded localStorage) is the authoritative
+    // selected market and contract type after Quick Strategy form submission.
+    expect(contracts.every(c => c.is_sold && c.status === 'lost' &&
+        c.underlying_symbol === selected.symbol && c.contract_type === selected.contractType)).toBe(true);
+
+    // Journal and Transactions are LZ-compressed in session storage.
+    // Verify the REAL rendered report tabs rather than pretending their
+    // underlying compressed storage is ordinary JSON.
+    await page.locator('li#db-run-panel-tab__transactions').click();
+    await expect(page.getByTestId('dt_transactions_item').first())
+        .toBeVisible({ timeout: 15000 });
+    expect(await page.getByTestId('dt_transactions_item').count())
+        .toBeGreaterThanOrEqual(3);
+    await page.locator('li#db-run-panel-tab__journal').click();
+    await expect(page.locator('.journal__item-list'))
+        .toContainText(/Bought|Loss amount|Profit amount/, { timeout: 15000 });
+    await page.locator('li#db-run-panel-tab__summary').click();
+    await expect(page.getByTestId('mock-summary')).toBeVisible();
+    const numberOfRuns = page.locator('.run-panel__tile')
+        .filter({ hasText: 'No. of runs' })
+        .locator('.run-panel__tile-content');
+    await expect.poll(async () => Number(await numberOfRuns.textContent()),
+        { timeout: 12000 }).toBeGreaterThanOrEqual(3);
+    const balance = await page.evaluate(() => {
+        const account = localStorage.getItem('active_loginid');
+        const balances = JSON.parse(sessionStorage.getItem('yolo:local-admin-balances') || '{}');
+        return balances[account];
+    });
+    const stakes = contracts.reduce((sum, row) => sum + row.buy_price, 0);
+    expect(balance).toBeCloseTo(10000 - stakes, 2);
+    console.log('Presentation paper Martingale:', JSON.stringify({
+        count: contracts.length, market: contracts[0].underlying_symbol,
+        type: contracts[0].contract_type, balance,
+    }));
+});
+
+test('presentation: Bot Builder Rise/Fall Put on selected Volatility 75 updates reported type and profit', async ({ page }) => {
+    page.on('dialog', async dialog => {
+        if (dialog.type() === 'confirm') await dialog.accept();
+        else await dialog.dismiss();
+    });
+    await launchQuickStrategy(page, /^Martingale$/, 100, {
+        symbol: 'R_75', tradetype: 'callput', type: 'PUT',
+        stake: '2', duration: '1', profit: '1', loss: '2',
+    }, 'presentation');
+    await expect.poll(async () => (await ledger(page)).filter(c => c.is_sold).length,
+        { timeout: 26000 }).toBe(1);
+    await expect(page.locator('#db-animation__run-button')).toBeVisible({ timeout: 12000 });
+    const trades = await ledger(page);
+    expect(trades).toHaveLength(1);
+    expect(trades[0]).toMatchObject({
+        underlying_symbol: 'R_75',
+        contract_type: 'PUT',
+        status: 'won',
+        buy_price: 2,
+        sell_price: 3.6,
+        profit: 1.6,
+    });
+    const selected = await page.evaluate(() => {
+        const blocks = window.Blockly.derivWorkspace.getAllBlocks(true);
+        return {
+            symbol: blocks.find(b => b.type === 'trade_definition_market')?.getFieldValue('SYMBOL_LIST'),
+            contractType: blocks.find(b => b.type === 'purchase')?.getFieldValue('PURCHASE_LIST'),
+        };
+    });
+    expect(selected).toMatchObject({ symbol: 'R_75', contractType: 'PUT' });
+    await page.locator('li#db-run-panel-tab__transactions').click();
+    await expect(page.getByTestId('dt_transactions_item').first()).toBeVisible({ timeout: 12000 });
+    console.log('Bot presentation Put on volatility 75:', JSON.stringify({ selected, profit: trades[0].profit }));
+});
+
+
+for (const { name, matcher } of [
+    { name: "D'Alembert", matcher: /Alembert/i },
+    { name: "Oscar's Grind", matcher: /Oscar.*Grind/i },
+]) {
+    test('presentation: ' + name + ' generates paper losses without waiting for strategy signals',
+        async ({ page }) => {
+            page.on('dialog', async dialog =>
+                dialog.type() === 'confirm' ? dialog.accept() : dialog.dismiss());
+            await launchQuickStrategy(page, matcher, 0, {
+                symbol: 'R_100', tradetype: 'callput', type: 'CALL',
+                stake: '1', duration: '1', profit: '1000', loss: '1000',
+            }, 'presentation');
+            await expect.poll(async () => (await ledger(page)).filter(c => c.is_sold).length,
+                { timeout: 30000, intervals: [300, 600, 1000] })
+                .toBeGreaterThanOrEqual(3);
+            await page.locator('#db-animation__stop-button').click({ timeout: 12000 });
+            await expect(page.locator('#db-animation__run-button')).toBeVisible({ timeout: 15000 });
+            await expect.poll(async () => (await ledger(page)).every(c => c.is_sold),
+                { timeout: 16000 }).toBe(true);
+            const contracts = await ledger(page);
+            expect(contracts.every(c => c.status === 'lost' && c.contract_type === 'CALL' &&
+                c.underlying_symbol === 'R_100')).toBe(true);
+            await page.locator('li#db-run-panel-tab__transactions').click();
+            await expect(page.getByTestId('dt_transactions_item').first()).toBeVisible({ timeout: 12000 });
+            await page.locator('li#db-run-panel-tab__journal').click();
+            await expect(page.locator('.journal__item-list')).toContainText(/Bought|Loss amount/, { timeout: 12000 });
+            console.log('Generic simulated ' + name + ' presentation:', JSON.stringify({
+                settled: contracts.length, stakes: contracts.map(c => c.buy_price),
+            }));
+        }
+    );
+}

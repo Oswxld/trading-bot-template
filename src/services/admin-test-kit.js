@@ -13,6 +13,7 @@ export const TEST_DEMO_ID = 'VRTC_ADMIN_TEST';
 export const TEST_REAL_ID = 'CR_ADMIN_TEST';
 const STATE_KEY = 'yolo:local-admin-balances';
 const WIN_PROBABILITY_KEY = 'yolo:local-admin-win-probability';
+const ADMIN_EXECUTION_KEY = 'yolo:local-admin-execution';
 const CONTRACT_LEDGER_KEY = 'yolo:local-admin-contracts';
 const CONTRACT_SERIAL_KEY = 'yolo:local-admin-contract-serial';
 const REPORT_CLEAR_KEY = 'yolo:local-admin-report-clear';
@@ -54,6 +55,22 @@ export const getAdminTestWinProbability = () => {
 export const setAdminTestWinProbability = value => {
     if (!isAdminTestActive() || !Number.isInteger(value) || value < 0 || value > 100) return false;
     sessionStorage.setItem(WIN_PROBABILITY_KEY, String(value));
+    return true;
+};
+
+/**
+ * In presentation mode, only the local Admin Test Kit runs scripted paper
+ * contracts for UI demonstrations. Engine mode keeps the original Blockly
+ * execution against the fake API for testing actual strategy logic.
+ * Neither mode is accessible on deployed domains.
+ */
+export const getAdminTestExecutionMode = () => {
+    if (!isAdminTestActive()) return 'engine';
+    return sessionStorage.getItem(ADMIN_EXECUTION_KEY) === 'engine' ? 'engine' : 'presentation';
+};
+export const setAdminTestExecutionMode = value => {
+    if (!isAdminTestActive() || !['presentation', 'engine'].includes(value)) return false;
+    sessionStorage.setItem(ADMIN_EXECUTION_KEY, value);
     return true;
 };
 
@@ -190,6 +207,7 @@ export const enterAdminTest = () => {
     sessionStorage.setItem(ADMIN_TEST_BACKUP, JSON.stringify(original));
     sessionStorage.setItem(STATE_KEY, JSON.stringify(DEFAULT_BALANCES));
     sessionStorage.setItem(WIN_PROBABILITY_KEY, String(DEFAULT_WIN_PROBABILITY));
+    sessionStorage.setItem(ADMIN_EXECUTION_KEY, 'presentation');
     sessionStorage.removeItem(CONTRACT_SERIAL_KEY);
     for (const accountId of Object.keys(DEFAULT_BALANCES)) {
         sessionStorage.removeItem(`${CONTRACT_LEDGER_KEY}:${accountId}`);
@@ -210,6 +228,7 @@ export const exitAdminTest = () => {
     sessionStorage.removeItem(ADMIN_TEST_BACKUP);
     sessionStorage.removeItem(STATE_KEY);
     sessionStorage.removeItem(WIN_PROBABILITY_KEY);
+    sessionStorage.removeItem(ADMIN_EXECUTION_KEY);
     sessionStorage.removeItem(CONTRACT_SERIAL_KEY);
     for (const accountId of Object.keys(DEFAULT_BALANCES)) {
         sessionStorage.removeItem(`${CONTRACT_LEDGER_KEY}:${accountId}`);
@@ -228,7 +247,19 @@ export const switchAdminTestAccount = id => {
     return true;
 };
 
-const CONTRACT_TYPES = ['DIGITDIFF', 'DIGITMATCH', 'DIGITOVER', 'DIGITUNDER', 'DIGITEVEN', 'DIGITODD', 'CALL', 'PUT'];
+const CONTRACT_TYPES = ['DIGITDIFF', 'DIGITMATCH', 'DIGITOVER', 'DIGITUNDER', 'DIGITEVEN', 'DIGITODD', 'CALL', 'PUT', 'ACCU'];
+
+// Fictional presentation prices are deliberately independent of a live
+// broker's quotes. The contract family and prediction influence the payout,
+// while the adjustable probability controls whether each trade wins.
+const simulatedPayoutFactor = (type, barrier, growthRate = 0.03, duration = 1) => {
+    if (type === 'DIGITMATCH') return 8.4;
+    if (type === 'ACCU') return Number(Math.pow(1 + Number(growthRate || 0.03), duration).toFixed(4));
+    // Preserve the existing test kit's uniform illustrative 80% payout for
+    // other contracts; the selected family/market is still represented in
+    // the contract metadata and synthetic entry/exit ticks.
+    return 1.8;
+};
 const SYMBOLS = [
     ['R_100', 'Volatility 100 Index'],
     ['R_75', 'Volatility 75 Index'],
@@ -329,7 +360,9 @@ export const createAdminTestApi = () => {
     activeTimers.add(openTimer);
 
     const emit = payload => {
-        if (closed) return;
+        // A previous account's socket must never deliver its contracts,
+        // ticks, or balance into the newly selected account's UI.
+        if (closed || !isAdminTestActive() || localStorage.getItem('active_loginid') !== accountId) return;
         for (const callback of [...listeners]) callback({ data: payload });
     };
     const sendResponse = (request, response, msg_type) => {
@@ -441,6 +474,12 @@ export const createAdminTestApi = () => {
         async send(rawRequest) {
             const request = typeof rawRequest === 'string' ? JSON.parse(rawRequest) : rawRequest;
             if (closed || connection.readyState !== 1) throw new Error('Simulated connection is not open.');
+            // The socket is bound to the account selected when it was made.
+            // Reject stale Bot Builder/Bulk Trader requests during a switch;
+            // APIBase can then recreate and authorize the correct local socket.
+            if (!isAdminTestActive() || localStorage.getItem('active_loginid') !== accountId) {
+                throw new Error('Simulated account changed; reconnect before sending requests.');
+            }
             const kind = Object.keys(request).find(key => [
                 'balance', 'time', 'active_symbols', 'contracts_for', 'trading_times',
                 'ticks_history', 'ticks', 'proposal', 'buy', 'proposal_open_contract',
@@ -460,7 +499,7 @@ export const createAdminTestApi = () => {
             if (kind === 'trading_times') return message({ trading_times: { markets: [] } });
             if (kind === 'contracts_for') return message({ contracts_for: { available: CONTRACT_TYPES.map(type => ({
                 contract_type: type,
-                contract_category: type.startsWith('DIGIT') ? 'digits' : 'callput',
+                contract_category: type.startsWith('DIGIT') ? 'digits' : type === 'ACCU' ? 'accumulator' : 'callput',
                 expiry_type: 'tick', min_contract_duration: '1t', max_contract_duration: '10t',
                 barriers: ['DIGITMATCH', 'DIGITDIFF', 'DIGITOVER', 'DIGITUNDER'].includes(type) ? 1 : 0,
             })) } });
@@ -506,7 +545,12 @@ export const createAdminTestApi = () => {
                     return message({ error: err }, 'proposal');
                 }
                 const id = `adm-proposal-${++serial}`;
-                const multiplier = type === 'DIGITMATCH' ? 8.4 : 1.8;
+                const multiplier = simulatedPayoutFactor(type,
+                    request.barrier ?? request.selected_tick ?? request.prediction,
+                    request.growth_rate, duration);
+                if (!multiplier) return message({ error: {
+                    code: 'InvalidContractProposal', message: 'This digit prediction cannot produce the chosen contract outcome.',
+                } }, 'proposal');
                 const basisPayout = request.basis === 'payout';
                 const stake = Number((basisPayout ? amount / multiplier : amount).toFixed(2));
                 const payout = Number((basisPayout ? amount : stake * multiplier).toFixed(2));
@@ -521,7 +565,11 @@ export const createAdminTestApi = () => {
             if (kind === 'buy') {
                 const direct = request.parameters;
                 const directAmount = Number(direct?.amount);
-                const directMultiplier = direct?.contract_type === 'DIGITMATCH' ? 8.4 : 1.8;
+                const directMultiplier = simulatedPayoutFactor(
+                    direct?.contract_type,
+                    direct?.barrier ?? direct?.selected_tick ?? direct?.prediction,
+                    direct?.growth_rate, Number(direct?.duration ?? 1)
+                ) || 1.8;
                 const directStake = Number((direct?.basis === 'payout'
                     ? directAmount / directMultiplier : directAmount).toFixed(2));
                 const proposal = proposals.get(request.buy) ||
@@ -534,9 +582,14 @@ export const createAdminTestApi = () => {
                     });
                 const amount = Number(proposal?.stake ?? proposal?.amount);
                 const duration = Number(proposal?.duration ?? 1);
+                const payoutFactor = simulatedPayoutFactor(
+                    proposal?.contract_type,
+                    proposal?.barrier ?? proposal?.selected_tick ?? proposal?.prediction,
+                    proposal?.growth_rate, duration
+                );
                 const symbol = proposal?.underlying_symbol || 'R_100';
                 const offeredPrice = Number(request.price);
-                if (!proposal || !CONTRACT_TYPES.includes(proposal.contract_type) ||
+                if (!proposal || !payoutFactor || !CONTRACT_TYPES.includes(proposal.contract_type) ||
                     !SYMBOLS.some(s => s.symbol === symbol) ||
                     !Number.isFinite(amount) || amount <= 0 ||
                     !Number.isInteger(duration) || duration < 1 || duration > 10 ||
@@ -559,6 +612,14 @@ export const createAdminTestApi = () => {
                 const contract = {
                     contract_id, contract_type: proposal.contract_type,
                     underlying_symbol: symbol,
+                    // The Transactions UI's getContractTypeName() reads the
+                    // penultimate shortcode segment for CALL/PUT to distinguish
+                    // Rise/Fall from Higher/Lower. Real Deriv contracts include
+                    // this field; omitting it crashed the entire report drawer.
+                    shortcode: [
+                        proposal.contract_type, symbol, amount, now,
+                        now + duration, 'S0P', '0',
+                    ].join('_'),
                     currency: 'USD', buy_price: amount, payout: proposal.payout,
                     barrier: proposal.barrier ?? proposal.selected_tick ?? proposal.prediction,
                     entry_tick: entry.quote, entry_spot: entry.quote,

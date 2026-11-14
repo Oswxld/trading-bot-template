@@ -9,6 +9,7 @@ import { TContractInfo } from '@/components/summary/summary-card.types';
 import { contract_stages } from '@/constants/contract-stage';
 import { transaction_elements } from '@/constants/transactions';
 import { useStore } from '@/hooks/useStore';
+import { isAdminTestActive } from '@/services/admin-test-kit';
 import { DerivLightEmptyCardboardBoxIcon } from '@deriv/quill-icons/Illustration';
 import { Localize } from '@deriv-com/translations';
 import { useDevice } from '@deriv-com/ui';
@@ -135,6 +136,26 @@ const Transactions = observer(({ is_drawer_open }: TTransactions) => {
             >
                 <div className='transactions__scrollbar'>
                     {transaction_list?.length ? (
+                        isAdminTestActive() ? (
+                            // Local paper trading may open Transactions before
+                            // react-virtualized AutoSizer has a measurable
+                            // height. That left a populated ledger and cached
+                            // rows behind an empty screen. Render the local
+                            // bounded report directly; leave live Deriv's
+                            // virtualized list completely unchanged.
+                            <div className='transactions__local-rows' data-testid='admin-simulated-transactions' data-row-count={transaction_list.length}>
+                                {transaction_list.slice(0, 300).map((row, index) => (
+                                    <TransactionItem
+                                        key={row.type === transaction_elements.CONTRACT &&
+                                            typeof row.data === 'object'
+                                            ? row.data?.transaction_ids?.buy : `divider-${index}`}
+                                        row={row as TTransactionItem['row']}
+                                        onClickTransaction={onClickTransaction}
+                                        active_transaction_id={active_transaction_id}
+                                    />
+                                ))}
+                            </div>
+                        ) : (
                         <DataList
                             className='transactions'
                             data_source={transaction_list}
@@ -173,6 +194,7 @@ const Transactions = observer(({ is_drawer_open }: TTransactions) => {
                                 }
                             }}
                         />
+                        )
                     ) : (
                         <>
                             {contract_stage >= contract_stages.STARTING ? (

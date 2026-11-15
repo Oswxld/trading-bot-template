@@ -304,7 +304,7 @@ describe('Digit Analyzer pattern score calculation engine (Chunk 6.2)', () => {
         const bad = [
             [first, first],
             [second, first],
-            [{ ...first, id: 'R_10:1770000000:1' }, first],
+            [{ ...first, id: 'history:R_10:1770000001:1' }],
             [{ ...first, id: 'history:R_75:1770000000:1' }],
             [{ ...first, id: 'history:R_10:1:1' }],
             [{ ...first, id: 'history:R_10:1770000000:0' }],

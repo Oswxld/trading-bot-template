@@ -10,7 +10,7 @@ test.use({ baseURL: 'http://127.0.0.1:4173', screenshot: 'only-on-failure' });
 async function installMarketCatalogFixture(page, { fail = false } = {}) {
     await page.addInitScript(({ endpoint, failCatalog }) => {
         const NativeWebSocket = window.WebSocket;
-        const telemetry = { opened: 0, closed: 0, active: 0, maximum: 0 };
+        const telemetry = { opened: 0, closed: 0, active: 0, maximum: 0, historyRequests: [] };
         window.__digitAnalyzerSocketMetrics = telemetry;
         const markets = [
             {
@@ -65,6 +65,29 @@ async function installMarketCatalogFixture(page, { fail = false } = {}) {
                             ? { req_id: request.req_id, error: { message: 'Catalog unavailable' } }
                             : { req_id: request.req_id, msg_type: 'active_symbols', active_symbols: markets };
                         this.onmessage?.({ data: JSON.stringify(response) });
+                    }, 0);
+                } else if (request.ticks_history) {
+                    // A one-off historical SNAPSHOT, never a subscription.
+                    const count = request.count;
+                    const symbol = request.ticks_history;
+                    const precision = symbol === 'R_75' ? 2 : 3;
+                    telemetry.historyRequests.push({ symbol, count, subscribed: !!request.subscribe });
+                    const times = Array.from({ length: count }, (_, i) => 1770000000 - count + i);
+                    const prices = Array.from({ length: count }, (_, i) => (
+                        symbol === 'R_75' ? 987.21 + i % 10 / 100 : 123.201 + i % 10 / 1000
+                    ));
+                    setTimeout(() => {
+                        if (this.isClosed) return;
+                        this.onmessage?.({ data: JSON.stringify({
+                            msg_type: 'history',
+                            req_id: request.req_id,
+                            echo_req: {
+                                ticks_history: symbol, count,
+                                end: 'latest', style: 'ticks',
+                            },
+                            pip_size: precision,
+                            history: { prices, times },
+                        }) });
                     }, 0);
                 } else if (request.ticks) {
                     const symbol = request.ticks;
@@ -142,6 +165,8 @@ async function verifyAnalysis(page) {
     await expect(page.getByRole('option', { name: 'Volatility 50 Index (closed)' })).toHaveAttribute('disabled', '');
     await expect(page.locator('.digit-analyzer__quote')).toHaveText('123.450');
     await expect(page.locator('.digit-analyzer__last-digit')).toHaveText('0');
+    await expect(page.locator('.digit-analyzer__sample-count')).toContainText('1,000 / 1,000');
+    await expect(page.getByRole('note')).toContainText('Historical and live observations are synchronized');
     await expect(page.getByRole('note')).toContainText('Receiving live ticks');
     await expect(page.getByRole('region', { name: 'Recent ticks' })).toContainText('123.450');
     await expect(page.getByRole('region', { name: 'Digit distribution' })).toBeVisible();
@@ -224,9 +249,16 @@ test('mobile: 10 digit bars, controls and cards remain inside 375px viewport', a
     const subscriptions = await page.evaluate(() => window.__digitAnalyzerSocketMetrics);
     expect(subscriptions.active).toBe(1);
     expect(subscriptions.maximum).toBe(1);
+    expect(subscriptions.historyRequests.some(r => r.symbol === 'R_75' && r.count === 1000)).toBe(true);
 
     await page.getByRole('combobox', { name: 'Sample size' }).selectOption('500');
     await expect(page.getByRole('combobox', { name: 'Sample size' })).toHaveValue('500');
+    await expect(page.locator('.digit-analyzer__sample-count')).toContainText('500 / 500');
+    const afterResize = await page.evaluate(() => window.__digitAnalyzerSocketMetrics);
+    expect(afterResize.historyRequests.some(r => r.symbol === 'R_75' && r.count === 500)).toBe(true);
+    expect(afterResize.historyRequests.every(r => !r.subscribed)).toBe(true);
+    expect(afterResize.maximum).toBe(1);
+    expect(afterResize.opened).toBe(1);
     await page.getByRole('combobox', { name: 'Over/Under threshold' }).selectOption('7');
     await expect(page.getByText('Over 7')).toBeVisible();
 });

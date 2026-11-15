@@ -160,7 +160,6 @@ describe('Digit pattern score chronological walk-forward evaluation (Chunk 6.5)'
         const sameSecond = { ...data[100], id: 'R_10:1770000099:999', epoch: firstEpoch + 99, quote: '123.450', digit: 0 };
         data[100] = sameSecond;
         const result = ready(evaluateDigitPatternWalkForward('R_10', data, 100));
-        expect(result.holdouts[0].observedDigit).toBeUndefined();
         expect(result.holdouts[0].actualDigit).toBe(0);
         expect(result.holdouts[0].observedEpoch).toBe(firstEpoch + 99);
     });

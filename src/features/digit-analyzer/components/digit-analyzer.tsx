@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import type { AnalyzerMarket, AnalyzerSampleSize } from '../types/digit-analyzer.types';
+import { useMarketCatalog } from '../hooks/use-market-catalog';
+import type { AnalyzerSampleSize } from '../types/digit-analyzer.types';
 import AnalyzerControls from './analyzer-controls';
 import AnalyzerHeader from './analyzer-header';
 import CurrentTick from './current-tick';
@@ -8,35 +9,71 @@ import OutcomeStatistics from './outcome-statistics';
 import RecentTicks from './recent-ticks';
 import '../styles/digit-analyzer.scss';
 
-// Chunk 2.4 is presentational only. Markets will come from the dedicated public
-// feed service in Chunk 3; we never represent a mock market as available.
-const NO_MARKETS: readonly AnalyzerMarket[] = [];
-
 /**
- * Read-only dashboard shell.
- * No WebSocket, trading requests, or fabricated statistics are created here.
- * The analyzer hook and real market-data stream will feed these components later.
+ * Chunk 3.3: the market dropdown now uses a real public active_symbols catalog.
+ * No history or tick stream is subscribed to yet, and no prices/statistics are
+ * fabricated. The hook opens one dedicated socket only while this tab is mounted.
  */
 const DigitAnalyzer = () => {
-    const [selectedSymbol, setSelectedSymbol] = useState('');
+    const {
+        markets,
+        selectedSymbol,
+        selectMarket,
+        connectionState,
+        phase,
+        error,
+        reloadMarkets,
+    } = useMarketCatalog();
     const [sampleSize, setSampleSize] = useState<AnalyzerSampleSize>(1000);
     const [selectedDigit, setSelectedDigit] = useState(5);
     const [threshold, setThreshold] = useState(5);
 
+    const selectedMarket = markets.find(market => market.symbol === selectedSymbol);
+    const loadedCount = markets.filter(market => market.isOpen !== false).length;
+
     return (
         <section className='digit-analyzer' aria-labelledby='digit-analyzer-title'>
             <div className='digit-analyzer__content'>
-                <AnalyzerHeader connectionState='idle' />
+                <AnalyzerHeader connectionState={connectionState} />
 
-                <div className='digit-analyzer__notice' role='note'>
-                    The analyzer interface is ready. Live market data is not connected yet.
-                    Market selection, refresh, and pause will become available when the public feed is integrated.
+                <div className={`digit-analyzer__notice digit-analyzer__notice--${phase}`} role='note'>
+                    <div className='digit-analyzer__notice-copy'>
+                        {phase === 'loading' && (
+                            <p>Connecting to Deriv and loading available synthetic markets. Live ticks are not streaming yet.</p>
+                        )}
+                        {phase === 'ready' && (
+                            <p>
+                                {loadedCount} synthetic {loadedCount === 1 ? 'market' : 'markets'} available.
+                                {selectedMarket ? ` Selected: ${selectedMarket.displayName}.` : ''}
+                                {' '}Live tick streaming is not enabled yet.
+                            </p>
+                        )}
+                        {phase === 'empty' && (
+                            <p>Deriv returned no currently selectable synthetic markets. Live tick streaming has not started.</p>
+                        )}
+                        {phase === 'error' && (
+                            <p role='alert'>
+                                Unable to load the Deriv market catalog: {error ?? 'Connection unavailable.'}
+                            </p>
+                        )}
+                    </div>
+                    {phase !== 'loading' && (
+                        <button
+                            type='button'
+                            className='digit-analyzer__reload-markets'
+                            onClick={reloadMarkets}
+                        >
+                            {phase === 'error' ? 'Retry markets' : 'Reload markets'}
+                        </button>
+                    )}
                 </div>
 
                 <AnalyzerControls
-                    markets={NO_MARKETS}
+                    markets={markets}
                     selectedSymbol={selectedSymbol}
-                    onMarketChange={setSelectedSymbol}
+                    onMarketChange={selectMarket}
+                    isMarketLoading={phase === 'loading'}
+                    hasMarketError={phase === 'error'}
                     sampleSize={sampleSize}
                     onSampleSizeChange={setSampleSize}
                     isPaused={false}

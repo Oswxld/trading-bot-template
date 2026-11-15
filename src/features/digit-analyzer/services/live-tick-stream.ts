@@ -48,6 +48,9 @@ export class LiveTickStream {
             };
             session.unsubscribe = this.client.onMessage(message => {
                 if (this.disposed || this.active !== session || generation !== this.generation) return;
+                // Before the correlated req_id acknowledgment, an unrelated
+                // tick with the same symbol must never claim this session.
+                if (!session.subscriptionId) return;
                 this.receiveTick(session, message);
             });
             this.active = session;
@@ -64,6 +67,11 @@ export class LiveTickStream {
                     throw new Error('Mismatched tick subscription identifier');
                 }
                 session.subscriptionId = id;
+                // The request response is itself the first tick. Process it
+                // only after the matching req_id confirmed the subscription.
+                if (!this.disposed && this.active === session && generation === this.generation) {
+                    this.receiveTick(session, initial);
+                }
             } catch (error) {
                 // A timed-out subscription may still exist upstream. Close only
                 // the Analyzer's own socket rather than risk orphaned streams.
@@ -119,7 +127,12 @@ export class LiveTickStream {
 
         if (this.client.getState() !== 'live') return;
         try {
-            await this.client.request({ forget: session.subscriptionId });
+            const confirmation = await this.client.request({ forget: session.subscriptionId });
+            // A successful WebSocket response is not proof that Deriv actually
+            // removed the subscription. Never overlap an unconfirmed stream.
+            if (confirmation.msg_type !== 'forget' || confirmation.forget !== 1) {
+                throw new Error('Deriv did not confirm tick subscription cancellation');
+            }
         } catch (error) {
             // Never issue another subscribe while the server could still have
             // the prior one. Closing the anonymous socket clears it upstream.

@@ -62,6 +62,7 @@ jobs:
             src/features/digit-analyzer/__tests__/use-live-ticks.test.tsx \
             src/features/digit-analyzer/__tests__/normalize-history.test.ts \
             src/features/digit-analyzer/__tests__/historical-ticks.test.ts \
+            src/features/digit-analyzer/__tests__/rolling-tick-window.test.ts \
             --ci --runInBand --coverage=false
 
       - name: Trading and Admin Test Kit smoke tests

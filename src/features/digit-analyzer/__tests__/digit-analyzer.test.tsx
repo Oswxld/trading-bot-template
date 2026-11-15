@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { useMarketCatalog } from '../hooks/use-market-catalog';
 import { useLiveTicks } from '../hooks/use-live-ticks';
 // Exercise the same public entry point used by main.tsx's lazy import.
@@ -113,7 +113,7 @@ describe('Digit Analyzer feature shell', () => {
         expect(screen.getAllByText('Awaiting market data')).toHaveLength(5);
     });
 
-    it('renders actual streamed prices and last digits without faking histogram totals', () => {
+    it('renders real one-tick digit distribution and outcomes while history is loading', () => {
         jest.mocked(useMarketCatalog).mockReturnValue({
             ...loadingCatalog,
             connectionState: 'live',
@@ -139,7 +139,14 @@ describe('Digit Analyzer feature shell', () => {
         expect(screen.getByRole('region', { name: 'Latest tick' })).toHaveTextContent('1 / 1,000');
         expect(screen.getByText('Most recent market tick')).toBeInTheDocument();
         expect(screen.getByRole('region', { name: 'Recent ticks' })).toHaveTextContent('123.450');
-        expect(screen.getAllByText('Awaiting market data')).toHaveLength(4);
+        expect(screen.queryByText('Awaiting market data')).not.toBeInTheDocument();
+        expect(screen.getByRole('group', { name: 'Digit 0: 1 of 1 ticks (100.0%)' })).toBeInTheDocument();
+        expect(within(screen.getByRole('region', { name: 'Even / Odd' })).getByText('Even').parentElement)
+            .toHaveTextContent('100.0%');
+        expect(within(screen.getByRole('region', { name: 'Over / Under' })).getByText('Under 5').parentElement)
+            .toHaveTextContent('100.0%');
+        expect(within(screen.getByRole('region', { name: 'Matches / Differs' })).getByText('Differs').parentElement)
+            .toHaveTextContent('100.0%');
         expect(screen.getByRole('combobox', { name: 'Market' })).toHaveValue('R_75');
     });
 
@@ -162,7 +169,10 @@ describe('Digit Analyzer feature shell', () => {
         render(<DigitAnalyzer />);
         expect(screen.getByText('Historical and live observations are synchronized into the rolling sample.')).toBeInTheDocument();
         expect(screen.getByRole('region', { name: 'Latest tick' })).toHaveTextContent('1 / 1,000');
-        expect(screen.getAllByText('Awaiting market data')).toHaveLength(4);
+        expect(screen.queryByText('Awaiting market data')).not.toBeInTheDocument();
+        expect(screen.getByRole('group', { name: 'Digit 5: 1 of 1 ticks (100.0%)' })).toBeInTheDocument();
+        expect(within(screen.getByRole('region', { name: 'Matches / Differs' })).getByText('Matches 5').parentElement)
+            .toHaveTextContent('100.0%');
     });
 
     it('shows an explicit error with a Retry action instead of fake market choices', () => {

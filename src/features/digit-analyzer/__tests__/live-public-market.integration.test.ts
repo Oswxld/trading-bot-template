@@ -6,6 +6,7 @@ import { calculateDigitPercentages } from '../services/digit-percentages';
 import { calculateDigitParity } from '../services/digit-parity';
 import { calculateDigitOverUnder } from '../services/digit-over-under';
 import { calculateDigitMatchesDiffers } from '../services/digit-matches-differs';
+import { evaluateDigitPatternWalkForward } from '../services/digit-pattern-walkforward';
 import { LiveTickStream } from '../services/live-tick-stream';
 import PublicMarketDataClient, { DERIV_PUBLIC_MARKET_WS_URL } from '../services/public-market-data-client';
 import type { AnalyzerTick } from '../types/digit-analyzer.types';
@@ -194,3 +195,76 @@ liveTest('fetches 100 / 500 / 1000 authentic historical ticks with exact quote p
         expect(client.getState()).toBe('idle');
     }
 }, 105_000);
+
+
+/**
+ * Opt-in public-data walk-forward audit, with ZERO fabricated market outcomes.
+ * These are short observational snapshots for diagnostic benchmarking, not
+ * demonstrations of statistically significant or profitable predictions.
+ *
+ * The 1,000-tick API limit permits 900 one-tick holdouts for the 100-tick
+ * strategy and 500 for the 500-tick strategy. A 1,000-tick strategy requires
+ * at least 1,001 ticks; this probe must honestly return insufficient-holdout.
+ */
+liveTest('walk-forward tests real Deriv next ticks with a frequency-only baseline', async () => {
+    const client = new PublicMarketDataClient({ requestTimeoutMs: 25_000 });
+    try {
+        const catalog = await fetchSyntheticMarketCatalog(client);
+        const open = catalog.filter(market => market.isOpen !== false);
+        const first = open.find(market => market.symbol === '1HZ10V') ??
+            open.find(market => market.symbol === 'R_10') ?? open[0];
+        const second = open.find(market =>
+            market.symbol === '1HZ100V' && market.symbol !== first.symbol
+        ) ?? open.find(market =>
+            market.symbol === 'R_75' && market.symbol !== first.symbol
+        ) ?? open.find(market => market.symbol !== first.symbol);
+        if (!first || !second) {
+            throw new Error('Two distinct genuine public synthetic instruments are required');
+        }
+
+        for (const market of [first, second]) {
+            // Unmodified, real one-off history. Never subscribe, authorize or buy.
+            const ticks = await fetchHistoricalTicks(client, market.symbol, 1000);
+            expect(ticks).toHaveLength(1000);
+            expect(ticks.every(tick =>
+                tick.id.startsWith(`history:${market.symbol}:`)
+            )).toBe(true);
+
+            for (const size of [100, 500, 1000] as const) {
+                const backtest = evaluateDigitPatternWalkForward(market.symbol, ticks, size);
+                if (size === 1000) {
+                    expect(backtest.status).toBe('insufficient-holdout');
+                    expect(backtest.evaluatedTicks).toBe(0);
+                    console.log('[DERIV WALKFORWARD]', market.symbol, '| window:', size,
+                        '| no held-out tick (requires at least 1001 real ticks)');
+                    continue;
+                }
+                expect(backtest.status).toBe('evaluated');
+                if (backtest.status !== 'evaluated') throw new Error('Expected a real holdout sample');
+                expect(backtest.evaluatedTicks).toBe(1000 - size);
+                expect(backtest.holdouts[0].observedIndex).toBe(size);
+                expect(backtest.holdouts.at(-1)?.observedIndex).toBe(999);
+                expect(backtest.uniformReferenceRate).toBe(0.1);
+                for (const method of [backtest.model, backtest.frequencyBaseline]) {
+                    expect(method.creditedHitRate).toBeGreaterThanOrEqual(0);
+                    expect(method.creditedHitRate).toBeLessThanOrEqual(1);
+                    expect(method.uniquePicks + method.tiedPicks).toBe(backtest.evaluatedTicks);
+                }
+                console.log('[DERIV WALKFORWARD]',
+                    '| market:', market.symbol,
+                    '| window:', size,
+                    '| genuine held-out ticks:', backtest.evaluatedTicks,
+                    '| pattern tie-adjusted hit:', (100 * backtest.model.creditedHitRate).toFixed(2) + '%',
+                    '| simple frequency baseline:', (100 * backtest.frequencyBaseline.creditedHitRate).toFixed(2) + '%',
+                    '| equal-digit reference: 10.00%',
+                    '| model unique predictions:', backtest.model.uniquePicks,
+                    '| model ties:', backtest.model.tiedPicks,
+                    '| exploratory only, NOT validated probability or proven edge');
+            }
+        }
+        expect(client.getState()).toBe('live');
+    } finally {
+        client.dispose();
+        expect(client.getState()).toBe('idle');
+    }
+}, 140_000);

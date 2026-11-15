@@ -66,12 +66,17 @@ liveTest('connects to Deriv public WebSocket, loads markets, receives ticks and 
             ticks.push(tick);
             if (ticks.length >= 2) resolveTwoTicks?.();
         });
-        await Promise.race([
-            twoTicks,
-            new Promise<never>((_, reject) => {
-                setTimeout(() => reject(new Error('No second real tick arrived within 25 seconds')), 25_000);
-            }),
-        ]);
+        let tickTimeout: ReturnType<typeof setTimeout> | undefined;
+        try {
+            await Promise.race([
+                twoTicks,
+                new Promise<never>((_, reject) => {
+                    tickTimeout = setTimeout(() => reject(new Error('No second real tick arrived within 25 seconds')), 25_000);
+                }),
+            ]);
+        } finally {
+            if (tickTimeout) clearTimeout(tickTimeout);
+        }
 
         expect(ticks.length).toBeGreaterThanOrEqual(2);
         for (const tick of ticks) {

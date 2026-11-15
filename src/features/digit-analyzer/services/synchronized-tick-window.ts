@@ -72,6 +72,7 @@ export class SynchronizedTickWindow {
     private historyPhase: HistoryLoadPhase = 'idle';
     private bufferedLive: AnalyzerTick[] = [];
     private readonly maximumBufferedMultiplier = 2;
+    private disposed = false;
 
     constructor(symbol: string, size: AnalyzerSampleSize) {
         this.window = new RollingTickWindow(symbol, size);
@@ -91,6 +92,7 @@ export class SynchronizedTickWindow {
 
     /** Start a fresh history request without resetting the live subscription. */
     beginHistory(size: AnalyzerSampleSize = this.window.windowSize): number {
+        if (this.disposed) throw new Error('Synchronized tick window is disposed');
         this.window.setWindowSize(size);
         this.generation += 1;
         this.historyPhase = 'loading';
@@ -105,6 +107,8 @@ export class SynchronizedTickWindow {
 
     /** Adds a real live tick immediately; buffers it for eventual reconciliation. */
     receiveLive(tick: AnalyzerTick): boolean {
+        // A late callback after leaving Analysis cannot repopulate the window.
+        if (this.disposed) return false;
         const accepted = this.window.appendLive(tick);
         if (accepted && this.historyPhase === 'loading') {
             this.bufferedLive.push({ ...tick });
@@ -121,7 +125,18 @@ export class SynchronizedTickWindow {
      * A one-time history request must never trigger a tick subscription.
      */
     completeHistory(generation: number, history: readonly AnalyzerTick[]): boolean {
-        if (this.historyPhase !== 'loading' || generation !== this.generation) return false;
+        if (this.disposed || this.historyPhase !== 'loading' || generation !== this.generation) return false;
+
+        // A partial, stale, or empty snapshot must not roll the displayed
+        // sample backwards. This can occur with cached/stale API responses or
+        // rapid window changes while the latest accepted observation is newer.
+        // Leave all verified ticks untouched and let failHistory() report it.
+        const currentLatest = this.window.getSnapshot().latestTick;
+        const historyLatest = history.length ? history[history.length - 1] : null;
+        if (currentLatest?.id.startsWith('history:') &&
+            (!historyLatest || historyLatest.epoch < currentLatest.epoch)) {
+            throw new Error('Historical response is older than the current verified sample');
+        }
 
         const staged = new RollingTickWindow(this.window.symbol, this.window.windowSize);
         staged.replaceHistory(history);
@@ -139,7 +154,7 @@ export class SynchronizedTickWindow {
      * streaming. UI can show the error while continuing with live-only ticks.
      */
     failHistory(generation: number): boolean {
-        if (this.historyPhase !== 'loading' || generation !== this.generation) return false;
+        if (this.disposed || this.historyPhase !== 'loading' || generation !== this.generation) return false;
         this.historyPhase = 'error';
         this.bufferedLive = [];
         return true;
@@ -147,6 +162,8 @@ export class SynchronizedTickWindow {
 
     /** Invalidate all outstanding responses when Analysis is closed. */
     dispose(): void {
+        if (this.disposed) return;
+        this.disposed = true;
         this.generation += 1;
         this.bufferedLive = [];
         this.historyPhase = 'idle';

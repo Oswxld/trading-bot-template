@@ -39,6 +39,7 @@ const normalizedDiagnostics = (output, directory) =>
             // Replace worktree paths before comparing type error descriptions.
             return line
                 .replaceAll(directory.replace(/\\/g, '/'), '<workspace>')
+                .replaceAll(project.replace(/\\/g, '/'), '<workspace>')
                 .replace(/\(\d+,\d+\)(?=: error TS\d+:)/, '');
         })
         .sort();

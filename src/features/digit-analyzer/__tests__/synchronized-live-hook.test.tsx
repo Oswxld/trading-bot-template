@@ -201,6 +201,55 @@ describe('useLiveTicks: historical + live rolling window integration', () => {
         expect(result.current.latestTick?.quote).toBe('121.01');
     });
 
+    it('preserves verified live quotes when a corrupted historical payload arrives', async () => {
+        const { result } = renderHook(() => useLiveTicks(client, 'R_10', true, 100));
+        await awaitInitial('R_10', 100);
+        act(() => socket.ack('R_10', 1770000100, 121.00));
+        await waitFor(() => expect(result.current.sampleCount).toBe(1));
+
+        const request = socket.findRequest('ticks_history', 'R_10', 100);
+        act(() => socket.reply({
+            msg_type: 'history',
+            req_id: request.req_id,
+            history: { prices: [1.23, 1.24], times: [1770000000, 1770000001] },
+            // Missing required pip_size: never infer an unverified last digit.
+        }));
+        await waitFor(() => expect(result.current.historyPhase).toBe('error'));
+        expect(result.current.historyError).toContain('precision');
+        expect(result.current.sampleCount).toBe(1);
+        expect(result.current.latestTick?.quote).toBe('121.00');
+
+        act(() => socket.tick('R_10', 1770000101, 121.01));
+        expect(result.current.sampleCount).toBe(2);
+        expect(result.current.latestTick?.quote).toBe('121.01');
+    });
+
+    it('drops all cached prices after an interrupted connection disables the analysis feed', async () => {
+        const { result, rerender } = renderHook(
+            ({ enabled }) => useLiveTicks(client, 'R_10', enabled, 100),
+            { initialProps: { enabled: true } }
+        );
+        await awaitInitial('R_10', 100);
+        act(() => socket.ack('R_10', 1770000100, 121.00));
+        await waitFor(() => expect(result.current.sampleCount).toBe(1));
+        expect(result.current.latestTick?.quote).toBe('121.00');
+
+        // The parent catalog receives the socket state change and disables
+        // its analysis hook until a NEW public client is connected.
+        act(() => client.close());
+        rerender({ enabled: false });
+        expect(result.current.sampleCount).toBe(0);
+        expect(result.current.recentTicks).toEqual([]);
+        expect(result.current.latestTick).toBeNull();
+        expect(result.current.status).toBe('idle');
+        expect(result.current.historyPhase).toBe('idle');
+
+        // The obsolete request and a late frame cannot repopulate the feed.
+        act(() => socket.history('R_10', 100));
+        expect(result.current.sampleCount).toBe(0);
+        expect(result.current.latestTick).toBeNull();
+    });
+
     it('forgets the market stream on unmount and ignores a late history response', async () => {
         const { unmount, result } = renderHook(() => useLiveTicks(client, 'R_10', true, 100));
         await awaitInitial('R_10', 100);

@@ -54,14 +54,34 @@ async function installMarketCatalogFixture(page, { fail = false } = {}) {
 
             send(payload) {
                 const request = JSON.parse(payload);
-                if (!request.active_symbols) return; // Keepalives are handled by the client.
-                setTimeout(() => {
-                    if (this.isClosed) return;
-                    const response = failCatalog
-                        ? { req_id: request.req_id, error: { message: 'Catalog unavailable' } }
-                        : { req_id: request.req_id, msg_type: 'active_symbols', active_symbols: markets };
-                    this.onmessage?.({ data: JSON.stringify(response) });
-                }, 0);
+                if (request.active_symbols) {
+                    setTimeout(() => {
+                        if (this.isClosed) return;
+                        const response = failCatalog
+                            ? { req_id: request.req_id, error: { message: 'Catalog unavailable' } }
+                            : { req_id: request.req_id, msg_type: 'active_symbols', active_symbols: markets };
+                        this.onmessage?.({ data: JSON.stringify(response) });
+                    }, 0);
+                } else if (request.ticks) {
+                    const symbol = request.ticks;
+                    const quote = symbol === 'R_75' ? 987.654 : 123.45;
+                    const pipSize = symbol === 'R_75' ? 2 : 3;
+                    setTimeout(() => {
+                        if (this.isClosed) return;
+                        this.onmessage?.({ data: JSON.stringify({
+                            msg_type: 'tick', req_id: request.req_id,
+                            subscription: { id: 'stream-' + symbol },
+                            tick: { symbol, epoch: 1770000000, quote, pip_size: pipSize },
+                        }) });
+                    }, 0);
+                } else if (request.forget) {
+                    setTimeout(() => {
+                        if (this.isClosed) return;
+                        this.onmessage?.({ data: JSON.stringify({
+                            msg_type: 'forget', req_id: request.req_id, forget: 1,
+                        }) });
+                    }, 0);
+                }
             }
 
             close() {
@@ -106,6 +126,10 @@ async function verifyAnalysis(page) {
     // Playwright's toBeDisabled() does not consistently inspect disabled <option> elements.
     // The native HTMLSelectElement still prevents selection of this option.
     await expect(page.getByRole('option', { name: 'Volatility 50 Index (closed)' })).toHaveAttribute('disabled', '');
+    await expect(page.locator('.digit-analyzer__quote')).toHaveText('123.450');
+    await expect(page.locator('.digit-analyzer__last-digit')).toHaveText('0');
+    await expect(page.getByRole('note')).toContainText('Receiving live ticks');
+    await expect(page.getByRole('region', { name: 'Recent ticks' })).toContainText('123.450');
     await expect(page.getByRole('region', { name: 'Digit distribution' })).toBeVisible();
     await expect(page.getByRole('region', { name: 'Recent ticks' })).toBeVisible();
     await expect(page.locator('.digit-analyzer__bar-column')).toHaveCount(10);
@@ -173,6 +197,9 @@ test('mobile: 10 digit bars, controls and cards remain inside 375px viewport', a
     await page.getByRole('combobox', { name: 'Market' }).selectOption('R_75');
     await expect(page.getByRole('combobox', { name: 'Market' })).toHaveValue('R_75');
     await expect(page.getByRole('note')).toContainText('Selected: Volatility 75 Index');
+    await expect(page.locator('.digit-analyzer__quote')).toHaveText('987.65');
+    await expect(page.locator('.digit-analyzer__last-digit')).toHaveText('5');
+    await expect(page.getByRole('region', { name: 'Recent ticks' })).not.toContainText('123.450');
 
     await page.getByRole('combobox', { name: 'Sample size' }).selectOption('500');
     await expect(page.getByRole('combobox', { name: 'Sample size' })).toHaveValue('500');

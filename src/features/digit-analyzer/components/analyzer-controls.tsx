@@ -6,6 +6,8 @@ type AnalyzerControlsProps = {
     markets: readonly AnalyzerMarket[];
     selectedSymbol: string;
     onMarketChange: (symbol: string) => void;
+    isMarketLoading?: boolean;
+    hasMarketError?: boolean;
     sampleSize: AnalyzerSampleSize;
     onSampleSizeChange: (size: AnalyzerSampleSize) => void;
     isPaused: boolean;
@@ -18,6 +20,8 @@ const AnalyzerControls = ({
     markets,
     selectedSymbol,
     onMarketChange,
+    isMarketLoading,
+    hasMarketError,
     sampleSize,
     onSampleSizeChange,
     isPaused,
@@ -25,7 +29,13 @@ const AnalyzerControls = ({
     onTogglePause,
 }: AnalyzerControlsProps) => (
     <section className='digit-analyzer__toolbar' aria-label='Analysis controls'>
-        <MarketSelector markets={markets} selectedSymbol={selectedSymbol} onSelect={onMarketChange} />
+        <MarketSelector
+            markets={markets}
+            selectedSymbol={selectedSymbol}
+            onSelect={onMarketChange}
+            isLoading={isMarketLoading}
+            hasError={hasMarketError}
+        />
         <label className='digit-analyzer__field digit-analyzer__field--window'>
             <span className='digit-analyzer__field-label'>Sample window</span>
             <select

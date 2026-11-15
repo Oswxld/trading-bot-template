@@ -172,6 +172,17 @@ async function verifyAnalysis(page) {
     await expect(page.getByRole('region', { name: 'Digit distribution' })).toBeVisible();
     await expect(page.getByRole('region', { name: 'Recent ticks' })).toBeVisible();
     await expect(page.locator('.digit-analyzer__bar-column')).toHaveCount(10);
+    // All ten descriptive pattern scores are live, and only the true
+    // highest (digit zero for this deterministic sample) receives green.
+    const patternPanel = page.getByRole('region', { name: 'Digit pattern scores' });
+    await expect(patternPanel).toBeVisible();
+    await expect(patternPanel.locator('.digit-analyzer__pattern-digit')).toHaveCount(10);
+    await expect(patternPanel.locator('.digit-analyzer__pattern-digit--leader')).toHaveCount(1);
+    await expect(patternPanel.getByRole('group', {
+        name: /Digit 0: .* pattern points, highest observed pattern score/,
+    })).toBeVisible();
+    await expect(patternPanel).toContainText('not a');
+    await expect(patternPanel).toContainText('trading recommendation');
     // Real fixture history ends before the first live tick. The new digit 0
     // replaces the oldest digit 1: 101 zeros, 99 ones, 100 of every other.
     await expect(page.getByRole('group', { name: 'Digit 0: 101 of 1000 ticks (10.1%)' })).toBeVisible();
@@ -271,6 +282,11 @@ test('mobile: 10 digit bars, controls and cards remain inside 375px viewport', a
     await expect(page.getByRole('combobox', { name: 'Sample size' })).toHaveValue('500');
     await expect(page.locator('.digit-analyzer__sample-count')).toContainText('500 / 500');
     await expect(page.getByRole('group', { name: 'Digit 5: 51 of 500 ticks (10.2%)' })).toBeVisible();
+    const patternAfterResize = page.getByRole('region', { name: 'Digit pattern scores' });
+    await expect(patternAfterResize.locator('.digit-analyzer__pattern-digit--leader')).toHaveCount(1);
+    await expect(patternAfterResize.getByRole('group', {
+        name: /Digit 5: .* pattern points, highest observed pattern score/,
+    })).toBeVisible();
     const matchesAfterResize = page.getByRole('region', { name: 'Matches / Differs' }).locator('.digit-analyzer__metric-row');
     await expect(matchesAfterResize.nth(0)).toContainText('51');
     await expect(matchesAfterResize.nth(0)).toContainText('10.2%');
@@ -307,6 +323,24 @@ test('small mobile: all 10 bars stay within a 320px viewport', async ({ page }) 
         return { right: rect.right, viewport: window.innerWidth };
     });
     expect(dimensions.right).toBeLessThanOrEqual(dimensions.viewport + 1);
+    const patternBounds = await page.locator('.digit-analyzer__pattern-grid').evaluate(element => {
+        const digits = element.querySelectorAll('.digit-analyzer__pattern-digit');
+        const rect = element.getBoundingClientRect();
+        const last = digits[digits.length - 1].getBoundingClientRect();
+        return {
+            total: digits.length,
+            columns: getComputedStyle(element).gridTemplateColumns.split(' ').length,
+            left: rect.left,
+            right: rect.right,
+            lastRight: last.right,
+            viewport: window.innerWidth,
+        };
+    });
+    expect(patternBounds.total).toBe(10);
+    expect(patternBounds.columns).toBe(5);
+    expect(patternBounds.left).toBeGreaterThanOrEqual(-1);
+    expect(patternBounds.right).toBeLessThanOrEqual(patternBounds.viewport + 1);
+    expect(patternBounds.lastRight).toBeLessThanOrEqual(patternBounds.viewport + 1);
 });
 
 test('catalog network errors show a retry instead of false market prices', async ({ page }) => {

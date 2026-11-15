@@ -101,7 +101,7 @@ describe('Digit Analyzer feature shell', () => {
         render(<DigitAnalyzer />);
 
         expect(screen.getByRole('note')).toHaveTextContent('2 synthetic markets available');
-        expect(screen.getByRole('note')).toHaveTextContent('Live tick streaming is not enabled yet');
+        expect(screen.getByRole('note')).toHaveTextContent('Preparing live market stream');
         expect(screen.getByRole('combobox', { name: 'Market' })).toHaveValue('R_10');
         expect(screen.getByRole('option', { name: 'Volatility 50 Index (closed)' })).toBeDisabled();
         fireEvent.change(screen.getByRole('combobox', { name: 'Market' }), { target: { value: 'R_25' } });

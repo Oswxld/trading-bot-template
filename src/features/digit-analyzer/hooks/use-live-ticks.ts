@@ -57,5 +57,24 @@ export const useLiveTicks = (
         };
     }, [controller, enabled, selectedSymbol]);
 
-    return { latestTick, recentTicks, status, error };
+    // Effects run after render. Suppress an old market's values synchronously
+    // during the render in which the selection changes, before cleanup runs.
+    // This also prevents stale prices being shown while the feed is disabled.
+    const prefix = `${selectedSymbol}:`;
+    const visibleTick = enabled && latestTick?.id.startsWith(prefix) ? latestTick : null;
+    const visibleRecent = enabled && selectedSymbol
+        ? recentTicks.filter(tick => tick.id.startsWith(prefix))
+        : [];
+    const visibleStatus: LiveTickStatus = !enabled || !selectedSymbol || !controller
+        ? 'idle'
+        : status === 'streaming' && !visibleTick
+            ? 'subscribing'
+            : status;
+
+    return {
+        latestTick: visibleTick,
+        recentTicks: visibleRecent,
+        status: visibleStatus,
+        error: visibleStatus === 'error' ? error : null,
+    };
 };

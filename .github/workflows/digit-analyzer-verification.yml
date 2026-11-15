@@ -53,6 +53,7 @@ jobs:
             src/utils/__tests__/getActiveTabUrl.test.ts \
             src/features/digit-analyzer/__tests__/digit-analyzer.test.tsx \
             src/features/digit-analyzer/__tests__/dashboard-panels.test.tsx \
+            src/features/digit-analyzer/__tests__/public-market-data-client.test.ts \
             --ci --runInBand --coverage=false
 
       - name: Trading and Admin Test Kit smoke tests

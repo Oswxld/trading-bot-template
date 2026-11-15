@@ -2,6 +2,91 @@ const { test, expect } = require('@playwright/test');
 
 test.use({ baseURL: 'http://127.0.0.1:4173', screenshot: 'only-on-failure' });
 
+/**
+ * Intercept ONLY the Analyzer's isolated public endpoint. Keep every existing
+ * trading/other app WebSocket untouched. Browser tests must be deterministic,
+ * not depend on connectivity to the real broker.
+ */
+async function installMarketCatalogFixture(page, { fail = false } = {}) {
+    await page.addInitScript(({ endpoint, failCatalog }) => {
+        const NativeWebSocket = window.WebSocket;
+        const markets = [
+            {
+                underlying_symbol: 'R_10',
+                underlying_symbol_name: 'Volatility 10 Index',
+                market: 'synthetic_index',
+                exchange_is_open: 1,
+                is_trading_suspended: 0,
+                pip_size: 0.01,
+            },
+            {
+                underlying_symbol: 'R_75',
+                underlying_symbol_name: 'Volatility 75 Index',
+                market: 'synthetic_index',
+                exchange_is_open: 1,
+                is_trading_suspended: 0,
+                pip_size: 0.001,
+            },
+            {
+                underlying_symbol: 'R_50',
+                underlying_symbol_name: 'Volatility 50 Index',
+                market: 'synthetic_index',
+                exchange_is_open: 0,
+                is_trading_suspended: 0,
+            },
+        ];
+
+        class PublicCatalogSocket {
+            constructor(url) {
+                this.url = String(url);
+                this.readyState = 0;
+                this.onopen = null;
+                this.onmessage = null;
+                this.onerror = null;
+                this.onclose = null;
+                this.isClosed = false;
+                setTimeout(() => {
+                    if (this.isClosed) return;
+                    this.readyState = 1;
+                    this.onopen?.(new Event('open'));
+                }, 0);
+            }
+
+            send(payload) {
+                const request = JSON.parse(payload);
+                if (!request.active_symbols) return; // Keepalives are handled by the client.
+                setTimeout(() => {
+                    if (this.isClosed) return;
+                    const response = failCatalog
+                        ? { req_id: request.req_id, error: { message: 'Catalog unavailable' } }
+                        : { req_id: request.req_id, msg_type: 'active_symbols', active_symbols: markets };
+                    this.onmessage?.({ data: JSON.stringify(response) });
+                }, 0);
+            }
+
+            close() {
+                if (this.isClosed) return;
+                this.isClosed = true;
+                this.readyState = 3;
+                this.onclose?.(new Event('close'));
+            }
+        }
+
+        function WebSocketWrapper(url, protocols) {
+            if (String(url) === endpoint) return new PublicCatalogSocket(url);
+            return protocols === undefined ? new NativeWebSocket(url) : new NativeWebSocket(url, protocols);
+        }
+        WebSocketWrapper.prototype = NativeWebSocket.prototype;
+        for (const field of ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED']) {
+            Object.defineProperty(WebSocketWrapper, field, { value: NativeWebSocket[field] });
+        }
+        window.WebSocket = WebSocketWrapper;
+    }, {
+        endpoint: 'wss://api.derivws.com/trading/v1/options/ws/public',
+        failCatalog: fail,
+    });
+}
+
 async function dismissTour(page) {
     const tour = page.locator('.tour-dialog').first();
     if (await tour.isVisible().catch(() => false)) {
@@ -13,8 +98,12 @@ async function dismissTour(page) {
 async function verifyAnalysis(page) {
     await expect(page.locator('#id-analysis')).toBeVisible({ timeout: 40000 });
     await expect(page.getByRole('heading', { name: 'Digit Analyzer' })).toBeVisible({ timeout: 40000 });
-    await expect(page.locator('.digit-analyzer__connection')).toContainText('Not connected');
-    await expect(page.getByRole('combobox', { name: 'Market' })).toBeDisabled();
+    await expect(page.locator('.digit-analyzer__connection')).toContainText('Live');
+    await expect(page.getByRole('note')).toContainText('2 synthetic markets available');
+    await expect(page.getByRole('note')).toContainText('Live tick streaming is not enabled yet');
+    await expect(page.getByRole('combobox', { name: 'Market' })).toBeEnabled();
+    await expect(page.getByRole('combobox', { name: 'Market' })).toHaveValue('R_10');
+    await expect(page.getByRole('option', { name: 'Volatility 50 Index (closed)' })).toBeDisabled();
     await expect(page.getByRole('region', { name: 'Digit distribution' })).toBeVisible();
     await expect(page.getByRole('region', { name: 'Recent ticks' })).toBeVisible();
     await expect(page.locator('.digit-analyzer__bar-column')).toHaveCount(10);
@@ -23,6 +112,7 @@ async function verifyAnalysis(page) {
 test('desktop: Analysis deep link and tab switches do not break neighboring tools', async ({ page }) => {
     test.setTimeout(110000);
     await page.setViewportSize({ width: 1440, height: 900 });
+    await installMarketCatalogFixture(page);
     await page.goto('/#analysis', { waitUntil: 'domcontentloaded' });
     await verifyAnalysis(page);
     await dismissTour(page);
@@ -43,6 +133,7 @@ test('desktop: Analysis deep link and tab switches do not break neighboring tool
 test('mobile: 10 digit bars, controls and cards remain inside 375px viewport', async ({ page }) => {
     test.setTimeout(110000);
     await page.setViewportSize({ width: 375, height: 812 });
+    await installMarketCatalogFixture(page);
     await page.goto('/#analysis', { waitUntil: 'domcontentloaded' });
     await verifyAnalysis(page);
     await dismissTour(page);
@@ -77,6 +168,10 @@ test('mobile: 10 digit bars, controls and cards remain inside 375px viewport', a
     expect(positions.firstBar.width).toBeGreaterThan(0);
     expect(positions.lastBar.width).toBeGreaterThan(0);
 
+    await page.getByRole('combobox', { name: 'Market' }).selectOption('R_75');
+    await expect(page.getByRole('combobox', { name: 'Market' })).toHaveValue('R_75');
+    await expect(page.getByRole('note')).toContainText('Selected: Volatility 75 Index');
+
     await page.getByRole('combobox', { name: 'Sample size' }).selectOption('500');
     await expect(page.getByRole('combobox', { name: 'Sample size' })).toHaveValue('500');
     await page.getByRole('combobox', { name: 'Over/Under threshold' }).selectOption('7');
@@ -86,6 +181,7 @@ test('mobile: 10 digit bars, controls and cards remain inside 375px viewport', a
 test('small mobile: all 10 bars stay within a 320px viewport', async ({ page }) => {
     test.setTimeout(110000);
     await page.setViewportSize({ width: 320, height: 700 });
+    await installMarketCatalogFixture(page);
     await page.goto('/#analysis', { waitUntil: 'domcontentloaded' });
     await verifyAnalysis(page);
 
@@ -94,4 +190,16 @@ test('small mobile: all 10 bars stay within a 320px viewport', async ({ page }) 
         return { right: rect.right, viewport: window.innerWidth };
     });
     expect(dimensions.right).toBeLessThanOrEqual(dimensions.viewport + 1);
+});
+
+test('catalog network errors show a retry instead of false market prices', async ({ page }) => {
+    test.setTimeout(110000);
+    await installMarketCatalogFixture(page, { fail: true });
+    await page.goto('/#analysis', { waitUntil: 'domcontentloaded' });
+    await expect(page.getByRole('heading', { name: 'Digit Analyzer' })).toBeVisible({ timeout: 40000 });
+    await expect(page.getByRole('alert')).toContainText('Catalog unavailable');
+    await expect(page.getByRole('combobox', { name: 'Market' })).toBeDisabled();
+    await expect(page.getByText('No ticks received yet')).toBeVisible();
+    await page.getByRole('button', { name: 'Retry markets' }).click();
+    await expect(page.getByRole('alert')).toContainText('Catalog unavailable');
 });

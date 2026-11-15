@@ -29,7 +29,9 @@ export const normalizeLiveTick = (
         : typeof tick.quote === 'string' && /^-?\d+(\.\d+)?$/.test(tick.quote)
             ? Number(tick.quote)
             : NaN;
-    if (!Number.isFinite(numericQuote) || !Number.isSafeInteger(sequence) || sequence <= 0) return null;
+    // toFixed uses exponential notation at |value| >= 1e21; that would give a false final digit.
+    if (!Number.isFinite(numericQuote) || Math.abs(numericQuote) >= 1e21 ||
+        !Number.isSafeInteger(sequence) || sequence <= 0) return null;
 
     const quote = numericQuote.toFixed(tick.pip_size);
     const lastCharacter = quote.charAt(quote.length - 1);

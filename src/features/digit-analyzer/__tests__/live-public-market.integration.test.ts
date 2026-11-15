@@ -1,6 +1,11 @@
 /** @jest-environment node */
 import { fetchSyntheticMarketCatalog } from '../services/market-catalog';
 import { fetchHistoricalTicks } from '../services/historical-ticks';
+import { countDigitFrequencies } from '../services/digit-frequency';
+import { calculateDigitPercentages } from '../services/digit-percentages';
+import { calculateDigitParity } from '../services/digit-parity';
+import { calculateDigitOverUnder } from '../services/digit-over-under';
+import { calculateDigitMatchesDiffers } from '../services/digit-matches-differs';
 import { LiveTickStream } from '../services/live-tick-stream';
 import PublicMarketDataClient, { DERIV_PUBLIC_MARKET_WS_URL } from '../services/public-market-data-client';
 import type { AnalyzerTick } from '../types/digit-analyzer.types';
@@ -88,6 +93,12 @@ liveTest('connects to Deriv public WebSocket, loads markets, receives ticks and 
             expect(tick.digit).toBeGreaterThanOrEqual(0);
             expect(tick.digit).toBeLessThanOrEqual(9);
         }
+        const liveHistogram = countDigitFrequencies(ticks);
+        expect(liveHistogram.totalTicks).toBe(ticks.length);
+        expect(liveHistogram.counts.reduce((sum, count) => sum + count, 0)).toBe(ticks.length);
+        expect(calculateDigitParity(liveHistogram).even + calculateDigitParity(liveHistogram).odd)
+            .toBe(ticks.length);
+
         console.log('[DERIV LIVE] two verified ticks:',
             ticks.slice(0, 2).map(t => ({ quote: t.quote, lastDigit: t.digit, epoch: t.epoch })));
         expect(messageTypes).toContain('active_symbols');
@@ -142,6 +153,33 @@ liveTest('fetches 100 / 500 / 1000 authentic historical ticks with exact quote p
             expect(ticks.every(t => /^[0-9]$/.test(t.quote.charAt(t.quote.length - 1)))).toBe(true);
             expect(ticks.every(t => t.digit === Number(t.quote.charAt(t.quote.length - 1)))).toBe(true);
             expect(ticks.every((t, index) => index === 0 || t.epoch >= ticks[index - 1].epoch)).toBe(true);
+
+            // Full statistical pipeline from unmodified, authentic Deriv
+            // prices: compare every derived result to an independent scan.
+            const frequencies = countDigitFrequencies(ticks);
+            const distribution = calculateDigitPercentages(frequencies);
+            const parity = calculateDigitParity(frequencies);
+            expect(frequencies.totalTicks).toBe(ticks.length);
+            expect(frequencies.counts.reduce((sum, n) => sum + n, 0)).toBe(ticks.length);
+            expect(distribution.hasData).toBe(true);
+            expect(distribution.percentages.reduce((sum, n) => sum + n, 0)).toBeCloseTo(100, 8);
+            expect(parity.even).toBe(ticks.filter(t => t.digit % 2 === 0).length);
+            expect(parity.odd).toBe(ticks.filter(t => t.digit % 2 === 1).length);
+            for (let selectedDigit = 0; selectedDigit <= 9; selectedDigit += 1) {
+                const overUnder = calculateDigitOverUnder(frequencies, selectedDigit);
+                const matchesDiffers = calculateDigitMatchesDiffers(frequencies, selectedDigit);
+                expect(overUnder.over).toBe(ticks.filter(t => t.digit > selectedDigit).length);
+                expect(overUnder.under).toBe(ticks.filter(t => t.digit < selectedDigit).length);
+                expect(overUnder.equal).toBe(ticks.filter(t => t.digit === selectedDigit).length);
+                expect(overUnder.over + overUnder.under + overUnder.equal).toBe(ticks.length);
+                expect(matchesDiffers.matches).toBe(overUnder.equal);
+                expect(matchesDiffers.differs).toBe(ticks.length - overUnder.equal);
+                expect(matchesDiffers.matches + matchesDiffers.differs).toBe(ticks.length);
+            }
+            console.log('[DERIV STATS] genuine ticks:', ticks.length,
+                '| even:', parity.even, '| odd:', parity.odd,
+                '| digit 7:', frequencies.counts[7],
+                '| complete invariant checks for thresholds/digits 0..9: passed');
             console.log('[DERIV HISTORY] requested:', count, '| received:', ticks.length,
                 '| oldest:', ticks[0].epoch, '| newest:', ticks[ticks.length - 1].epoch,
                 '| newest quote:', ticks[ticks.length - 1].quote,

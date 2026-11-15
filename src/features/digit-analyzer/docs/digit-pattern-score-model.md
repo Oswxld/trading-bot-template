@@ -1,6 +1,6 @@
 # Chunk 6.1 — Digit Pattern Score Model (Design Contract v1.0.0)
 
-**Status:** model and interface **defined in 6.1**, scoring calculations **implemented and unit-tested in 6.2**. Highest-score/tie selection, dashboard integration and predictive evaluation remain in 6.3–6.5 respectively.
+**Status:** model and interface **defined in 6.1**, scoring calculations **implemented in 6.2**, and highest-score/tie detection **implemented in 6.3**. Dashboard integration and predictive evaluation remain for 6.4–6.5.
 
 ## Product meaning and constraints
 
@@ -54,7 +54,7 @@ This compares a digit's **full-window frequency (40%)**, **recent frequency (35%
 
 - `insufficient-data`: **no scores and no green leader**.
 - `ready`: ten valid finite scores indexed by digit; each in `[0,100]`, with fixed weight/configuration version.
-- Chunk 6.3 determines leaders from the **unrounded** scores. To avoid a fake unique winner, report ties explicitly and highlight **all joint leaders** if multiple digits have equal maximum score. Do not make a random or arbitrary “winning prediction”. The exact numeric equality/tie tolerance must be documented and regression tested in 6.3.
+- Chunk 6.3 identifies leaders from the **unrounded** scores using the deterministic rule `highestScore = max(score[0..9])` and `leaderDigits = {d | highestScore - score[d] <= 1e-9}`. The absolute tolerance **1e-9 score points** only absorbs tiny floating-point differences; **equal rounded UI labels do not create ties**. Return all joint leaders in ascending digit order and `isTie: true` for two or more. A uniformly balanced sample produces ten co-leaders, never an invented unique prediction. Do not arbitrarily choose the first, use randomness or infer next-tick odds. The function also validates score entries, totals, readiness metadata and model version before ranking.
 - The green indicator means **“highest historical pattern score in this observed sample”**, not “recommended trade”, “next digit” or “probable win”. No green highlight when loading, disconnected with no verified ticks, invalid, or insufficient observations.
 - On genuine tick arrival, recompute from the currently selected market and window. On a market switch, clear old-market scores immediately; do not combine markets. On size change, use only retained actual ticks.
 
@@ -69,8 +69,8 @@ This compares a digit's **full-window frequency (40%)**, **recent frequency (35%
 
 - **6.1** (this commit): define the scoring formula, versioned configuration, data contract and restrictions.
 - **6.2** (complete): pure scoring engine in `../services/digit-pattern-score.ts` with mathematical unit tests, strict input validation, rolling snapshot support and no inferred next-tick probability.
-- **6.3**: calculate maximum and tie detection from unrounded scores.
+- **6.3** (complete): pure leader detection and deterministic tie handling in `../services/digit-pattern-leaders.ts`, with no-data gating and regression tests.
 - **6.4**: show all ten scores, highest-in-green status and clear no-data states.
 - **6.5**: full integration/stress testing and forward-only performance evaluation.
 
-Source of truth for configuration and result types: `../services/digit-pattern-score-model.ts`. Implementation: `../services/digit-pattern-score.ts`. The engine returns all ten scores but deliberately does **not** select or highlight a winner until 6.3/6.4.
+Source of truth for configuration and result types: `../services/digit-pattern-score-model.ts`. Scoring engine: `../services/digit-pattern-score.ts`. Leader selection: `../services/digit-pattern-leaders.ts`. **No green dashboard highlighting yet**; that is intentionally deferred to 6.4.

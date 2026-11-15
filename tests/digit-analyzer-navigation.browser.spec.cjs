@@ -103,7 +103,9 @@ async function verifyAnalysis(page) {
     await expect(page.getByRole('note')).toContainText('Live tick streaming is not enabled yet');
     await expect(page.getByRole('combobox', { name: 'Market' })).toBeEnabled();
     await expect(page.getByRole('combobox', { name: 'Market' })).toHaveValue('R_10');
-    await expect(page.getByRole('option', { name: 'Volatility 50 Index (closed)' })).toBeDisabled();
+    // Playwright's toBeDisabled() does not consistently inspect disabled <option> elements.
+    // The native HTMLSelectElement still prevents selection of this option.
+    await expect(page.getByRole('option', { name: 'Volatility 50 Index (closed)' })).toHaveAttribute('disabled', '');
     await expect(page.getByRole('region', { name: 'Digit distribution' })).toBeVisible();
     await expect(page.getByRole('region', { name: 'Recent ticks' })).toBeVisible();
     await expect(page.locator('.digit-analyzer__bar-column')).toHaveCount(10);

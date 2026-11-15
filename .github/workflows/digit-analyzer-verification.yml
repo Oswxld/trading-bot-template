@@ -69,6 +69,7 @@ jobs:
             src/features/digit-analyzer/__tests__/digit-frequency.test.ts \
             src/features/digit-analyzer/__tests__/digit-percentages.test.ts \
             src/features/digit-analyzer/__tests__/digit-parity.test.ts \
+            src/features/digit-analyzer/__tests__/digit-over-under.test.ts \
             --ci --runInBand --coverage=false
 
       - name: Trading and Admin Test Kit smoke tests

@@ -14,6 +14,7 @@ on:
       - 'src/utils/getActiveTabUrl.ts'
       - 'src/utils/__tests__/getActiveTabUrl.test.ts'
       - 'tests/digit-analyzer-navigation.browser.spec.cjs'
+      - 'scripts/verify-typecheck-regressions.cjs'
       - 'package.json'
       - 'package-lock.json'
   workflow_dispatch:
@@ -28,11 +29,13 @@ concurrency:
 jobs:
   verify:
     name: Navigation, dashboard, type-check and production build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - name: Checkout development branch
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Node.js 22
         uses: actions/setup-node@v4
@@ -62,9 +65,9 @@ jobs:
             src/pages/bulk-trader/__tests__/bulk-trader-integration.test.js \
             --ci --runInBand --coverage=false
 
-      - name: TypeScript type check
+      - name: TypeScript regression check against master
         if: always()
-        run: npm run type-check
+        run: node scripts/verify-typecheck-regressions.cjs
 
       - name: Production build
         if: always()

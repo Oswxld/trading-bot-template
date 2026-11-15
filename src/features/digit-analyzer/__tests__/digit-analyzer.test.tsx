@@ -1,10 +1,12 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { useMarketCatalog } from '../hooks/use-market-catalog';
+import { useLiveTicks } from '../hooks/use-live-ticks';
 // Exercise the same public entry point used by main.tsx's lazy import.
 import DigitAnalyzer from '..';
 
 // Isolate view tests from the real WebSocket; hook lifecycle has its own tests.
 jest.mock('../hooks/use-market-catalog', () => ({ useMarketCatalog: jest.fn() }));
+jest.mock('../hooks/use-live-ticks', () => ({ useLiveTicks: jest.fn() }));
 
 const selectMarket = jest.fn();
 const reloadMarkets = jest.fn();
@@ -24,6 +26,9 @@ describe('Digit Analyzer feature shell', () => {
     beforeEach(() => {
         jest.clearAllMocks();
         jest.mocked(useMarketCatalog).mockReturnValue({ ...loadingCatalog });
+        jest.mocked(useLiveTicks).mockReturnValue({
+            latestTick: null, recentTicks: [], status: 'idle', error: null,
+        });
     });
 
     it('shows an honest loading state until public market metadata arrives', () => {
@@ -105,6 +110,30 @@ describe('Digit Analyzer feature shell', () => {
         expect(reloadMarkets).toHaveBeenCalledTimes(1);
         expect(screen.getByRole('button', { name: 'Refresh' })).toBeDisabled();
         expect(screen.getAllByText('Awaiting market data')).toHaveLength(5);
+    });
+
+    it('renders actual streamed prices and last digits without faking histogram totals', () => {
+        jest.mocked(useMarketCatalog).mockReturnValue({
+            ...loadingCatalog,
+            connectionState: 'live',
+            phase: 'ready',
+            markets: [{ symbol: 'R_75', displayName: 'Volatility 75 Index', isOpen: true }],
+            selectedSymbol: 'R_75',
+        });
+        jest.mocked(useLiveTicks).mockReturnValue({
+            latestTick: { id: 'R_75:1770000000:1', epoch: 1770000000, quote: '123.450', digit: 0 },
+            recentTicks: [{ id: 'R_75:1770000000:1', epoch: 1770000000, quote: '123.450', digit: 0 }],
+            status: 'streaming',
+            error: null,
+        });
+        render(<DigitAnalyzer />);
+
+        expect(screen.getByRole('note')).toHaveTextContent('Receiving live ticks');
+        expect(screen.getByText('123.450')).toBeInTheDocument();
+        expect(screen.getByText('Most recent market tick')).toBeInTheDocument();
+        expect(screen.getByRole('region', { name: 'Recent ticks' })).toHaveTextContent('123.450');
+        expect(screen.getAllByText('Awaiting market data')).toHaveLength(4);
+        expect(screen.getByRole('combobox', { name: 'Market' })).toHaveValue('R_75');
     });
 
     it('shows an explicit error with a Retry action instead of fake market choices', () => {

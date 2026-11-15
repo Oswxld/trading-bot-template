@@ -1,5 +1,6 @@
 /** @jest-environment node */
 import { fetchSyntheticMarketCatalog } from '../services/market-catalog';
+import { fetchHistoricalTicks } from '../services/historical-ticks';
 import { LiveTickStream } from '../services/live-tick-stream';
 import PublicMarketDataClient, { DERIV_PUBLIC_MARKET_WS_URL } from '../services/public-market-data-client';
 import type { AnalyzerTick } from '../types/digit-analyzer.types';
@@ -107,6 +108,51 @@ liveTest('connects to Deriv public WebSocket, loads markets, receives ticks and 
         // stop() previously failed. Never leave a live anonymous socket open.
         client.dispose();
         if (stream) await stream.dispose();
+        expect(client.getState()).toBe('idle');
+    }
+}, 105_000);
+
+/**
+ * Real history validation deliberately runs separately from live subscriptions.
+ * A plain ticks_history request MUST NOT create a second subscription.
+ */
+liveTest('fetches 100 / 500 / 1000 authentic historical ticks with exact quote precision', async () => {
+    const client = new PublicMarketDataClient({ requestTimeoutMs: 25_000 });
+    const historyResponses: Array<{ hasSubscription: boolean; messageType: string | undefined }> = [];
+    const unsubscribe = client.onMessage(message => {
+        if (message.msg_type === 'history') {
+            historyResponses.push({
+                hasSubscription: !!message.subscription,
+                messageType: message.msg_type,
+            });
+        }
+    });
+    try {
+        const catalog = await fetchSyntheticMarketCatalog(client);
+        const markets = catalog.filter(market => market.isOpen !== false);
+        expect(markets.length).toBeGreaterThan(0);
+        const selected = markets.find(m => m.symbol === '1HZ10V') ?? markets[0];
+        console.log('[DERIV HISTORY] market:', selected.symbol, '| public channel:', DERIV_PUBLIC_MARKET_WS_URL);
+
+        for (const count of [100, 500, 1000] as const) {
+            const ticks = await fetchHistoricalTicks(client, selected.symbol, count);
+            expect(ticks.length).toBeGreaterThan(0);
+            expect(ticks.length).toBeLessThanOrEqual(count);
+            expect(ticks.every(t => t.id.startsWith(`history:${selected.symbol}:`))).toBe(true);
+            expect(ticks.every(t => /^[0-9]$/.test(t.quote.charAt(t.quote.length - 1)))).toBe(true);
+            expect(ticks.every(t => t.digit === Number(t.quote.charAt(t.quote.length - 1)))).toBe(true);
+            expect(ticks.every((t, index) => index === 0 || t.epoch >= ticks[index - 1].epoch)).toBe(true);
+            console.log('[DERIV HISTORY] requested:', count, '| received:', ticks.length,
+                '| oldest:', ticks[0].epoch, '| newest:', ticks[ticks.length - 1].epoch,
+                '| newest quote:', ticks[ticks.length - 1].quote,
+                '| last digit:', ticks[ticks.length - 1].digit);
+        }
+        expect(historyResponses).toHaveLength(3);
+        expect(historyResponses.every(x => x.messageType === 'history' && !x.hasSubscription)).toBe(true);
+        expect(client.getState()).toBe('live');
+    } finally {
+        unsubscribe();
+        client.dispose();
         expect(client.getState()).toBe('idle');
     }
 }, 105_000);

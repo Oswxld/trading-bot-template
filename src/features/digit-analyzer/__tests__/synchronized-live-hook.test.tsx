@@ -338,6 +338,10 @@ describe('useLiveTicks: historical + live rolling window integration', () => {
         const { result } = renderHook(() => useLiveTicks(client, 'R_10', true, 500));
         await awaitInitial('R_10', 500);
         act(() => socket.ack('R_10', 1770000000, 120.00));
+        // The subscription acknowledgement is processed asynchronously.
+        // Only emit more live ticks AFTER the transport confirms streaming.
+        await waitFor(() => expect(result.current.status).toBe('streaming'));
+        await waitFor(() => expect(result.current.sampleCount).toBe(1));
         const historyRequest = socket.findRequest('ticks_history', 'R_10', 500);
         act(() => {
             socket.tick('R_10', 1770000001, 120.01);

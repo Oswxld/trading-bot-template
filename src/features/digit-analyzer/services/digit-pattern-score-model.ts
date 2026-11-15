@@ -1,7 +1,7 @@
 import type { AnalyzerTick } from '../types/digit-analyzer.types';
 
 /**
- * Chunk 6.1 — versioned scoring DESIGN, not a scoring engine.
+ * Chunk 6.1 — versioned scoring design consumed by the 6.2 engine.
  *
  * These values are heuristic design choices that MUST be calibrated with
  * forward-only tests before anyone treats the ranking as predictive.
@@ -59,7 +59,7 @@ export type DigitPatternScoreInput = {
 };
 
 /**
- * The 6.2 engine will implement this discriminated contract.
+ * The 6.2 engine implements this discriminated contract.
  * No invented score of 0 or 50 when data is insufficient.
  */
 export type DigitPatternScoreResult =

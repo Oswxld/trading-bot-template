@@ -133,9 +133,17 @@ export class SynchronizedTickWindow {
         // Leave all verified ticks untouched and let failHistory() report it.
         const currentLatest = this.window.getSnapshot().latestTick;
         const historyLatest = history.length ? history[history.length - 1] : null;
-        if (currentLatest?.id.startsWith('history:') &&
-            (!historyLatest || historyLatest.epoch < currentLatest.epoch)) {
-            throw new Error('Historical response is older than the current verified sample');
+        if (currentLatest?.id.startsWith('history:')) {
+            if (!historyLatest || historyLatest.epoch < currentLatest.epoch) {
+                throw new Error('Historical response is older than the current verified sample');
+            }
+            if (historyLatest.epoch === currentLatest.epoch &&
+                !history.some(tick => sameObservation(tick, currentLatest))) {
+                // Within one second Deriv can have multiple genuine ticks;
+                // a different final quote alone cannot establish which
+                // snapshot is newer. Preserve the last verified observation.
+                throw new Error('Historical response has ambiguous same-second ordering');
+            }
         }
 
         const staged = new RollingTickWindow(this.window.symbol, this.window.windowSize);

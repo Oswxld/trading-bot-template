@@ -120,7 +120,7 @@ async function verifyAnalysis(page) {
     await expect(page.getByRole('heading', { name: 'Digit Analyzer' })).toBeVisible({ timeout: 40000 });
     await expect(page.locator('.digit-analyzer__connection')).toContainText('Live');
     await expect(page.getByRole('note')).toContainText('2 synthetic markets available');
-    await expect(page.getByRole('note')).toContainText('Live tick streaming is not enabled yet');
+    await expect(page.getByRole('note')).toContainText('Receiving live ticks');
     await expect(page.getByRole('combobox', { name: 'Market' })).toBeEnabled();
     await expect(page.getByRole('combobox', { name: 'Market' })).toHaveValue('R_10');
     // Playwright's toBeDisabled() does not consistently inspect disabled <option> elements.

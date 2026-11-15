@@ -11,9 +11,9 @@ import RecentTicks from './recent-ticks';
 import '../styles/digit-analyzer.scss';
 
 /**
- * Chunk 3.4: market catalog and current tick stream share one dedicated public
- * connection. Only real, verified market quotes populate the live-price and
- * recent-tick views. Sample-window statistics and history come in later chunks.
+ * Chunk 4.3: historical snapshots and live ticks share the same public
+ * connection, then populate a genuine bounded rolling sample. Digit-frequency
+ * calculations and probability-style statistics are not enabled yet.
  */
 const DigitAnalyzer = () => {
     const {
@@ -26,12 +26,21 @@ const DigitAnalyzer = () => {
         reloadMarkets,
         clientRef,
     } = useMarketCatalog();
-    const { latestTick, recentTicks, status: tickStatus, error: tickError } = useLiveTicks(
+    const [sampleSize, setSampleSize] = useState<AnalyzerSampleSize>(1000);
+    const {
+        latestTick,
+        recentTicks,
+        sampleCount,
+        status: tickStatus,
+        error: tickError,
+        historyPhase,
+        historyError,
+    } = useLiveTicks(
         clientRef.current,
         selectedSymbol,
-        phase === 'ready' && connectionState === 'live'
+        phase === 'ready' && connectionState === 'live',
+        sampleSize
     );
-    const [sampleSize, setSampleSize] = useState<AnalyzerSampleSize>(1000);
     const [selectedDigit, setSelectedDigit] = useState(5);
     const [threshold, setThreshold] = useState(5);
 
@@ -65,6 +74,18 @@ const DigitAnalyzer = () => {
                         {phase === 'ready' && tickStatus === 'error' && (
                             <p role='alert'>Live tick error: {tickError ?? 'Subscription failed.'}</p>
                         )}
+                        {phase === 'ready' && historyPhase === 'loading' && (
+                            <p>Loading the latest {sampleSize.toLocaleString()} historical ticks.</p>
+                        )}
+                        {phase === 'ready' && historyPhase === 'ready' && (
+                            <p>Historical and live observations are synchronized into the rolling sample.</p>
+                        )}
+                        {phase === 'ready' && historyPhase === 'error' && (
+                            <p role='alert'>
+                                Historical ticks unavailable: {historyError ?? 'History request failed.'}
+                                {' '}Live observations can still continue.
+                            </p>
+                        )}
                         {phase === 'empty' && (
                             <p>Deriv returned no currently selectable synthetic markets. Live tick streaming has not started.</p>
                         )}
@@ -96,7 +117,7 @@ const DigitAnalyzer = () => {
                     isPaused={false}
                 />
 
-                <CurrentTick tick={latestTick} sampleCount={0} sampleSize={sampleSize} />
+                <CurrentTick tick={latestTick} sampleCount={sampleCount} sampleSize={sampleSize} />
 
                 <div className='digit-analyzer__grid'>
                     <DigitDistribution counts={[]} totalTicks={0} latestDigit={null} />

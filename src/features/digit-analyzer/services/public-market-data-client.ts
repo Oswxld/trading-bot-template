@@ -129,6 +129,8 @@ export class PublicMarketDataClient {
             this.connectResolve = resolve;
             this.connectReject = reject;
         });
+        // Keep the promise even if socket construction fails synchronously.
+        const opening = this.connectPromise;
 
         try {
             const socket = this.socketFactory(DERIV_PUBLIC_MARKET_WS_URL);
@@ -156,7 +158,7 @@ export class PublicMarketDataClient {
         }
 
         // This promise is resolved only by the actual socket open event.
-        return this.connectPromise ?? Promise.resolve();
+        return opening;
     }
 
     send(request: PublicMarketRequest): number {

@@ -1,6 +1,11 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { useLiveTicks } from '../hooks/use-live-ticks';
 import PublicMarketDataClient from '../services/public-market-data-client';
+import { countDigitFrequencies } from '../services/digit-frequency';
+import { calculateDigitPercentages } from '../services/digit-percentages';
+import { calculateDigitParity } from '../services/digit-parity';
+import { calculateDigitOverUnder } from '../services/digit-over-under';
+import { calculateDigitMatchesDiffers } from '../services/digit-matches-differs';
 import type { AnalyzerSampleSize } from '../types/digit-analyzer.types';
 
 class MultiRequestSocket {
@@ -248,6 +253,106 @@ describe('useLiveTicks: historical + live rolling window integration', () => {
         act(() => socket.history('R_10', 100));
         expect(result.current.sampleCount).toBe(0);
         expect(result.current.latestTick).toBeNull();
+    });
+
+    it('derives all five statistics from real-shaped socket history and simultaneous live ticks', async () => {
+        const { result } = renderHook(() => useLiveTicks(client, 'R_10', true, 100));
+        await awaitInitial('R_10', 100);
+        act(() => socket.ack('R_10', 1770000099, 120.99));
+        // Live tick 99 is also included in history; count it only once.
+        act(() => socket.history('R_10', 100));
+        await waitFor(() => expect(result.current.historyPhase).toBe('ready'));
+
+        act(() => {
+            socket.tick('R_10', 1770000100, 121.00);
+            socket.tick('R_10', 1770000101, 121.01);
+            socket.tick('R_10', 1770000102, 121.02);
+        });
+        await waitFor(() => expect(result.current.latestTick?.quote).toBe('121.02'));
+        const { rollingTicks, sampleCount } = result.current;
+        expect(sampleCount).toBe(100);
+        expect(rollingTicks.length).toBe(100);
+
+        const frequencies = countDigitFrequencies(rollingTicks);
+        const distribution = calculateDigitPercentages(frequencies);
+        const parity = calculateDigitParity(frequencies);
+        expect(frequencies.counts.reduce((a, b) => a + b, 0)).toBe(sampleCount);
+        expect(distribution.percentages.reduce((a, b) => a + b, 0)).toBeCloseTo(100, 10);
+        expect(parity.even + parity.odd).toBe(sampleCount);
+        for (let selected = 0; selected <= 9; selected += 1) {
+            const over = calculateDigitOverUnder(frequencies, selected);
+            const matches = calculateDigitMatchesDiffers(frequencies, selected);
+            expect(over.over).toBe(rollingTicks.filter(t => t.digit > selected).length);
+            expect(over.under).toBe(rollingTicks.filter(t => t.digit < selected).length);
+            expect(matches.matches).toBe(rollingTicks.filter(t => t.digit === selected).length);
+            expect(matches.matches).toBe(over.equal);
+            expect(matches.differs).toBe(sampleCount - matches.matches);
+        }
+        expect(socket.sent.filter(r => r.ticks === 'R_10')).toHaveLength(1);
+        expect(socket.sent.filter(r => r.ticks_history === 'R_10')).toHaveLength(1);
+        expect(socket.sent.every(r => !r.buy && !r.authorize)).toBe(true);
+    });
+
+    it('recalculates statistics only for the newest market across rapid R_10 → R_75 → R_10 switches', async () => {
+        const { result, rerender } = renderHook(
+            ({ symbol }) => useLiveTicks(client, symbol, true, 100),
+            { initialProps: { symbol: 'R_10' } }
+        );
+        await awaitInitial('R_10', 100);
+        act(() => socket.ack('R_10', 1770000099, 120.99));
+        act(() => socket.history('R_10', 100));
+        await waitFor(() => expect(result.current.historyPhase).toBe('ready'));
+        expect(result.current.rollingTicks.length).toBe(100);
+
+        rerender({ symbol: 'R_75' });
+        expect(result.current.sampleCount).toBe(0);
+        await awaitInitial('R_75', 100);
+        act(() => socket.ack('R_75', 1770000100, 456.78));
+        act(() => socket.history('R_75', 100, {
+            prices: Array(100).fill(456.78), start: 1770000000,
+        }));
+        await waitFor(() => expect(result.current.historyPhase).toBe('ready'));
+        let frequencies = countDigitFrequencies(result.current.rollingTicks);
+        expect(frequencies.counts[8]).toBe(100);
+        expect(frequencies.counts[9]).toBe(0);
+
+        rerender({ symbol: 'R_10' });
+        expect(result.current.sampleCount).toBe(0);
+        await waitFor(() => expect(socket.sent.filter(r => r.ticks_history === 'R_10')).toHaveLength(2));
+        await waitFor(() => expect(socket.sent.filter(r => r.ticks === 'R_10')).toHaveLength(2));
+        act(() => socket.ack('R_10', 1770000200, 876.54));
+        act(() => socket.history('R_10', 100, {
+            prices: Array(100).fill(876.54), start: 1770000101,
+        }));
+        await waitFor(() => expect(result.current.historyPhase).toBe('ready'));
+        frequencies = countDigitFrequencies(result.current.rollingTicks);
+        expect(frequencies.counts[4]).toBe(100);
+        expect(frequencies.counts[8]).toBe(0);
+        expect(result.current.rollingTicks.every(t => t.id.includes('R_10:'))).toBe(true);
+        expect(socket.sent.filter(r => !!r.subscribe).every(r => r.ticks === 'R_10' || r.ticks === 'R_75'))
+            .toBe(true);
+        expect(socket.sent.filter(r => !!r.subscribe)).toHaveLength(3);
+    });
+
+    it('reports a consistent partial sample after a failed history request, even during incoming live ticks', async () => {
+        const { result } = renderHook(() => useLiveTicks(client, 'R_10', true, 500));
+        await awaitInitial('R_10', 500);
+        act(() => socket.ack('R_10', 1770000000, 120.00));
+        const historyRequest = socket.findRequest('ticks_history', 'R_10', 500);
+        act(() => {
+            socket.tick('R_10', 1770000001, 120.01);
+            socket.tick('R_10', 1770000002, 120.02);
+            socket.reply({ req_id: historyRequest.req_id, error: { message: 'Rate limited' } });
+        });
+        await waitFor(() => expect(result.current.historyPhase).toBe('error'));
+        expect(result.current.sampleCount).toBe(3);
+        const frequency = countDigitFrequencies(result.current.rollingTicks);
+        expect(frequency.counts.slice(0, 3)).toEqual([1, 1, 1]);
+        expect(calculateDigitParity(frequency).even).toBe(2);
+        expect(calculateDigitOverUnder(frequency, 1).over).toBe(1);
+        expect(calculateDigitMatchesDiffers(frequency, 1).matches).toBe(1);
+        expect(result.current.status).toBe('streaming');
+        expect(socket.sent.filter(r => r.ticks === 'R_10')).toHaveLength(1);
     });
 
     it('forgets the market stream on unmount and ignores a late history response', async () => {

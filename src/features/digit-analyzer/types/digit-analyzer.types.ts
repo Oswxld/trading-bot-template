@@ -8,9 +8,21 @@ export const ANALYZER_SAMPLE_SIZES = [100, 500, 1000] as const;
 export type AnalyzerSampleSize = (typeof ANALYZER_SAMPLE_SIZES)[number];
 
 export type AnalyzerMarket = {
+    /** Deriv underlying identifier used for all future tick subscriptions. */
     symbol: string;
     displayName: string;
+    /**
+     * Minimum price increment from active_symbols (e.g. 0.01).
+     * This is NOT the number of decimal places in tick.pip_size.
+     */
     pipSize?: number;
+    subgroup?: string;
+    submarket?: string;
+    /**
+     * true: explicitly open and not suspended;
+     * false: explicitly closed/suspended;
+     * undefined: API omitted enough status metadata to know.
+     */
     isOpen?: boolean;
 };
 

@@ -94,7 +94,12 @@ export class SynchronizedTickWindow {
         this.window.setWindowSize(size);
         this.generation += 1;
         this.historyPhase = 'loading';
-        this.bufferedLive = [];
+        // A sample-size change must not lose already-received live ticks that
+        // may be newer than the incoming historical snapshot. Stage recent
+        // live observations as well as those arriving while the request runs.
+        this.bufferedLive = this.window.getSnapshot().ticks
+            .filter(tick => !tick.id.startsWith('history:'))
+            .slice(-size * this.maximumBufferedMultiplier);
         return this.generation;
     }
 

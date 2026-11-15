@@ -182,6 +182,103 @@ describe('LiveTickStream: one anonymous tick subscription per market', () => {
         expect(socket.sent.filter(item => 'ticks' in item)).toHaveLength(0);
     });
 
+    it('ignores uncorrelated same-symbol ticks before the subscribe request is acknowledged', async () => {
+        const seen: AnalyzerTick[] = [];
+        const pending = manager.subscribe('R_75', tick => seen.push(tick));
+        await waitFor(() => expect(socket.sent.some(item => item.ticks === 'R_75')).toBe(true));
+
+        // A stale/orphaned subscription must not be able to claim the new session.
+        socket.tick('R_75', 'orphaned-stream', 999.999, 3);
+        expect(seen).toHaveLength(0);
+
+        socket.ack('R_75', 'expected-stream');
+        await pending;
+        expect(seen).toHaveLength(1);
+        expect(seen[0].quote).toBe('123.450');
+
+        socket.tick('R_75', 'orphaned-stream', 888.888, 3);
+        socket.tick('R_75', 'expected-stream', 777.777, 3);
+        expect(seen.map(tick => tick.quote)).toEqual(['123.450', '777.777']);
+    });
+
+    it('will not begin a second subscription before forget is actually confirmed', async () => {
+        socket.autoForget = false;
+        const first = manager.subscribe('R_10', jest.fn());
+        await waitFor(() => expect(socket.sent.some(item => item.ticks === 'R_10')).toBe(true));
+        socket.ack('R_10', 'stream-10');
+        await first;
+
+        const second = manager.subscribe('R_75', jest.fn());
+        await waitFor(() => expect(socket.sent.some(item => item.forget === 'stream-10')).toBe(true));
+
+        // Even with a pending new selection, the old subscription remains the
+        // sole one until we receive a matching req_id from the Deriv server.
+        expect(socket.sent.some(item => item.ticks === 'R_75')).toBe(false);
+
+        const forget = socket.sent.find(item => item.forget === 'stream-10');
+        socket.reply({ msg_type: 'forget', req_id: forget?.req_id, forget: 1 });
+        await waitFor(() => expect(socket.sent.some(item => item.ticks === 'R_75')).toBe(true));
+        socket.ack('R_75', 'stream-75');
+        await second;
+    });
+
+    it('closes the public socket rather than overlapping streams after an unconfirmed forget response', async () => {
+        socket.autoForget = false;
+        const first = manager.subscribe('R_10', jest.fn());
+        await waitFor(() => expect(socket.sent.some(item => item.ticks === 'R_10')).toBe(true));
+        socket.ack('R_10', 'stream-10');
+        await first;
+
+        const switching = manager.subscribe('R_75', jest.fn());
+        const rejected = expect(switching).rejects.toThrow('did not confirm tick subscription cancellation');
+        await waitFor(() => expect(socket.sent.some(item => item.forget === 'stream-10')).toBe(true));
+
+        const forget = socket.sent.find(item => item.forget === 'stream-10');
+        socket.reply({ msg_type: 'forget', req_id: forget?.req_id, forget: 0 });
+        await rejected;
+        expect(socket.closeCalls).toBeGreaterThan(0);
+        expect(client.getState()).toBe('idle');
+        expect(socket.sent.some(item => item.ticks === 'R_75')).toBe(false);
+    });
+
+    it('coalesces rapid R_10 → R_25 → R_75 selections while a subscribe is pending', async () => {
+        const observations: string[] = [];
+        const first = manager.subscribe('R_10', tick => observations.push('10:' + tick.quote));
+        await waitFor(() => expect(socket.sent.some(item => item.ticks === 'R_10')).toBe(true));
+
+        const middle = manager.subscribe('R_25', tick => observations.push('25:' + tick.quote));
+        const final = manager.subscribe('R_75', tick => observations.push('75:' + tick.quote));
+        socket.tick('R_10', 'unknown-stream');
+        socket.ack('R_10', 'stream-10');
+        await first;
+        await middle;
+        await waitFor(() => expect(socket.sent.some(item => item.forget === 'stream-10')).toBe(true));
+        await waitFor(() => expect(socket.sent.some(item => item.ticks === 'R_75')).toBe(true));
+
+        expect(socket.sent.some(item => item.ticks === 'R_25')).toBe(false);
+        socket.ack('R_75', 'stream-75');
+        await final;
+        socket.tick('R_10', 'stream-10');
+        expect(observations).toEqual(['75:123.450']);
+    });
+
+    it('ignores all delayed ticks after disposal even while the server confirmation is pending', async () => {
+        const callback = jest.fn();
+        const starting = manager.subscribe('R_75', callback);
+        await waitFor(() => expect(socket.sent.some(item => item.ticks === 'R_75')).toBe(true));
+
+        const disposed = manager.dispose();
+        socket.tick('R_75', 'old-session', 456.789, 3);
+        socket.ack('R_75', 'stream-75');
+        await starting;
+        await disposed;
+        socket.tick('R_75', 'stream-75', 999.999, 3);
+
+        expect(callback).not.toHaveBeenCalled();
+        expect(socket.sent.some(item => item.forget === 'stream-75')).toBe(true);
+        await expect(manager.subscribe('R_10', callback)).rejects.toThrow('disposed');
+    });
+
     it('dispose rejects new subscriptions and removes the old stream', async () => {
         const first = manager.subscribe('R_10', jest.fn());
         await waitFor(() => expect(socket.sent.some(item => item.ticks === 'R_10')).toBe(true));

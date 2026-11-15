@@ -16,6 +16,22 @@ class SocketFixture {
         if (request.forget) {
             queueMicrotask(() => this.reply({ req_id: request.req_id, msg_type: 'forget', forget: 1 }));
         }
+        if (request.ticks_history) {
+            // Existing hook tests exercise live subscriptions; an empty REAL-
+            // SHAPED history response keeps those scenarios deterministic.
+            queueMicrotask(() => this.reply({
+                req_id: request.req_id,
+                msg_type: 'history',
+                echo_req: {
+                    ticks_history: request.ticks_history,
+                    count: request.count,
+                    end: request.end,
+                    style: request.style,
+                },
+                pip_size: 3,
+                history: { prices: [], times: [] },
+            }));
+        }
     }
 
     close() { this.readyState = 3; }

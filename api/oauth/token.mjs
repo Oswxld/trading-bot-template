@@ -11,14 +11,14 @@
  */
 const noStore = { 'Cache-Control': 'no-store', 'Content-Type': 'application/json; charset=utf-8' };
 
-const respond = (data: Record<string, unknown>, status: number) =>
+const respond = (data, status) =>
     new Response(JSON.stringify(data), { status, headers: noStore });
 
-const isNonEmpty = (value: unknown, maxLength: number) =>
+const isNonEmpty = (value, maxLength) =>
     typeof value === 'string' && value.length > 0 && value.length <= maxLength;
 
 export default {
-    async fetch(request: Request): Promise<Response> {
+    async fetch(request) {
         if (request.method !== 'POST') {
             return respond({ error: 'method_not_allowed' }, 405);
         }
@@ -29,7 +29,7 @@ export default {
             return respond({ error: 'not_configured', error_description: 'OAuth deployment settings are missing.' }, 503);
         }
 
-        let expectedOrigin: string;
+        let expectedOrigin;
         try {
             const redirect = new URL(redirectUri);
             if (redirect.protocol !== 'https:' || redirect.pathname !== '/' || redirect.search || redirect.hash) {
@@ -53,10 +53,10 @@ export default {
             // An OAuth code and verifier are short: reject larger payloads.
             const raw = await request.text();
             if (raw.length > 4096) return respond({ error: 'invalid_request' }, 413);
-            const body: unknown = JSON.parse(raw);
+            const body = JSON.parse(raw);
             if (!body || typeof body !== 'object') return respond({ error: 'invalid_request' }, 400);
 
-            const payload = body as Record<string, unknown>;
+            const payload = body;
             const { code, code_verifier: verifier, redirect_uri: suppliedRedirect } = payload;
             if (
                 !isNonEmpty(code, 2048) ||
@@ -72,7 +72,7 @@ export default {
                 grant_type: 'authorization_code',
                 client_id: clientId,
                 redirect_uri: redirectUri,
-                code: code as string,
+                code,
                 code_verifier: verifier,
             });
             const upstream = await fetch('https://auth.deriv.com/oauth2/token', {
@@ -82,12 +82,12 @@ export default {
                 signal: AbortSignal.timeout(15000),
             });
 
-            const data: unknown = await upstream.json();
+            const data = await upstream.json();
             if (!data || typeof data !== 'object') {
                 return respond({ error: 'invalid_response' }, 502);
             }
 
-            const result = data as Record<string, unknown>;
+            const result = data;
             if (!upstream.ok || typeof result.access_token !== 'string') {
                 return respond({
                     error: typeof result.error === 'string' ? result.error : 'token_exchange_failed',

@@ -95,6 +95,11 @@
     }
 
     &__notice {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1.2rem;
         margin-bottom: 1.8rem;
         padding: 1.2rem 1.6rem;
         border: 1px solid var(--border-normal, #d1d5db);
@@ -103,6 +108,38 @@
         color: var(--text-general, #586473);
         font-size: 1.3rem;
         line-height: 1.5;
+
+        &--error {
+            border-color: var(--status-danger, #dc3545);
+        }
+    }
+
+    &__notice-copy {
+        flex: 1 1 28rem;
+        min-width: 0;
+        overflow-wrap: anywhere;
+
+        p {
+            margin: 0;
+        }
+    }
+
+    &__reload-markets {
+        flex: 0 0 auto;
+        padding: 0.8rem 1.2rem;
+        min-height: 4.4rem;
+        border: 1px solid var(--border-normal, #d1d5db);
+        border-radius: 0.8rem;
+        background: var(--general-main-1, #fff);
+        color: var(--text-prominent, #182331);
+        font: inherit;
+        font-weight: 700;
+        cursor: pointer;
+
+        &:focus-visible {
+            outline: 2px solid var(--brand-primary, #ff444f);
+            outline-offset: 2px;
+        }
     }
 
     &__grid {

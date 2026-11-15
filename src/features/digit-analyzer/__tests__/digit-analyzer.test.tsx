@@ -129,7 +129,7 @@ describe('Digit Analyzer feature shell', () => {
         render(<DigitAnalyzer />);
 
         expect(screen.getByRole('note')).toHaveTextContent('Receiving live ticks');
-        expect(screen.getByText('123.450')).toBeInTheDocument();
+        expect(screen.getAllByText('123.450')).toHaveLength(2);
         expect(screen.getByText('Most recent market tick')).toBeInTheDocument();
         expect(screen.getByRole('region', { name: 'Recent ticks' })).toHaveTextContent('123.450');
         expect(screen.getAllByText('Awaiting market data')).toHaveLength(4);

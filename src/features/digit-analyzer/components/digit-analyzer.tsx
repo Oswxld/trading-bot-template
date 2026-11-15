@@ -4,6 +4,8 @@ import { calculateDigitPercentages } from '../services/digit-percentages';
 import { calculateDigitParity } from '../services/digit-parity';
 import { calculateDigitOverUnder } from '../services/digit-over-under';
 import { calculateDigitMatchesDiffers } from '../services/digit-matches-differs';
+import { calculateDigitPatternScores } from '../services/digit-pattern-score';
+import { detectDigitPatternLeaders } from '../services/digit-pattern-leaders';
 import { useMarketCatalog } from '../hooks/use-market-catalog';
 import { useLiveTicks } from '../hooks/use-live-ticks';
 import type { AnalyzerSampleSize } from '../types/digit-analyzer.types';
@@ -11,6 +13,7 @@ import AnalyzerControls from './analyzer-controls';
 import AnalyzerHeader from './analyzer-header';
 import CurrentTick from './current-tick';
 import DigitDistribution from './digit-distribution';
+import DigitPatternScores from './digit-pattern-scores';
 import OutcomeStatistics from './outcome-statistics';
 import RecentTicks from './recent-ticks';
 import '../styles/digit-analyzer.scss';
@@ -73,6 +76,27 @@ const DigitAnalyzer = () => {
             } : null,
         };
     }, [rollingTicks, selectedDigit, threshold]);
+
+    // All ten scores and the top digit(s) come from the SAME live/history
+    // sample as the distribution. No additional subscription, timer or
+    // trading endpoint. While history is loading, do not signal a leader.
+    // The market-aware engine refuses stale/wrong-symbol tick observations.
+    const patternsLoading = phase === 'loading' ||
+        (phase === 'ready' && historyPhase === 'loading');
+    const patterns = useMemo(() => {
+        if (phase !== 'ready' || connectionState !== 'live' ||
+            !selectedSymbol || historyPhase === 'loading' || tickStatus === 'error') {
+            return { scores: null, leaders: null };
+        }
+        try {
+            const scores = calculateDigitPatternScores({ symbol: selectedSymbol, ticks: rollingTicks });
+            return { scores, leaders: detectDigitPatternLeaders(scores) };
+        } catch {
+            // Invalid market observations must never produce a green winner.
+            // The tick stream owns transport errors and their diagnostics.
+            return { scores: null, leaders: null };
+        }
+    }, [connectionState, historyPhase, phase, rollingTicks, selectedSymbol, tickStatus]);
 
     const selectedMarket = markets.find(market => market.symbol === selectedSymbol);
     const loadedCount = markets.filter(market => market.isOpen !== false).length;
@@ -157,6 +181,11 @@ const DigitAnalyzer = () => {
                         latestDigit={latestTick?.digit ?? null}
                     />
                     <RecentTicks ticks={recentTicks} />
+                    <DigitPatternScores
+                        scores={patterns.scores}
+                        leaders={patterns.leaders}
+                        isLoading={patternsLoading}
+                    />
                     <OutcomeStatistics
                         outcomes={statistics.outcomes}
                         totalTicks={statistics.distribution.totalTicks}

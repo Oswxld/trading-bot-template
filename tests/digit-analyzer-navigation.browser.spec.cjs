@@ -172,6 +172,22 @@ async function verifyAnalysis(page) {
     await expect(page.getByRole('region', { name: 'Digit distribution' })).toBeVisible();
     await expect(page.getByRole('region', { name: 'Recent ticks' })).toBeVisible();
     await expect(page.locator('.digit-analyzer__bar-column')).toHaveCount(10);
+    // Real fixture history ends before the first live tick. The new digit 0
+    // replaces the oldest digit 1: 101 zeros, 99 ones, 100 of every other.
+    await expect(page.getByRole('group', { name: 'Digit 0: 101 of 1000 ticks (10.1%)' })).toBeVisible();
+    await expect(page.getByRole('group', { name: 'Digit 1: 99 of 1000 ticks (9.9%)' })).toBeVisible();
+    const parity = page.getByRole('region', { name: 'Even / Odd' }).locator('.digit-analyzer__metric-row');
+    await expect(parity.nth(0)).toContainText('501');
+    await expect(parity.nth(0)).toContainText('50.1%');
+    await expect(parity.nth(1)).toContainText('499');
+    await expect(parity.nth(1)).toContainText('49.9%');
+    const overUnder = page.getByRole('region', { name: 'Over / Under' }).locator('.digit-analyzer__metric-row');
+    await expect(overUnder.nth(0)).toContainText('40.0%');
+    await expect(overUnder.nth(1)).toContainText('50.0%');
+    await expect(overUnder.nth(2)).toContainText('10.0%');
+    const matches = page.getByRole('region', { name: 'Matches / Differs' }).locator('.digit-analyzer__metric-row');
+    await expect(matches.nth(0)).toContainText('10.0%');
+    await expect(matches.nth(1)).toContainText('90.0%');
 }
 
 test('desktop: Analysis deep link and tab switches do not break neighboring tools', async ({ page }) => {
@@ -254,6 +270,10 @@ test('mobile: 10 digit bars, controls and cards remain inside 375px viewport', a
     await page.getByRole('combobox', { name: 'Sample size' }).selectOption('500');
     await expect(page.getByRole('combobox', { name: 'Sample size' })).toHaveValue('500');
     await expect(page.locator('.digit-analyzer__sample-count')).toContainText('500 / 500');
+    await expect(page.getByRole('group', { name: 'Digit 5: 51 of 500 ticks (10.2%)' })).toBeVisible();
+    const matchesAfterResize = page.getByRole('region', { name: 'Matches / Differs' }).locator('.digit-analyzer__metric-row');
+    await expect(matchesAfterResize.nth(0)).toContainText('51');
+    await expect(matchesAfterResize.nth(0)).toContainText('10.2%');
     const afterResize = await page.evaluate(() => window.__digitAnalyzerSocketMetrics);
     expect(afterResize.historyRequests.some(r => r.symbol === 'R_75' && r.count === 500)).toBe(true);
     expect(afterResize.historyRequests.every(r => !r.subscribed)).toBe(true);
@@ -261,6 +281,18 @@ test('mobile: 10 digit bars, controls and cards remain inside 375px viewport', a
     expect(afterResize.opened).toBe(1);
     await page.getByRole('combobox', { name: 'Over/Under threshold' }).selectOption('7');
     await expect(page.getByText('Over 7')).toBeVisible();
+    const over7 = page.getByRole('region', { name: 'Over / Under' }).locator('.digit-analyzer__metric-row');
+    await expect(over7.nth(0)).toContainText('20.0%');
+    await expect(over7.nth(1)).toContainText('70.0%');
+    await expect(over7.nth(2)).toContainText('10.0%');
+    await page.getByRole('combobox', { name: 'Matches/Differs digit' }).selectOption('1');
+    const matches1 = page.getByRole('region', { name: 'Matches / Differs' }).locator('.digit-analyzer__metric-row');
+    await expect(matches1.nth(0)).toContainText('49');
+    await expect(matches1.nth(0)).toContainText('9.8%');
+    const noNewSubscriptions = await page.evaluate(() => window.__digitAnalyzerSocketMetrics);
+    expect(noNewSubscriptions.active).toBe(1);
+    expect(noNewSubscriptions.maximum).toBe(1);
+    expect(noNewSubscriptions.historyRequests.length).toBe(afterResize.historyRequests.length);
 });
 
 test('small mobile: all 10 bars stay within a 320px viewport', async ({ page }) => {

@@ -56,6 +56,7 @@ jobs:
             src/features/digit-analyzer/__tests__/public-market-data-client.test.ts \
             src/features/digit-analyzer/__tests__/normalize-symbol.test.ts \
             src/features/digit-analyzer/__tests__/market-catalog.test.ts \
+            src/features/digit-analyzer/__tests__/use-market-catalog.test.tsx \
             --ci --runInBand --coverage=false
 
       - name: Trading and Admin Test Kit smoke tests

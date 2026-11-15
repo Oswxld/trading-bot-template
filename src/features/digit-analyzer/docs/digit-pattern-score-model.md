@@ -1,6 +1,6 @@
 # Chunk 6.1 — Digit Pattern Score Model (Design Contract v1.0.0)
 
-**Status:** model and interface **defined in 6.1**, scoring calculations **implemented in 6.2**, and highest-score/tie detection **implemented in 6.3**. Dashboard integration **implemented in 6.4**; forward-only predictive evaluation remains for 6.5.
+**Status:** model and interface **defined in 6.1**, scoring calculations **implemented in 6.2**, and highest-score/tie detection **implemented in 6.3**. Dashboard integration **implemented in 6.4**, and forward-only exploratory walk-forward evaluation and tests **implemented in 6.5**. This does not establish predictive usefulness.
 
 ## Product meaning and constraints
 
@@ -71,6 +71,20 @@ This compares a digit's **full-window frequency (40%)**, **recent frequency (35%
 - **6.2** (complete): pure scoring engine in `../services/digit-pattern-score.ts` with mathematical unit tests, strict input validation, rolling snapshot support and no inferred next-tick probability.
 - **6.3** (complete): pure leader detection and deterministic tie handling in `../services/digit-pattern-leaders.ts`, with no-data gating and regression tests.
 - **6.4** (complete): render all ten digit scores in the dashboard using `../components/digit-pattern-scores.tsx`; highlight all joint leaders in green, distinguish loading/collecting/ready states, and maintain a 5-column layout on narrow screens.
-- **6.5**: full integration/stress testing and forward-only performance evaluation.
+- **6.5** (implemented): a strict chronological next-tick audit in `../services/digit-pattern-walkforward.ts`, offline leakage/stress tests in `../__tests__/digit-pattern-walkforward.test.ts`, and an opt-in public Deriv historical evaluation in `../__tests__/live-public-market.integration.test.ts`. Follow-up manual browser checks are still needed.
 
 Source of truth for configuration and result types: `../services/digit-pattern-score-model.ts`. Scoring engine: `../services/digit-pattern-score.ts`. Leader selection: `../services/digit-pattern-leaders.ts`. The dashboard now connects scoring and leader selection to the same synchronized rolling sample as the existing statistics. The green highlight is descriptive only; it is not a probability or trading signal.
+
+## Step 6.5 evaluation protocol and honest interpretation
+
+**Method:** for a chosen full sample size `S` (100, 500 or 1,000) and `N` sequential observations, evaluate **only** ticks with indices `S..N-1`. For each index `i`, both methods see exactly `ticks[i-S .. i-1]` and are compared only with the previously unseen `ticks[i]`. Thus `N=S` provides **zero holdouts**. It is incorrect to claim a 1,000-tick window was evaluated on just 1,000 fetched ticks.
+
+**Comparison:** the pattern model chooses all unrounded top pattern scores, while the simple frequency baseline chooses all digits sharing the largest past-sample occurrence count. On an exact `k`-way tie, a correct member earns `1/k` (otherwise 0). We track the average **tie-adjusted credit rate** and the separate rate of unique winners; the same tick positions are used for both methods. This avoids reporting 100% "accuracy" for a ten-digit tie. The model is not designed to sum its ten 0–100 scores to 100%; dividing by score is not an honest match probability.
+
+**Comparison reference:** 10% is the mathematical reference if ten digits have equal independent next-tick chances, not a verified characteristic of each Deriv synthetic instrument. An apparent rise over 10% or over the baseline on a short snapshot **does not establish** a stable predictive edge or profitability.
+
+**Caveats:** one-off historical snapshots are limited, include overlapping training windows and observations that may be dependent. There is no calibrated per-digit probability, uncertainty guarantee or independent market-regime validation. The model weights (40/35/25) were selected as heuristics in 6.1; no weights are tuned against the evaluation holdouts. Do not draw performance or trade recommendations from the highest green score.
+
+**Actual real-market check:** the opt-in GitHub Actions workflow `digit-analyzer-live-connection.yml` fetches 1,000 authentic public ticks from each of two distinct available instruments and audits 900 (S=100) and 500 (S=500) chronologically held-out next ticks per instrument. It explicitly reports that S=1,000 has **zero** valid held-out ticks. If real history cannot be retrieved, the check fails rather than substituting simulations.
+
+**Release gate:** keep the existing displayed label `Digit pattern score` and explanatory disclaimer. A true next-tick probability claim requires much longer, independently acquired multi-market/out-of-time data with a pre-registered evaluation plan, uncertainty analysis accounting for dependence and a persistent repeatable improvement over simple baselines.

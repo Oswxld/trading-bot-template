@@ -71,7 +71,7 @@ const DigitPatternScores = ({ scores, leaders, isLoading = false }: DigitPattern
                 })}
             </div>
 
-            <p className='digit-analyzer__pattern-state' role='status'>
+            <p className='digit-analyzer__pattern-state' aria-live='polite'>
                 {isLoading
                     ? 'Loading verified market observations; scores are not available yet.'
                     : ready

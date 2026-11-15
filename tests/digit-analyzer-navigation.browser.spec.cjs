@@ -1,6 +1,6 @@
 const { test, expect } = require('@playwright/test');
 
-test.use({ baseURL: 'http://127.0.0.1:4173' });
+test.use({ baseURL: 'http://127.0.0.1:4173', screenshot: 'only-on-failure' });
 
 async function dismissTour(page) {
     const tour = page.locator('.tour-dialog').first();

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useMarketCatalog } from '../hooks/use-market-catalog';
+import { useLiveTicks } from '../hooks/use-live-ticks';
 import type { AnalyzerSampleSize } from '../types/digit-analyzer.types';
 import AnalyzerControls from './analyzer-controls';
 import AnalyzerHeader from './analyzer-header';
@@ -10,9 +11,9 @@ import RecentTicks from './recent-ticks';
 import '../styles/digit-analyzer.scss';
 
 /**
- * Chunk 3.3: the market dropdown now uses a real public active_symbols catalog.
- * No history or tick stream is subscribed to yet, and no prices/statistics are
- * fabricated. The hook opens one dedicated socket only while this tab is mounted.
+ * Chunk 3.4: market catalog and current tick stream share one dedicated public
+ * connection. Only real, verified market quotes populate the live-price and
+ * recent-tick views. Sample-window statistics and history come in later chunks.
  */
 const DigitAnalyzer = () => {
     const {
@@ -23,7 +24,13 @@ const DigitAnalyzer = () => {
         phase,
         error,
         reloadMarkets,
+        clientRef,
     } = useMarketCatalog();
+    const { latestTick, recentTicks, status: tickStatus, error: tickError } = useLiveTicks(
+        clientRef.current,
+        selectedSymbol,
+        phase === 'ready' && connectionState === 'live'
+    );
     const [sampleSize, setSampleSize] = useState<AnalyzerSampleSize>(1000);
     const [selectedDigit, setSelectedDigit] = useState(5);
     const [threshold, setThreshold] = useState(5);
@@ -45,8 +52,18 @@ const DigitAnalyzer = () => {
                             <p>
                                 {loadedCount} synthetic {loadedCount === 1 ? 'market' : 'markets'} available.
                                 {selectedMarket ? ` Selected: ${selectedMarket.displayName}.` : ''}
-                                {' '}Live tick streaming is not enabled yet.
+                                {' '}
+                                {tickStatus === 'streaming'
+                                    ? 'Receiving live ticks.'
+                                    : tickStatus === 'subscribing'
+                                        ? 'Subscribing to live ticks...'
+                                        : tickStatus === 'error'
+                                            ? 'Tick stream unavailable; reload markets to reconnect.'
+                                            : 'Preparing live market stream.'}
                             </p>
+                        )}
+                        {phase === 'ready' && tickStatus === 'error' && (
+                            <p role='alert'>Live tick error: {tickError ?? 'Subscription failed.'}</p>
                         )}
                         {phase === 'empty' && (
                             <p>Deriv returned no currently selectable synthetic markets. Live tick streaming has not started.</p>
@@ -79,11 +96,11 @@ const DigitAnalyzer = () => {
                     isPaused={false}
                 />
 
-                <CurrentTick tick={null} sampleCount={0} sampleSize={sampleSize} />
+                <CurrentTick tick={latestTick} sampleCount={0} sampleSize={sampleSize} />
 
                 <div className='digit-analyzer__grid'>
                     <DigitDistribution counts={[]} totalTicks={0} latestDigit={null} />
-                    <RecentTicks ticks={[]} />
+                    <RecentTicks ticks={recentTicks} />
                     <OutcomeStatistics
                         outcomes={null}
                         totalTicks={0}

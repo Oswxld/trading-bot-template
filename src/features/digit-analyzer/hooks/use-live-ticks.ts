@@ -82,7 +82,9 @@ export const useLiveTicks = (
         void controller.subscribe(selectedSymbol, tick => {
             if (!current) return;
             try {
-                session.receiveLive(tick);
+                // Duplicate IDs and out-of-order ticks are ignored by the
+                // synchronized window. Do not count them or repaint the UI.
+                if (!session.receiveLive(tick)) return;
                 setView(previous => previous.owner === session ? {
                     ...previous,
                     snapshot: session.snapshot(),

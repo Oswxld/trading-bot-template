@@ -168,7 +168,7 @@ describe('Digit Analyzer observed percentage distribution (Chunk 5.2)', () => {
         expect(first.counts).not.toBe(second.counts);
         expect(first.percentages).not.toBe(second.percentages);
         (first.percentages as unknown as number[])[1] = 0;
-        (first.counts as number[])[1] = 0;
+        (first.counts as unknown as number[])[1] = 0;
         expect(second.counts[1]).toBe(2);
         expect(second.percentages[1]).toBeCloseTo(200 / 3, 10);
     });

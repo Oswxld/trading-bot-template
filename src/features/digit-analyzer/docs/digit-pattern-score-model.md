@@ -1,6 +1,6 @@
 # Chunk 6.1 — Digit Pattern Score Model (Design Contract v1.0.0)
 
-**Status:** model and interface **defined**, scoring calculations **not yet implemented**. The calculation engine, winner selection, dashboard and predictive validation belong to Chunks 6.2–6.5 respectively.
+**Status:** model and interface **defined in 6.1**, scoring calculations **implemented and unit-tested in 6.2**. Highest-score/tie selection, dashboard integration and predictive evaluation remain in 6.3–6.5 respectively.
 
 ## Product meaning and constraints
 
@@ -68,9 +68,9 @@ This compares a digit's **full-window frequency (40%)**, **recent frequency (35%
 ## Build sequence
 
 - **6.1** (this commit): define the scoring formula, versioned configuration, data contract and restrictions.
-- **6.2**: implement the pure scoring engine + mathematical unit tests.
+- **6.2** (complete): pure scoring engine in `../services/digit-pattern-score.ts` with mathematical unit tests, strict input validation, rolling snapshot support and no inferred next-tick probability.
 - **6.3**: calculate maximum and tie detection from unrounded scores.
 - **6.4**: show all ten scores, highest-in-green status and clear no-data states.
 - **6.5**: full integration/stress testing and forward-only performance evaluation.
 
-Source of truth for configuration and result types: `../services/digit-pattern-score-model.ts`.
+Source of truth for configuration and result types: `../services/digit-pattern-score-model.ts`. Implementation: `../services/digit-pattern-score.ts`. The engine returns all ten scores but deliberately does **not** select or highlight a winner until 6.3/6.4.

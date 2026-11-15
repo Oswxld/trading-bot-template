@@ -12,11 +12,11 @@ export type RollingTickSnapshot = {
     latestTick: AnalyzerTick | null;
 };
 
-const assertWindowSize = (size: number): asserts size is AnalyzerSampleSize => {
+function assertWindowSize(size: number): asserts size is AnalyzerSampleSize {
     if (!ANALYZER_SAMPLE_SIZES.includes(size as AnalyzerSampleSize)) {
         throw new Error('Rolling tick window must be 100, 500 or 1000');
     }
-};
+}
 
 const assertSymbol = (symbol: string): void => {
     if (typeof symbol !== 'string' || !/^[A-Za-z0-9_]{2,30}$/.test(symbol)) {

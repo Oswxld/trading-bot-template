@@ -55,7 +55,7 @@ export const calculateDigitPercentages = (
     const totalTicks = frequency.totalTicks;
     const percentages = frequency.counts.map(count =>
         totalTicks === 0 ? 0 : (count * 100) / totalTicks
-    ) as DigitPercentageValues;
+    ) as unknown as DigitPercentageValues;
 
     return {
         counts: [...frequency.counts] as unknown as DigitFrequencyCounts,

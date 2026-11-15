@@ -77,6 +77,7 @@ jobs:
             src/features/digit-analyzer/__tests__/digit-pattern-score.test.ts \
             src/features/digit-analyzer/__tests__/digit-pattern-leaders.test.ts \
             src/features/digit-analyzer/__tests__/digit-pattern-dashboard.test.tsx \
+            src/features/digit-analyzer/__tests__/digit-pattern-walkforward.test.ts \
             --ci --runInBand --coverage=false
 
       - name: Trading and Admin Test Kit smoke tests

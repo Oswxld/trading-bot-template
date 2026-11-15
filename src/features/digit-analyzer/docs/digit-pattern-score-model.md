@@ -1,6 +1,6 @@
 # Chunk 6.1 — Digit Pattern Score Model (Design Contract v1.0.0)
 
-**Status:** model and interface **defined in 6.1**, scoring calculations **implemented in 6.2**, and highest-score/tie detection **implemented in 6.3**. Dashboard integration and predictive evaluation remain for 6.4–6.5.
+**Status:** model and interface **defined in 6.1**, scoring calculations **implemented in 6.2**, and highest-score/tie detection **implemented in 6.3**. Dashboard integration **implemented in 6.4**; forward-only predictive evaluation remains for 6.5.
 
 ## Product meaning and constraints
 
@@ -70,7 +70,7 @@ This compares a digit's **full-window frequency (40%)**, **recent frequency (35%
 - **6.1** (this commit): define the scoring formula, versioned configuration, data contract and restrictions.
 - **6.2** (complete): pure scoring engine in `../services/digit-pattern-score.ts` with mathematical unit tests, strict input validation, rolling snapshot support and no inferred next-tick probability.
 - **6.3** (complete): pure leader detection and deterministic tie handling in `../services/digit-pattern-leaders.ts`, with no-data gating and regression tests.
-- **6.4**: show all ten scores, highest-in-green status and clear no-data states.
+- **6.4** (complete): render all ten digit scores in the dashboard using `../components/digit-pattern-scores.tsx`; highlight all joint leaders in green, distinguish loading/collecting/ready states, and maintain a 5-column layout on narrow screens.
 - **6.5**: full integration/stress testing and forward-only performance evaluation.
 
-Source of truth for configuration and result types: `../services/digit-pattern-score-model.ts`. Scoring engine: `../services/digit-pattern-score.ts`. Leader selection: `../services/digit-pattern-leaders.ts`. **No green dashboard highlighting yet**; that is intentionally deferred to 6.4.
+Source of truth for configuration and result types: `../services/digit-pattern-score-model.ts`. Scoring engine: `../services/digit-pattern-score.ts`. Leader selection: `../services/digit-pattern-leaders.ts`. The dashboard now connects scoring and leader selection to the same synchronized rolling sample as the existing statistics. The green highlight is descriptive only; it is not a probability or trading signal.

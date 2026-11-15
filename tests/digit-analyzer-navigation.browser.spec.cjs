@@ -13,7 +13,7 @@ async function dismissTour(page) {
 async function verifyAnalysis(page) {
     await expect(page.locator('#id-analysis')).toBeVisible({ timeout: 40000 });
     await expect(page.getByRole('heading', { name: 'Digit Analyzer' })).toBeVisible({ timeout: 40000 });
-    await expect(page.getByRole('status', { name: 'Not connected' })).toBeVisible();
+    await expect(page.locator('.digit-analyzer__connection')).toContainText('Not connected');
     await expect(page.getByRole('combobox', { name: 'Market' })).toBeDisabled();
     await expect(page.getByRole('region', { name: 'Digit distribution' })).toBeVisible();
     await expect(page.getByRole('region', { name: 'Recent ticks' })).toBeVisible();

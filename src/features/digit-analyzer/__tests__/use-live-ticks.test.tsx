@@ -126,6 +126,70 @@ describe('useLiveTicks dashboard data lifecycle', () => {
         await waitFor(() => expect(socket.sent.some(message => message.forget === 'tick-R_10')).toBe(true));
     });
 
+    it('handles three rapid selections without showing an obsolete quote or opening a second socket', async () => {
+        const { result, rerender } = renderHook(
+            ({ symbol }) => useLiveTicks(client, symbol, true),
+            { initialProps: { symbol: 'R_10' } }
+        );
+        await waitFor(() => expect(socket.sent.some(message => message.ticks === 'R_10')).toBe(true));
+        rerender({ symbol: 'R_25' });
+        rerender({ symbol: 'R_75' });
+
+        expect(result.current.latestTick).toBeNull();
+        expect(result.current.status).toBe('subscribing');
+        act(() => socket.subscribeResponse('R_10', 123.45, 3));
+        await waitFor(() => expect(socket.sent.some(message => message.ticks === 'R_75')).toBe(true));
+
+        expect(socket.sent.some(message => message.ticks === 'R_25')).toBe(false);
+        expect(socket.sent.some(message => message.forget === 'tick-R_10')).toBe(true);
+        act(() => socket.subscribeResponse('R_75', 987.654, 2));
+        await waitFor(() => expect(result.current.status).toBe('streaming'));
+        expect(result.current.latestTick?.quote).toBe('987.65');
+        expect(result.current.recentTicks).toHaveLength(1);
+        expect(result.current.recentTicks[0].id.startsWith('R_75:')).toBe(true);
+    });
+
+    it('ignores late ticks when switching public clients and cleans up the old one', async () => {
+        const replacementSocket = new SocketFixture();
+        const replacementClient = new PublicMarketDataClient({
+            socketFactory: () => replacementSocket as unknown as WebSocket,
+        });
+        try {
+            const connecting = replacementClient.connect();
+            replacementSocket.open();
+            await connecting;
+
+            const { result, rerender, unmount } = renderHook(
+                ({ activeClient }) => useLiveTicks(activeClient, 'R_10', true),
+                { initialProps: { activeClient: client } }
+            );
+            await waitFor(() => expect(socket.sent.some(message => message.ticks === 'R_10')).toBe(true));
+            act(() => socket.subscribeResponse('R_10', 123.45, 3));
+            await waitFor(() => expect(result.current.status).toBe('streaming'));
+            expect(result.current.latestTick?.quote).toBe('123.450');
+
+            rerender({ activeClient: replacementClient });
+            expect(result.current.latestTick).toBeNull();
+            await waitFor(() => expect(replacementSocket.sent.some(message => message.ticks === 'R_10')).toBe(true));
+
+            act(() => {
+                socket.reply({
+                    msg_type: 'tick', subscription: { id: 'tick-R_10' },
+                    tick: { symbol: 'R_10', quote: 999.999, pip_size: 3, epoch: 1770000010 },
+                });
+                replacementSocket.subscribeResponse('R_10', 456.789, 3);
+            });
+            await waitFor(() => expect(result.current.status).toBe('streaming'));
+            expect(result.current.latestTick?.quote).toBe('456.789');
+            expect(result.current.recentTicks.map(t => t.quote)).toEqual(['456.789']);
+
+            unmount();
+            await waitFor(() => expect(replacementSocket.sent.some(message => message.forget === 'tick-R_10')).toBe(true));
+        } finally {
+            replacementClient.dispose();
+        }
+    });
+
     it('has no socket side effects when there is no catalog client or selected market', () => {
         const { result } = renderHook(() => useLiveTicks(null, '', false));
         expect(result.current.status).toBe('idle');

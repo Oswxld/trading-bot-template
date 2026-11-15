@@ -27,7 +27,8 @@ describe('Digit Analyzer feature shell', () => {
         jest.clearAllMocks();
         jest.mocked(useMarketCatalog).mockReturnValue({ ...loadingCatalog });
         jest.mocked(useLiveTicks).mockReturnValue({
-            latestTick: null, recentTicks: [], status: 'idle', error: null,
+            latestTick: null, recentTicks: [], sampleCount: 0, rollingTicks: [],
+            status: 'idle', error: null, historyPhase: 'idle', historyError: null,
         });
     });
 
@@ -125,15 +126,43 @@ describe('Digit Analyzer feature shell', () => {
             recentTicks: [{ id: 'R_75:1770000000:1', epoch: 1770000000, quote: '123.450', digit: 0 }],
             status: 'streaming',
             error: null,
+            sampleCount: 1,
+            rollingTicks: [{ id: 'R_75:1770000000:1', epoch: 1770000000, quote: '123.450', digit: 0 }],
+            historyPhase: 'loading',
+            historyError: null,
         });
         render(<DigitAnalyzer />);
 
         expect(screen.getByRole('note')).toHaveTextContent('Receiving live ticks');
         expect(screen.getAllByText('123.450')).toHaveLength(2);
+        expect(screen.getByText('Loading the latest 1,000 historical ticks.')).toBeInTheDocument();
+        expect(screen.getByText('1')).toBeInTheDocument();
         expect(screen.getByText('Most recent market tick')).toBeInTheDocument();
         expect(screen.getByRole('region', { name: 'Recent ticks' })).toHaveTextContent('123.450');
         expect(screen.getAllByText('Awaiting market data')).toHaveLength(4);
         expect(screen.getByRole('combobox', { name: 'Market' })).toHaveValue('R_75');
+    });
+
+    it('shows the real collected tick count after a synchronized historical snapshot', () => {
+        jest.mocked(useMarketCatalog).mockReturnValue({
+            ...loadingCatalog, connectionState: 'live', phase: 'ready',
+            selectedSymbol: 'R_75',
+            markets: [{ symbol: 'R_75', displayName: 'Volatility 75 Index', isOpen: true }],
+        });
+        jest.mocked(useLiveTicks).mockReturnValue({
+            latestTick: { id: 'history:R_75:1770000000:1', quote: '987.65', epoch: 1770000000, digit: 5 },
+            recentTicks: [{ id: 'history:R_75:1770000000:1', quote: '987.65', epoch: 1770000000, digit: 5 }],
+            rollingTicks: [{ id: 'history:R_75:1770000000:1', quote: '987.65', epoch: 1770000000, digit: 5 }],
+            sampleCount: 1,
+            status: 'subscribing',
+            error: null,
+            historyPhase: 'ready',
+            historyError: null,
+        });
+        render(<DigitAnalyzer />);
+        expect(screen.getByText('Historical and live observations are synchronized into the rolling sample.')).toBeInTheDocument();
+        expect(screen.getByRole('region', { name: 'Latest tick' })).toHaveTextContent('1 / 1,000');
+        expect(screen.getAllByText('Awaiting market data')).toHaveLength(4);
     });
 
     it('shows an explicit error with a Retry action instead of fake market choices', () => {

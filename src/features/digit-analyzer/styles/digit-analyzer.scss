@@ -356,6 +356,74 @@
         grid-column: span 1;
     }
 
+    // Dedicated all-digit pattern score panel. Green means the highest
+    // historical index, never a next-tick trade recommendation.
+    &__panel--patterns {
+        grid-column: 1 / -1;
+    }
+
+    &__pattern-grid {
+        display: grid;
+        grid-template-columns: repeat(10, minmax(0, 1fr));
+        gap: 0.8rem;
+        padding-top: 0.8rem;
+    }
+
+    &__pattern-digit {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-width: 0;
+        gap: 0.5rem;
+        padding: 1.2rem 0.5rem;
+        border: 1px solid var(--border-normal, #d1d5db);
+        border-radius: 0.9rem;
+        background: var(--general-main-1, #fff);
+        color: var(--text-prominent, #182331);
+        font-variant-numeric: tabular-nums;
+        transition: border-color 150ms ease, background-color 150ms ease;
+    }
+
+    &__pattern-digit--leader {
+        border-color: var(--status-success, #22a06b);
+        box-shadow: inset 0 0 0 1px var(--status-success, #22a06b);
+        background: rgba(34, 160, 107, 0.13);
+    }
+
+    &__pattern-number {
+        font-size: 1.8rem;
+        font-weight: 800;
+        line-height: 1.2;
+    }
+
+    &__pattern-points {
+        font-size: 1.6rem;
+        font-weight: 800;
+        line-height: 1.25;
+    }
+
+    &__pattern-tag {
+        min-height: 1.3rem;
+        color: var(--text-general, #586473);
+        font-size: 1rem;
+        line-height: 1.3;
+        text-align: center;
+        overflow-wrap: anywhere;
+    }
+
+    &__pattern-digit--leader &__pattern-tag {
+        color: var(--status-success, #22a06b);
+        font-weight: 800;
+    }
+
+    &__pattern-state {
+        margin: 0;
+        color: var(--text-general, #586473);
+        font-size: 1.2rem;
+        line-height: 1.5;
+    }
+
     &__panel-heading {
         display: flex;
         justify-content: space-between;
@@ -630,6 +698,10 @@
         &__distribution-scroll {
             overflow-x: hidden;
         }
+
+        &__pattern-grid {
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+        }
     }
 }
 
@@ -727,6 +799,27 @@
 
         &__panel-heading {
             gap: 0.8rem;
+        }
+
+        &__pattern-grid {
+            gap: 0.6rem;
+        }
+
+        &__pattern-digit {
+            padding: 1rem 0.3rem;
+            gap: 0.4rem;
+        }
+
+        &__pattern-number {
+            font-size: 1.6rem;
+        }
+
+        &__pattern-points {
+            font-size: 1.4rem;
+        }
+
+        &__pattern-tag {
+            font-size: 0.95rem;
         }
 
         &__panel-title {

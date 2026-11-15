@@ -10,6 +10,8 @@ test.use({ baseURL: 'http://127.0.0.1:4173', screenshot: 'only-on-failure' });
 async function installMarketCatalogFixture(page, { fail = false } = {}) {
     await page.addInitScript(({ endpoint, failCatalog }) => {
         const NativeWebSocket = window.WebSocket;
+        const telemetry = { opened: 0, closed: 0, active: 0, maximum: 0 };
+        window.__digitAnalyzerSocketMetrics = telemetry;
         const markets = [
             {
                 underlying_symbol: 'R_10',
@@ -45,6 +47,8 @@ async function installMarketCatalogFixture(page, { fail = false } = {}) {
                 this.onerror = null;
                 this.onclose = null;
                 this.isClosed = false;
+                this.subscriptions = new Set();
+                telemetry.opened += 1;
                 setTimeout(() => {
                     if (this.isClosed) return;
                     this.readyState = 1;
@@ -64,19 +68,26 @@ async function installMarketCatalogFixture(page, { fail = false } = {}) {
                     }, 0);
                 } else if (request.ticks) {
                     const symbol = request.ticks;
+                    const streamId = 'stream-' + symbol;
+                    if (!this.subscriptions.has(streamId)) {
+                        this.subscriptions.add(streamId);
+                        telemetry.active += 1;
+                        telemetry.maximum = Math.max(telemetry.maximum, telemetry.active);
+                    }
                     const quote = symbol === 'R_75' ? 987.654 : 123.45;
                     const pipSize = symbol === 'R_75' ? 2 : 3;
                     setTimeout(() => {
                         if (this.isClosed) return;
                         this.onmessage?.({ data: JSON.stringify({
                             msg_type: 'tick', req_id: request.req_id,
-                            subscription: { id: 'stream-' + symbol },
+                            subscription: { id: streamId },
                             tick: { symbol, epoch: 1770000000, quote, pip_size: pipSize },
                         }) });
                     }, 0);
                 } else if (request.forget) {
                     setTimeout(() => {
                         if (this.isClosed) return;
+                        if (this.subscriptions.delete(request.forget)) telemetry.active -= 1;
                         this.onmessage?.({ data: JSON.stringify({
                             msg_type: 'forget', req_id: request.req_id, forget: 1,
                         }) });
@@ -87,6 +98,9 @@ async function installMarketCatalogFixture(page, { fail = false } = {}) {
             close() {
                 if (this.isClosed) return;
                 this.isClosed = true;
+                telemetry.closed += 1;
+                telemetry.active -= this.subscriptions.size;
+                this.subscriptions.clear();
                 this.readyState = 3;
                 this.onclose?.(new Event('close'));
             }
@@ -149,10 +163,17 @@ test('desktop: Analysis deep link and tab switches do not break neighboring tool
         'id-bulk-trader', 'id-trading-bots', 'id-tutorials',
     ]);
 
+    await expect.poll(() => page.evaluate(() => window.__digitAnalyzerSocketMetrics.active)).toBe(1);
     await page.locator('#id-trading-bots').click();
     await expect(page.getByRole('region', { name: 'Trading bots' })).toBeVisible({ timeout: 20000 });
+    await expect.poll(() => page.evaluate(() => window.__digitAnalyzerSocketMetrics.active)).toBe(0);
+    await expect.poll(() => page.evaluate(() => window.__digitAnalyzerSocketMetrics.closed)).toBe(1);
     await page.locator('#id-analysis').click();
     await verifyAnalysis(page);
+    const totals = await page.evaluate(() => window.__digitAnalyzerSocketMetrics);
+    expect(totals.opened).toBe(2);
+    expect(totals.active).toBe(1);
+    expect(totals.maximum).toBe(1);
     await expect.poll(() => page.evaluate(() => window.location.hash)).toBe('#analysis');
 });
 
@@ -200,6 +221,9 @@ test('mobile: 10 digit bars, controls and cards remain inside 375px viewport', a
     await expect(page.locator('.digit-analyzer__quote')).toHaveText('987.65');
     await expect(page.locator('.digit-analyzer__last-digit')).toHaveText('5');
     await expect(page.getByRole('region', { name: 'Recent ticks' })).not.toContainText('123.450');
+    const subscriptions = await page.evaluate(() => window.__digitAnalyzerSocketMetrics);
+    expect(subscriptions.active).toBe(1);
+    expect(subscriptions.maximum).toBe(1);
 
     await page.getByRole('combobox', { name: 'Sample size' }).selectOption('500');
     await expect(page.getByRole('combobox', { name: 'Sample size' })).toHaveValue('500');

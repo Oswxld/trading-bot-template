@@ -1,4 +1,9 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { countDigitFrequencies } from '../services/digit-frequency';
+import { calculateDigitPercentages } from '../services/digit-percentages';
+import { calculateDigitParity } from '../services/digit-parity';
+import { calculateDigitOverUnder } from '../services/digit-over-under';
+import { calculateDigitMatchesDiffers } from '../services/digit-matches-differs';
 import { useMarketCatalog } from '../hooks/use-market-catalog';
 import { useLiveTicks } from '../hooks/use-live-ticks';
 import type { AnalyzerSampleSize } from '../types/digit-analyzer.types';
@@ -11,9 +16,9 @@ import RecentTicks from './recent-ticks';
 import '../styles/digit-analyzer.scss';
 
 /**
- * Chunk 4.3: historical snapshots and live ticks share the same public
- * connection, then populate a genuine bounded rolling sample. Digit-frequency
- * calculations and probability-style statistics are not enabled yet.
+ * Chunk 5.6: derive every displayed distribution and outcome from the SAME
+ * bounded, synchronized historical + live rolling sample. Observed statistics
+ * describe past ticks; they are not predictive trading probabilities.
  */
 const DigitAnalyzer = () => {
     const {
@@ -31,6 +36,7 @@ const DigitAnalyzer = () => {
         latestTick,
         recentTicks,
         sampleCount,
+        rollingTicks,
         status: tickStatus,
         error: tickError,
         historyPhase,
@@ -43,6 +49,30 @@ const DigitAnalyzer = () => {
     );
     const [selectedDigit, setSelectedDigit] = useState(5);
     const [threshold, setThreshold] = useState(5);
+
+    // All five statistic engines consume one validated frequency histogram.
+    // Control changes recalculate locally; they never restart the WebSocket.
+    // With no observed ticks, keep outcome cards in their no-data state.
+    const statistics = useMemo(() => {
+        const frequency = countDigitFrequencies(rollingTicks);
+        const distribution = calculateDigitPercentages(frequency);
+        const parity = calculateDigitParity(frequency);
+        const overUnder = calculateDigitOverUnder(frequency, threshold);
+        const matchesDiffers = calculateDigitMatchesDiffers(frequency, selectedDigit);
+
+        return {
+            distribution,
+            outcomes: distribution.hasData ? {
+                even: parity.even,
+                odd: parity.odd,
+                over: overUnder.over,
+                under: overUnder.under,
+                equal: overUnder.equal,
+                matches: matchesDiffers.matches,
+                differs: matchesDiffers.differs,
+            } : null,
+        };
+    }, [rollingTicks, selectedDigit, threshold]);
 
     const selectedMarket = markets.find(market => market.symbol === selectedSymbol);
     const loadedCount = markets.filter(market => market.isOpen !== false).length;
@@ -120,11 +150,16 @@ const DigitAnalyzer = () => {
                 <CurrentTick tick={latestTick} sampleCount={sampleCount} sampleSize={sampleSize} />
 
                 <div className='digit-analyzer__grid'>
-                    <DigitDistribution counts={[]} totalTicks={0} latestDigit={null} />
+                    <DigitDistribution
+                        counts={statistics.distribution.counts}
+                        percentages={statistics.distribution.percentages}
+                        totalTicks={statistics.distribution.totalTicks}
+                        latestDigit={latestTick?.digit ?? null}
+                    />
                     <RecentTicks ticks={recentTicks} />
                     <OutcomeStatistics
-                        outcomes={null}
-                        totalTicks={0}
+                        outcomes={statistics.outcomes}
+                        totalTicks={statistics.distribution.totalTicks}
                         threshold={threshold}
                         onThresholdChange={setThreshold}
                         selectedDigit={selectedDigit}

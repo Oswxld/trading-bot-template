@@ -71,6 +71,7 @@ jobs:
             src/features/digit-analyzer/__tests__/digit-parity.test.ts \
             src/features/digit-analyzer/__tests__/digit-over-under.test.ts \
             src/features/digit-analyzer/__tests__/digit-matches-differs.test.ts \
+            src/features/digit-analyzer/__tests__/dashboard-statistics-integration.test.tsx \
             --ci --runInBand --coverage=false
 
       - name: Trading and Admin Test Kit smoke tests

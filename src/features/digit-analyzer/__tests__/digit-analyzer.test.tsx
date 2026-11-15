@@ -1,39 +1,61 @@
 import { fireEvent, render, screen } from '@testing-library/react';
+import { useMarketCatalog } from '../hooks/use-market-catalog';
 // Exercise the same public entry point used by main.tsx's lazy import.
 import DigitAnalyzer from '..';
 
+// Isolate view tests from the real WebSocket; hook lifecycle has its own tests.
+jest.mock('../hooks/use-market-catalog', () => ({ useMarketCatalog: jest.fn() }));
+
+const selectMarket = jest.fn();
+const reloadMarkets = jest.fn();
+
+const loadingCatalog: ReturnType<typeof useMarketCatalog> = {
+    markets: [],
+    selectedSymbol: '',
+    selectMarket,
+    connectionState: 'connecting',
+    phase: 'loading',
+    error: null,
+    reloadMarkets,
+    clientRef: { current: null },
+};
+
 describe('Digit Analyzer feature shell', () => {
-    it('shows an honest disconnected state before market data integration', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+        jest.mocked(useMarketCatalog).mockReturnValue({ ...loadingCatalog });
+    });
+
+    it('shows an honest loading state until public market metadata arrives', () => {
         render(<DigitAnalyzer />);
 
         expect(screen.getByRole('heading', { name: 'Digit Analyzer' })).toBeInTheDocument();
-        expect(screen.getByRole('status')).toHaveTextContent('Not connected');
-        expect(screen.getByRole('note')).toHaveTextContent('Live market data is not connected yet');
+        expect(screen.getByRole('status')).toHaveTextContent('Connecting');
+        expect(screen.getByRole('note')).toHaveTextContent('loading available synthetic markets');
+        expect(screen.getByRole('note')).toHaveTextContent('Live ticks are not streaming yet');
     });
 
     it('mounts and unmounts without leaving analyzer content behind', () => {
         const { unmount } = render(<DigitAnalyzer />);
-
         expect(screen.getByRole('heading', { name: 'Digit Analyzer' })).toBeInTheDocument();
         unmount();
         expect(screen.queryByRole('heading', { name: 'Digit Analyzer' })).not.toBeInTheDocument();
 
-        // Tab content is mounted again when the user returns to Analysis.
         render(<DigitAnalyzer />);
-        expect(screen.getByRole('status')).toHaveTextContent('Not connected');
+        expect(screen.getByRole('status')).toHaveTextContent('Connecting');
     });
 
-    it('shows disabled network controls until the public data feed is available', () => {
+    it('keeps trading/tick controls disabled while the catalog is loading', () => {
         render(<DigitAnalyzer />);
-
         expect(screen.getByRole('combobox', { name: 'Market' })).toBeDisabled();
+        expect(screen.getByRole('option', { name: 'Loading Deriv markets...' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Refresh' })).toBeDisabled();
         expect(screen.getByRole('button', { name: 'Pause' })).toBeDisabled();
         expect(screen.getByText('No ticks received yet')).toBeInTheDocument();
         expect(screen.getByRole('region', { name: 'Latest tick' })).toBeInTheDocument();
     });
 
-    it('lets users configure analysis options without inventing data', () => {
+    it('lets users configure analysis settings without inventing tick data', () => {
         render(<DigitAnalyzer />);
 
         fireEvent.change(screen.getByRole('combobox', { name: 'Sample size' }), { target: { value: '500' } });
@@ -54,9 +76,49 @@ describe('Digit Analyzer feature shell', () => {
 
     it('renders the planned analysis areas without fabricating tick results', () => {
         render(<DigitAnalyzer />);
-
         expect(screen.getAllByText('Awaiting market data')).toHaveLength(5);
         expect(screen.getByRole('region', { name: 'Digit distribution' })).toBeInTheDocument();
         expect(screen.getByRole('region', { name: 'Recent ticks' })).toBeInTheDocument();
+    });
+
+    it('populates the market dropdown and allows changing only selectable symbols', () => {
+        jest.mocked(useMarketCatalog).mockReturnValue({
+            ...loadingCatalog,
+            connectionState: 'live',
+            phase: 'ready',
+            markets: [
+                { symbol: 'R_10', displayName: 'Volatility 10 Index', isOpen: true },
+                { symbol: 'R_25', displayName: 'Volatility 25 Index', isOpen: true },
+                { symbol: 'R_50', displayName: 'Volatility 50 Index', isOpen: false },
+            ],
+            selectedSymbol: 'R_10',
+        });
+        render(<DigitAnalyzer />);
+
+        expect(screen.getByRole('note')).toHaveTextContent('2 synthetic markets available');
+        expect(screen.getByRole('note')).toHaveTextContent('Live tick streaming is not enabled yet');
+        expect(screen.getByRole('combobox', { name: 'Market' })).toHaveValue('R_10');
+        expect(screen.getByRole('option', { name: 'Volatility 50 Index (closed)' })).toBeDisabled();
+        fireEvent.change(screen.getByRole('combobox', { name: 'Market' }), { target: { value: 'R_25' } });
+        expect(selectMarket).toHaveBeenCalledWith('R_25');
+        fireEvent.click(screen.getByRole('button', { name: 'Reload markets' }));
+        expect(reloadMarkets).toHaveBeenCalledTimes(1);
+        expect(screen.getByRole('button', { name: 'Refresh' })).toBeDisabled();
+        expect(screen.getAllByText('Awaiting market data')).toHaveLength(5);
+    });
+
+    it('shows an explicit error with a Retry action instead of fake market choices', () => {
+        jest.mocked(useMarketCatalog).mockReturnValue({
+            ...loadingCatalog,
+            connectionState: 'error',
+            phase: 'error',
+            error: 'Public market request timed out',
+        });
+        render(<DigitAnalyzer />);
+
+        expect(screen.getByRole('alert')).toHaveTextContent('Public market request timed out');
+        expect(screen.getByRole('combobox', { name: 'Market' })).toBeDisabled();
+        fireEvent.click(screen.getByRole('button', { name: 'Retry markets' }));
+        expect(reloadMarkets).toHaveBeenCalledTimes(1);
     });
 });

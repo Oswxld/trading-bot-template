@@ -1,5 +1,7 @@
 type DigitDistributionProps = {
     counts: readonly number[];
+    /** Unrounded percentages from the validated statistics engine (Chunk 5.2). */
+    percentages?: readonly number[];
     totalTicks: number;
     latestDigit: number | null;
 };
@@ -7,7 +9,7 @@ type DigitDistributionProps = {
 const DIGITS = Array.from({ length: 10 }, (_, digit) => digit);
 
 /** Presentation only. Frequencies and the rolling window are calculated elsewhere. */
-const DigitDistribution = ({ counts, totalTicks, latestDigit }: DigitDistributionProps) => {
+const DigitDistribution = ({ counts, percentages, totalTicks, latestDigit }: DigitDistributionProps) => {
     const maxCount = totalTicks > 0 ? Math.max(0, ...counts) : 0;
 
     return (
@@ -25,7 +27,7 @@ const DigitDistribution = ({ counts, totalTicks, latestDigit }: DigitDistributio
                 <div className='digit-analyzer__distribution' role='group' aria-label='Last-digit frequency chart'>
                     {DIGITS.map(digit => {
                         const count = counts[digit] ?? 0;
-                        const percent = totalTicks > 0 ? (100 * count) / totalTicks : 0;
+                        const percent = percentages?.[digit] ?? (totalTicks > 0 ? (100 * count) / totalTicks : 0);
                         const barHeight = maxCount > 0 ? (100 * count) / maxCount : 0;
                         return (
                             <div

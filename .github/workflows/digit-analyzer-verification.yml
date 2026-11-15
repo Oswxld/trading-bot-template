@@ -13,6 +13,7 @@ on:
       - 'src/stores/dashboard-store.ts'
       - 'src/utils/getActiveTabUrl.ts'
       - 'src/utils/__tests__/getActiveTabUrl.test.ts'
+      - 'tests/digit-analyzer-navigation.browser.spec.cjs'
       - 'package.json'
       - 'package-lock.json'
   workflow_dispatch:
@@ -68,3 +69,29 @@ jobs:
       - name: Production build
         if: always()
         run: npm run build
+
+      - name: Browser smoke for desktop and mobile navigation
+        if: always()
+        run: |
+          test -f dist/index.html
+          npm install --no-save --no-audit --no-fund --legacy-peer-deps @playwright/test@1.57.0
+          npx playwright install --with-deps chromium
+          npx http-server dist -a 127.0.0.1 -p 4173 -s > /tmp/digit-analyzer-http.log 2>&1 &
+          for i in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:4173/ > /dev/null; then break; fi
+            sleep 1
+          done
+          npx playwright test tests/digit-analyzer-navigation.browser.spec.cjs --reporter=line --workers=1 --timeout=90000 --screenshot=only-on-failure
+        env:
+          CI: 'true'
+
+      - name: Save browser failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: digit-analyzer-browser-diagnostics
+          path: |
+            test-results/
+            /tmp/digit-analyzer-http.log
+          if-no-files-found: ignore
+          retention-days: 3

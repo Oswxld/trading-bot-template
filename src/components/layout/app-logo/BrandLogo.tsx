@@ -1,5 +1,5 @@
 /**
- * Client-provided Yolo Traders bull illustration, optimized for the header.
+ * Client-provided SheedyTraders bull illustration, optimized for the header.
  * Rendering the wordmark as text keeps it crisp and readable.
  */
 type TBrandLogoProps = {
@@ -14,15 +14,15 @@ export const BrandLogo = ({
     height = 36,
     className = '',
 }: TBrandLogoProps) => (
-    <span className={`yolo-brand-logo ${className}`} style={{ width, height }} aria-label='Yolo Traders'>
+    <span className={`sheedytraders-brand-logo ${className}`} style={{ width, height }} aria-label='SheedyTraders'>
         <img
-            className='yolo-brand-logo__mark'
-            src='/yolo-traders-mark.png'
+            className='sheedytraders-brand-logo__mark'
+            src='/sheedytraders-mark.webp'
             alt=''
             width={height}
             height={height}
             decoding='async'
         />
-        <span className='yolo-brand-logo__text'>Yolo Traders</span>
+        <span className='sheedytraders-brand-logo__text'>SheedyTraders</span>
     </span>
 );

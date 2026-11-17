@@ -1,5 +1,5 @@
 /**
- * Client-provided Yolo Traders bull illustration, optimized for the header.
+ * Client-provided Pipprinter candlestick P mark, optimized for the header.
  * Rendering the wordmark as text keeps it crisp and readable.
  */
 type TBrandLogoProps = {
@@ -14,15 +14,15 @@ export const BrandLogo = ({
     height = 36,
     className = '',
 }: TBrandLogoProps) => (
-    <span className={`yolo-brand-logo ${className}`} style={{ width, height }} aria-label='Yolo Traders'>
+    <span className={`pipprinter-brand-logo ${className}`} style={{ width, height }} aria-label='Pipprinter'>
         <img
-            className='yolo-brand-logo__mark'
-            src='/yolo-traders-mark.png'
+            className='pipprinter-brand-logo__mark'
+            src='/pipprinter-mark.jpg'
             alt=''
             width={height}
             height={height}
             decoding='async'
         />
-        <span className='yolo-brand-logo__text'>Yolo Traders</span>
+        <span className='pipprinter-brand-logo__text'>Pipprinter</span>
     </span>
 );

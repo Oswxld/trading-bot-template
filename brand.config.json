@@ -1,11 +1,11 @@
 {
-    "brand_name": "Yolo Traders",
-    "brand_domain": "yourbrand.com",
+    "brand_name": "Pipprinter",
+    "brand_domain": "pipprinter.site",
     "brand_hostname": {
-        "staging": "staging.yourbrand.com/dashboard",
-        "production": "yourbrand.com/dashboard"
+        "staging": "staging.pipprinter.site/dashboard",
+        "production": "pipprinter.site/dashboard"
     },
-    "domain_name": "Yolo Traders",
+    "domain_name": "Pipprinter",
     "colors": {
         "primary": "#3b82f6",
         "secondary": "#64748b",
@@ -79,14 +79,14 @@
         "css_variable_prefix": "--brand"
     },
     "platform": {
-        "name": "Yolo Traders",
+        "name": "Pipprinter",
         "logo": {
             "type": "component",
             "component_name": "BrandLogo",
-            "alt_text": "Yolo Traders",
+            "alt_text": "Pipprinter",
             "link_url": "/",
             "show_text": false,
-            "text": "Yolo Traders"
+            "text": "Pipprinter"
         },
         "footer": {
             "enable_language_settings": false,
@@ -94,10 +94,10 @@
         },
         "hostname": {
             "production": {
-                "com": "bot.yourbrand.com"
+                "com": "pipprinter.site"
             },
             "staging": {
-                "com": "staging-bot.yourbrand.com"
+                "com": "staging.pipprinter.site"
             }
         },
         "auth2_url": {

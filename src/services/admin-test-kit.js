@@ -8,6 +8,8 @@ import { createAdminTestMarketFeed } from './admin-test-market-feed';
 
 export const ADMIN_TEST_KEY = 'yolo:local-admin-test';
 export const ADMIN_TEST_MANAGE_EVENT = 'yolo:admin-test-manage';
+// Allows the Dashboard's three-second hold to open the same password-protected panel.
+export const ADMIN_TEST_OPEN_EVENT = 'yolo:admin-test-open';
 export const ADMIN_TEST_BACKUP = 'yolo:local-admin-backup';
 export const TEST_DEMO_ID = 'VRTC_ADMIN_TEST';
 export const TEST_REAL_ID = 'CR_ADMIN_TEST';

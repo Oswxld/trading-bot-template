@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor, cleanup } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, cleanup } from '@testing-library/react';
 
 jest.mock('@/external/bot-skeleton', () => ({
     api_base: {
@@ -34,11 +34,20 @@ import { OAuthTokenExchangeService } from '@/services/oauth-token-exchange.servi
 import { requestBulkApi } from '../bulk-api-request';
 import BulkTrader from '../bulk-trader';
 
-const makeApi = () => ({
-    connection: { readyState: 1 },
-    send: jest.fn(),
-    onMessage: () => ({ subscribe: () => ({ unsubscribe: jest.fn() }) }),
-});
+const makeApi = () => {
+    const listeners = new Set();
+    return {
+        connection: { readyState: 1 },
+        send: jest.fn(),
+        emit: data => listeners.forEach(listener => listener({ data })),
+        onMessage: () => ({
+            subscribe: listener => {
+                listeners.add(listener);
+                return { unsubscribe: jest.fn(() => listeners.delete(listener)) };
+            },
+        }),
+    };
+};
 const init = ({ id, cachedAccount = null, clientVirtual = 1, isAuthorized = true } = {}) => {
     localStorage.setItem('active_loginid', id);
     api_base.api = makeApi();
@@ -148,5 +157,45 @@ describe('Bulk Trader Matches / Differs button interactions (mock broker only)',
         fireEvent.click(button);
         expect(await screen.findByText(/Select a verified authenticated Deriv account/)).toBeInTheDocument();
         expect(window.confirm).not.toHaveBeenCalled();
+    });
+
+    it('relabels the SAME live tick history immediately when the trade type or prediction changes', async () => {
+        init({ id: 'VRTC7001' });
+        render(<BulkTrader />);
+
+        await waitFor(() => expect(api_base.api.send.mock.calls.some(
+            ([payload]) => Boolean(payload.ticks_history)
+        )).toBe(true));
+        const request = api_base.api.send.mock.calls.find(([payload]) => payload.ticks_history)[0];
+        act(() => api_base.api.emit({
+            msg_type: 'history',
+            req_id: request.req_id,
+            pip_size: 2,
+            history: { prices: [100.01, 100.02, 100.05, 100.07, 100.08, 100.09] },
+        }));
+        const badges = () => [...document.querySelectorAll('.bulk-trader__recent span')];
+        const letters = () => badges().map(node => node.textContent).join('');
+
+        expect(letters()).toBe('DDMDDD');
+        expect(screen.getByLabelText('Recent tick results for Matches/Differs')).toBeInTheDocument();
+
+        fireEvent.change(screen.getByLabelText('TRADE TYPE'), { target: { value: 'OVER_UNDER' } });
+        expect(letters()).toBe('UU=OOO');
+        expect(screen.getByLabelText('Recent tick results for Over/Under')).toBeInTheDocument();
+        expect(badges()[0]).toHaveClass('bulk-trader__recent-primary');
+        expect(badges()[2]).toHaveClass('bulk-trader__recent-neutral');
+        expect(badges()[3]).toHaveClass('bulk-trader__recent-secondary');
+
+        fireEvent.change(screen.getByLabelText('PREDICTION'), { target: { value: '7' } });
+        expect(letters()).toBe('UUU=OO');
+
+        fireEvent.change(screen.getByLabelText('TRADE TYPE'), { target: { value: 'EVEN_ODD' } });
+        expect(letters()).toBe('OEOOEO');
+        expect(screen.getByLabelText('Recent tick results for Even/Odd')).toBeInTheDocument();
+        expect(badges()[1]).toHaveClass('bulk-trader__recent-primary');
+        expect(badges()[0]).toHaveClass('bulk-trader__recent-secondary');
+
+        fireEvent.change(screen.getByLabelText('TRADE TYPE'), { target: { value: 'MATCH_DIFF' } });
+        expect(letters()).toBe('DDDMDD');
     });
 });

@@ -21,6 +21,7 @@ import { requestBulkApi } from './bulk-api-request';
 import { makePendingBulkRecord, recoverInterruptedBulkRecords, upsertBulkRecord } from './bulk-trade-records';
 import { runBoundedBulkOperations } from './bulk-execution';
 import BulkReports from './bulk-reports';
+import { getRecentTickOutcome } from './recent-tick-outcomes';
 import './bulk-trader.scss';
 
 /**
@@ -913,12 +914,17 @@ const BulkTrader = observer(() => {
                         </div>
                     ))}
                 </div>
-                <div className='bulk-trader__recent' aria-label='Recent tick digit results'>
-                    {ticks.slice(-8).map((digit, index) => (
-                        <span key={index} className={digit === Number(prediction) ? 'bulk-trader__recent-match' : ''}>
-                            {digit === Number(prediction) ? 'M' : 'D'}
-                        </span>
-                    ))}
+                <div className='bulk-trader__recent' aria-label={`Recent tick results for ${currentSelection.label}`}>
+                    {ticks.slice(-8).map((digit, index) => {
+                        const outcome = getRecentTickOutcome(digit, tradeType, prediction);
+                        return (
+                            <span key={index} className={`bulk-trader__recent-${outcome.tone}`}
+                                title={`Digit ${digit}: ${outcome.description}`}
+                                aria-label={`Digit ${digit}: ${outcome.description}`}>
+                                {outcome.letter}
+                            </span>
+                        );
+                    })}
                 </div>
                 <div className='bulk-trader__trade-grid'>
                     <label>TICKS

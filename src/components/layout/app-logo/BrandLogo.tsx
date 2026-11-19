@@ -1,5 +1,5 @@
 /**
- * Precious Traders emblem supplied by the client (cropped from the provided logo).
+ * Apex wealth emblem supplied by the client (cropped from the provided logo).
  * Render the brand name as text next to it so it remains legible in the header.
  */
 type TBrandLogoProps = {
@@ -14,15 +14,15 @@ export const BrandLogo = ({
     height = 36,
     className = '',
 }: TBrandLogoProps) => (
-    <span className={`precious-brand-logo ${className}`} style={{ width, height }} aria-label='Precious Traders'>
+    <span className={`apex-brand-logo ${className}`} style={{ width, height }} aria-label='Apex wealth'>
         <img
-            className='precious-brand-logo__mark'
-            src='/precious-traders-mark.webp'
+            className='apex-brand-logo__mark'
+            src='/apex-wealth-mark.webp'
             alt=''
             width={height}
             height={height}
             decoding='async'
         />
-        <span className='precious-brand-logo__text'>Precious Traders</span>
+        <span className='apex-brand-logo__text'>Apex wealth</span>
     </span>
 );

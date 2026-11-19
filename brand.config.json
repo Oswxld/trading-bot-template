@@ -1,11 +1,11 @@
 {
-    "brand_name": "Precious Traders",
-    "brand_domain": "precioustraders.site",
+    "brand_name": "Apex wealth",
+    "brand_domain": "",
     "brand_hostname": {
-        "staging": "staging.precioustraders.site/dashboard",
-        "production": "precioustraders.site/dashboard"
+        "staging": "",
+        "production": ""
     },
-    "domain_name": "Precious Traders",
+    "domain_name": "Apex wealth",
     "colors": {
         "primary": "#3b82f6",
         "secondary": "#64748b",
@@ -79,14 +79,14 @@
         "css_variable_prefix": "--brand"
     },
     "platform": {
-        "name": "Precious Traders",
+        "name": "Apex wealth",
         "logo": {
             "type": "component",
             "component_name": "BrandLogo",
-            "alt_text": "Precious Traders",
+            "alt_text": "Apex wealth",
             "link_url": "/",
             "show_text": false,
-            "text": "Precious Traders"
+            "text": "Apex wealth"
         },
         "footer": {
             "enable_language_settings": false,
@@ -94,10 +94,10 @@
         },
         "hostname": {
             "production": {
-                "com": "precioustraders.site"
+                "com": ""
             },
             "staging": {
-                "com": "staging.precioustraders.site"
+                "com": ""
             }
         },
         "auth2_url": {

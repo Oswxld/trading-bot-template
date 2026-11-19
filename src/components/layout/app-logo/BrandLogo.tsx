@@ -1,6 +1,6 @@
 /**
- * Client-provided Yolo Traders bull illustration, optimized for the header.
- * Rendering the wordmark as text keeps it crisp and readable.
+ * Precious Traders emblem supplied by the client (cropped from the provided logo).
+ * Render the brand name as text next to it so it remains legible in the header.
  */
 type TBrandLogoProps = {
     width?: number;
@@ -10,19 +10,19 @@ type TBrandLogoProps = {
 };
 
 export const BrandLogo = ({
-    width = 180,
+    width = 210,
     height = 36,
     className = '',
 }: TBrandLogoProps) => (
-    <span className={`yolo-brand-logo ${className}`} style={{ width, height }} aria-label='Yolo Traders'>
+    <span className={`precious-brand-logo ${className}`} style={{ width, height }} aria-label='Precious Traders'>
         <img
-            className='yolo-brand-logo__mark'
-            src='/yolo-traders-mark.png'
+            className='precious-brand-logo__mark'
+            src='/precious-traders-mark.webp'
             alt=''
             width={height}
             height={height}
             decoding='async'
         />
-        <span className='yolo-brand-logo__text'>Yolo Traders</span>
+        <span className='precious-brand-logo__text'>Precious Traders</span>
     </span>
 );

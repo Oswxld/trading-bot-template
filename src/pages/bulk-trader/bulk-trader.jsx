@@ -626,6 +626,10 @@ const BulkTrader = observer(() => {
 
         runRef.current = true;
         stopRef.current = false;
+        // Reveal the existing Summary / Transactions / Journal panel as soon
+        // as a confirmed, validated batch starts (including on mobile).
+        // Do not open it when preflight fails or the user cancels.
+        setReportsOpen(true);
         setStatus('running');
         setProgress(0);
         setInFlight(0);

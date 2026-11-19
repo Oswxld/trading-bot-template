@@ -69,6 +69,9 @@ const init = ({ id, cachedAccount = null, clientVirtual = 1, isAuthorized = true
         if (payload.contracts_for) return Promise.resolve({
             contracts_for: { available: [
                 { contract_type: 'DIGITDIFF' }, { contract_type: 'DIGITMATCH' },
+                { contract_type: 'DIGITUNDER' }, { contract_type: 'DIGITOVER' },
+                { contract_type: 'DIGITEVEN' }, { contract_type: 'DIGITODD' },
+                { contract_type: 'PUT' }, { contract_type: 'CALL' },
             ] },
         });
         if (payload.active_symbols) return Promise.resolve({ active_symbols: [] });
@@ -197,5 +200,51 @@ describe('Bulk Trader Matches / Differs button interactions (mock broker only)',
 
         fireEvent.change(screen.getByLabelText('TRADE TYPE'), { target: { value: 'MATCH_DIFF' } });
         expect(letters()).toBe('DDDMDD');
+    });
+
+    it.each([
+        ['Differs', 'MATCH_DIFF'],
+        ['Over', 'OVER_UNDER'],
+        ['Even', 'EVEN_ODD'],
+        ['Rise', 'RISE_FALL'],
+    ])('automatically reveals reports after starting %s on mobile', async (button, type) => {
+        const previousWidth = window.innerWidth;
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: 375 });
+        try {
+            init({ id: 'VRTC7001' });
+            window.confirm.mockReturnValue(true);
+            render(<BulkTrader />);
+            const reportsToggle = screen.getByRole('button', { name: /View Summary \/ Transactions \/ Journal/ });
+            expect(reportsToggle).toHaveAttribute('aria-expanded', 'false');
+            expect(document.querySelector('.bulk-trader')).not.toHaveClass('bulk-trader--reports-open');
+
+            fireEvent.change(screen.getByLabelText('TRADE TYPE'), { target: { value: type } });
+            const tradeButton = screen.getByRole('button', { name: button });
+            await waitFor(() => expect(tradeButton).toBeEnabled());
+            fireEvent.click(tradeButton);
+            await waitFor(() => expect(window.confirm).toHaveBeenCalledTimes(1));
+            await waitFor(() => expect(reportsToggle).toHaveAttribute('aria-expanded', 'true'));
+            expect(document.querySelector('.bulk-trader')).toHaveClass('bulk-trader--reports-open');
+            // A report is now visible without clicking its toggle.
+            expect(screen.getByRole('button', { name: /Hide reports/ })).toBeInTheDocument();
+        } finally {
+            Object.defineProperty(window, 'innerWidth', { configurable: true, value: previousWidth });
+        }
+    });
+
+    it('does not open reports for a cancelled trade confirmation', async () => {
+        const previousWidth = window.innerWidth;
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: 375 });
+        try {
+            init({ id: 'VRTC7001' });
+            render(<BulkTrader />);
+            fireEvent.click(screen.getByRole('button', { name: 'Matches' }));
+            await waitFor(() => expect(window.confirm).toHaveBeenCalledTimes(1));
+            expect(screen.getByRole('button', { name: /View Summary \/ Transactions \/ Journal/ }))
+                .toHaveAttribute('aria-expanded', 'false');
+            expect(document.querySelector('.bulk-trader')).not.toHaveClass('bulk-trader--reports-open');
+        } finally {
+            Object.defineProperty(window, 'innerWidth', { configurable: true, value: previousWidth });
+        }
     });
 });

@@ -1,5 +1,5 @@
 import {
-    ADMIN_TEST_KEY, ADMIN_AUTO_OPEN_KEY, TEST_DEMO_ID, TEST_REAL_ID,
+    ADMIN_TEST_KEY, TEST_DEMO_ID, TEST_REAL_ID,
     isAdminTestAvailable, isAdminTestActive, enterAdminTest, exitAdminTest,
     autoEnterAdminTestForAccounts,
     switchAdminTestAccount, setAdminTestBalance,
@@ -45,14 +45,14 @@ describe('browser-local admin test kit (no broker connection)', () => {
             localStorage.setItem('account_type', 'real');
             expect(autoEnterAdminTestForAccounts([{ account_id: 'OWNER-DERIV-ACCOUNT' }])).toBe(true);
             expect(isAdminTestActive()).toBe(true);
-            expect(sessionStorage.getItem(ADMIN_AUTO_OPEN_KEY)).toBe('pending');
+            expect(sessionStorage.getItem('yolo:admin-auto-open')).toBeNull();
             expect(localStorage.getItem('active_loginid')).toBe(TEST_DEMO_ID);
             expect(sessionStorage.getItem('auth_info')).toBeNull();
 
             // Reloads/account switches don't trigger a second entry.
             expect(autoEnterAdminTestForAccounts([{ account_id: 'owner-deriv-account' }])).toBe(false);
             expect(exitAdminTest()).toBe(true);
-            expect(sessionStorage.getItem(ADMIN_AUTO_OPEN_KEY)).toBeNull();
+            expect(sessionStorage.getItem('yolo:admin-auto-open')).toBeNull();
             expect(localStorage.getItem('active_loginid')).toBe('owner-deriv-account');
             expect(sessionStorage.getItem('auth_info')).toBe('valid-oauth-session-placeholder');
             expect(JSON.parse(sessionStorage.getItem('deriv_accounts'))[0].account_id)

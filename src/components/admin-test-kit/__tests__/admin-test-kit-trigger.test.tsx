@@ -8,6 +8,7 @@ jest.mock('@/services/admin-test-kit', () => ({
     enterAdminTest: jest.fn(),
     ADMIN_TEST_MANAGE_EVENT: 'yolo:admin-test-manage',
     ADMIN_TEST_OPEN_EVENT: 'yolo:admin-test-open',
+    ADMIN_AUTO_OPEN_KEY: 'yolo:admin-auto-open',
     exitAdminTest: jest.fn(),
     getAdminTestBalances: () => ({ VRTC_ADMIN_TEST: 10000, CR_ADMIN_TEST: 500 }),
     getAdminTestWinProbability: jest.fn(() => 50),
@@ -23,12 +24,29 @@ jest.mock('@/services/admin-test-kit', () => ({
 }));
 
 describe('Admin Test Kit long-press trigger and password entry', () => {
-    beforeEach(() => jest.useFakeTimers());
+    beforeEach(() => {
+        jest.useFakeTimers();
+        sessionStorage.clear();
+    });
     afterEach(() => {
         const { isAdminTestActive } = require('@/services/admin-test-kit');
         isAdminTestActive.mockReturnValue(false);
+        sessionStorage.clear();
         jest.clearAllTimers();
         jest.useRealTimers();
+    });
+
+    it('auto-opens the full simulated controls only once after owner OAuth login', () => {
+        const { isAdminTestActive } = require('@/services/admin-test-kit');
+        isAdminTestActive.mockReturnValue(true);
+        sessionStorage.setItem('yolo:admin-auto-open', 'pending');
+        const { unmount } = render(<AdminTestKit />);
+        expect(screen.getByRole('dialog', { name: 'Local Admin Test Kit' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /exit test kit/i })).toBeInTheDocument();
+        expect(sessionStorage.getItem('yolo:admin-auto-open')).toBeNull();
+        unmount();
+        render(<AdminTestKit />);
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
 
     it('opens the same password-gated dialog from the dashboard hold event when inactive', () => {

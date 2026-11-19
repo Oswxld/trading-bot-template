@@ -1,25 +1,22 @@
-# Apex wealth — client deployment notes
+# Apex wealth — deployment configuration
 
-- Source branch: `client/precioustraders` (all trading features inherited)
-- Client branch: `client/apex-wealth`
-- Header: the AW trading emblem cropped from the client's uploaded design, with "Apex wealth" beside it.
-- Browser title, favicon, and social preview metadata: Apex wealth.
+This client branch `client/apex-wealth` is based on `client/precioustraders`, retaining its trading functionality. Only logo and brand/domain identity differ.
 
-## Configuration required before deploying
+- Production domain: `https://apexwealth.site`
+- Deriv OAuth client ID: `350iopNCqSoktVVFzRMvv`
+- Trader sign-up affiliate token: `GHY7QFQBHHFN` (query parameter `t`)
 
-This branch intentionally does **not** reuse Precious Traders' domain, OAuth client ID or affiliate token.
+## Vercel
 
-Configure a separate Vercel project using production branch `client/apex-wealth`, build command `npm run build`, output directory `dist`.
-
-Set these environment variables for the new client, using the details from the Apex wealth owner:
+Set production branch to `client/apex-wealth`, build command `npm run build`, output directory `dist`, Node.js 22.x.
 
 ```dotenv
-CLIENT_ID=<APEX_DERIV_OAUTH_APP_ID>
-AFFILIATE_TOKEN=<APEX_DERIV_AFFILIATE_TOKEN>
+CLIENT_ID=350iopNCqSoktVVFzRMvv
+AFFILIATE_TOKEN=GHY7QFQBHHFN
 AFFILIATE_TOKEN_PARAM=t
-OAUTH_REDIRECT_URI=https://<APEX_SITE_DOMAIN>
+OAUTH_REDIRECT_URI=https://apexwealth.site
 ```
 
-Register the **exact** `OAUTH_REDIRECT_URI` in the corresponding Deriv developers application. Login should use OAuth; signup may carry affiliate tracking. Never use another client's redirect URI or partner token.
+Register `https://apexwealth.site` as an **exact** redirect URI for this Deriv OAuth app. For local development, retain the corresponding local callback in the Deriv portal. Affiliate tracking applies only to Deriv **Sign Up**, not to OAuth **Login**.
 
-When the Apex wealth domain is known, update `brand.config.json` with its hostname values. Brand and code changes in this branch do not deploy it automatically.
+If the DNS settings for `apexwealth.site` do not point to Vercel, the project can build successfully but the domain will not serve it until DNS is configured.

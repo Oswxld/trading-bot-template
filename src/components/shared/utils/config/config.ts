@@ -222,6 +222,19 @@ export const clearCSRFToken = (): void => {
     sessionStorage.removeItem('oauth_csrf_token_timestamp');
 };
 
+/**
+ * Exact public OAuth callback registered with Deriv for Apex Wealth.
+ * The Vercel apex-to-www redirect is currently enabled, so users visit www,
+ * but authorization and code exchange must both use the registered apex URL.
+ * Other hosts (including localhost) keep their own origin for development.
+ */
+export const getOAuthRedirectURI = (): string => {
+    if (['apexwealth.site', 'www.apexwealth.site'].includes(window.location.hostname)) {
+        return 'https://apexwealth.site';
+    }
+    return window.location.origin;
+};
+
 export const generateOAuthURL = async (prompt?: string) => {
     try {
         // Use brand config for login URLs
@@ -244,9 +257,11 @@ export const generateOAuthURL = async (prompt?: string) => {
             storeCodeVerifier(codeVerifier);
 
             // Build redirect URL
-            const protocol = window.location.protocol;
-            const host = window.location.host;
-            const redirectUrl = `${protocol}//${host}`;
+            // On Apex Wealth, the public apex URL is the Deriv-registered callback.
+            // Vercel currently forwards that URL to www; the browser retains its
+            // PKCE/CSRF data on www and gets the same callback query parameters.
+            // OAuth must still advertise the registered (non-www) URI.
+            const redirectUrl = getOAuthRedirectURI();
             const scopes = 'trade';
 
             // Build OAuth URL with PKCE parameters

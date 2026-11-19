@@ -4,7 +4,6 @@ import {
     enterAdminTest,
     ADMIN_TEST_MANAGE_EVENT,
     ADMIN_TEST_OPEN_EVENT,
-    ADMIN_AUTO_OPEN_KEY,
     exitAdminTest,
     getAdminTestBalances,
     getAdminTestExecutionMode,
@@ -49,12 +48,8 @@ export default function AdminTestKit() {
         }, 3000);
     };
     useEffect(() => {
-        if (isAdminTestActive() && sessionStorage.getItem(ADMIN_AUTO_OPEN_KEY) === 'pending') {
-            // Consume this before showing the panel: a refresh, account change
-            // or exiting simulation must not reopen it automatically.
-            sessionStorage.removeItem(ADMIN_AUTO_OPEN_KEY);
-            setOpened(true);
-        }
+        // Dialog opens only by explicit user action: dot or Dashboard hold.
+        // Simulated mode can start automatically without displaying this panel.
         // The dashboard shortcut must behave exactly like the existing dot:
         // show the password entry when inactive, or the controls when active.
         const openPanel = () => {

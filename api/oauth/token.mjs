@@ -42,7 +42,12 @@ export default {
 
         // Prevent another site from using this deployment as an arbitrary OAuth proxy.
         const requestOrigin = request.headers.get('origin');
-        if (!requestOrigin || requestOrigin !== expectedOrigin) {
+        // Apex Wealth currently serves its UI on www due to an existing Vercel
+        // domain redirect, although Deriv is registered with the apex URI.
+        // Allow only these two exact origins; the *OAuth redirect_uri* stays apex.
+        const isApprovedApexWwwOrigin =
+            expectedOrigin === 'https://apexwealth.site' && requestOrigin === 'https://www.apexwealth.site';
+        if (!requestOrigin || (requestOrigin !== expectedOrigin && !isApprovedApexWwwOrigin)) {
             return respond({ error: 'forbidden_origin' }, 403);
         }
         if (!request.headers.get('content-type')?.toLowerCase().startsWith('application/json')) {

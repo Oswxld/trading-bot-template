@@ -1,4 +1,4 @@
-import { clearCodeVerifier, getCodeVerifier, isProduction } from '@/components/shared';
+import { clearCodeVerifier, getCodeVerifier, getOAuthRedirectURI, isProduction } from '@/components/shared';
 import { ErrorLogger } from '@/utils/error-logger';
 import brandConfig from '../../brand.config.json';
 
@@ -142,9 +142,9 @@ export class OAuthTokenExchangeService {
                 };
             }
 
-            const protocol = window.location.protocol;
-            const host = window.location.host;
-            const redirectUrl = `${protocol}//${host}`;
+            // Must exactly match the redirect_uri sent to Deriv during authorization.
+            // The browser may now be on www after Vercel redirects the callback.
+            const redirectUrl = getOAuthRedirectURI();
 
             const requestBody = new URLSearchParams({
                 grant_type: 'authorization_code',

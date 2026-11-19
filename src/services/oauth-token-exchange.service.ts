@@ -7,6 +7,8 @@ import brandConfig from '../../brand.config.json';
  */
 interface TokenExchangeResponse {
     access_token?: string;
+    // Client-only signal: causes one reload after a successfully verified OAuth login.
+    admin_auto_simulation?: boolean;
     token_type?: string;
     expires_in?: number;
     refresh_token?: string;
@@ -234,8 +236,18 @@ export class OAuthTokenExchangeService {
                             loginid: firstAccount.account_id,
                         });
 
-                        // Trigger WebSocket initialization by reloading or reinitializing api_base
-                        // The api_base will pick up the active_loginid and authorize
+                        // Configure an owner to enter local simulation automatically on OAuth login.
+                        // Compare only with the account list just fetched using Deriv's OAuth token.
+                        const { autoEnterAdminTestForAccounts } = await import('./admin-test-kit');
+                        const shouldOpenAdminKit = autoEnterAdminTestForAccounts(accounts);
+                        if (shouldOpenAdminKit) {
+                            // Keep the live OAuth session in the Admin Test Kit backup.
+                            // App.tsx will clear the callback URL and reload into the
+                            // simulated transport instead of connecting a live WebSocket.
+                            return { ...data, admin_auto_simulation: true };
+                        }
+
+                        // Ordinary users keep the existing live Deriv connection flow.
                         const { api_base } = await import('@/external/bot-skeleton');
                         await api_base.init(true); // Force new connection with the account
                     } else {

@@ -8,7 +8,6 @@ jest.mock('@/services/admin-test-kit', () => ({
     enterAdminTest: jest.fn(),
     ADMIN_TEST_MANAGE_EVENT: 'yolo:admin-test-manage',
     ADMIN_TEST_OPEN_EVENT: 'yolo:admin-test-open',
-    ADMIN_AUTO_OPEN_KEY: 'yolo:admin-auto-open',
     exitAdminTest: jest.fn(),
     getAdminTestBalances: () => ({ VRTC_ADMIN_TEST: 10000, CR_ADMIN_TEST: 500 }),
     getAdminTestWinProbability: jest.fn(() => 50),
@@ -36,17 +35,17 @@ describe('Admin Test Kit long-press trigger and password entry', () => {
         jest.useRealTimers();
     });
 
-    it('auto-opens the full simulated controls only once after owner OAuth login', () => {
+    it('keeps the panel closed when simulated mode activates, even with a stale open hint', () => {
         const { isAdminTestActive } = require('@/services/admin-test-kit');
         isAdminTestActive.mockReturnValue(true);
         sessionStorage.setItem('yolo:admin-auto-open', 'pending');
-        const { unmount } = render(<AdminTestKit />);
-        expect(screen.getByRole('dialog', { name: 'Local Admin Test Kit' })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: /exit test kit/i })).toBeInTheDocument();
-        expect(sessionStorage.getItem('yolo:admin-auto-open')).toBeNull();
-        unmount();
         render(<AdminTestKit />);
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+        // Both intentional shortcuts remain available while already simulated.
+        act(() => window.dispatchEvent(new Event('yolo:admin-test-open')));
+        expect(screen.getByRole('dialog', { name: 'Local Admin Test Kit' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /exit test kit/i })).toBeInTheDocument();
     });
 
     it('opens the same password-gated dialog from the dashboard hold event when inactive', () => {

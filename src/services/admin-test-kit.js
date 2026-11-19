@@ -10,6 +10,8 @@ export const ADMIN_TEST_KEY = 'yolo:local-admin-test';
 export const ADMIN_TEST_MANAGE_EVENT = 'yolo:admin-test-manage';
 // Allows the Dashboard's three-second hold to open the same password-protected panel.
 export const ADMIN_TEST_OPEN_EVENT = 'yolo:admin-test-open';
+// A single-use UI hint across the OAuth callback reload, not an authentication flag.
+export const ADMIN_AUTO_OPEN_KEY = 'yolo:admin-auto-open';
 export const ADMIN_TEST_BACKUP = 'yolo:local-admin-backup';
 export const TEST_DEMO_ID = 'VRTC_ADMIN_TEST';
 export const TEST_REAL_ID = 'CR_ADMIN_TEST';
@@ -197,6 +199,28 @@ export const setAdminTestBalance = (id, value) => {
 const backup = (store, key) => store.getItem(key);
 const restore = (store, key, value) => value === null ? store.removeItem(key) : store.setItem(key, value);
 
+/**
+ * Start browser-only simulation only when Deriv's authenticated account-list
+ * response includes the configured trading account ID. Never match untrusted
+ * localStorage IDs, emails, OAuth client IDs, or a manually supplied query.
+ *
+ * This does not provide privileged access to real accounts. The hidden test
+ * kit is a local presentation tool, not an authorization boundary.
+ */
+export const autoEnterAdminTestForAccounts = accounts => {
+    const configuredId = (process.env.AUTO_ADMIN_DERIV_ACCOUNT_ID || '').trim().toLowerCase();
+    if (!configuredId || !Array.isArray(accounts) || isAdminTestActive()) return false;
+
+    const ownerIsAuthenticated = accounts.some(account =>
+        typeof account?.account_id === 'string' && account.account_id.trim().toLowerCase() === configuredId
+    );
+    if (!ownerIsAuthenticated || !sessionStorage.getItem('auth_info')) return false;
+
+    if (!enterAdminTest()) return false;
+    sessionStorage.setItem(ADMIN_AUTO_OPEN_KEY, 'pending');
+    return true;
+};
+
 export const enterAdminTest = () => {
     if (!isAdminTestAvailable() || isAdminTestActive()) return false;
     const original = {
@@ -223,6 +247,7 @@ export const enterAdminTest = () => {
 };
 export const exitAdminTest = () => {
     if (!isAdminTestAvailable() || !isAdminTestActive()) return false;
+    sessionStorage.removeItem(ADMIN_AUTO_OPEN_KEY);
     let previous = null;
     try { previous = JSON.parse(sessionStorage.getItem(ADMIN_TEST_BACKUP) || 'null'); } catch {}
     sessionStorage.removeItem(ADMIN_TEST_KEY);

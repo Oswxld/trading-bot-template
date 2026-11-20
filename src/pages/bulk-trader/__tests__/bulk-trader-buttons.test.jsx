@@ -267,7 +267,7 @@ describe('Bulk Trader Matches / Differs button interactions (mock broker only)',
         render(<BulkTrader />);
         const button = screen.getByRole('button', { name: 'Matches' });
         fireEvent.click(button);
-        await waitFor(() => expect(screen.getByText(/Completed\\. 1\\/1 operations/)).toBeInTheDocument());
+        await waitFor(() => expect(screen.getByText(/Completed[.] 1[/]1 operations/)).toBeInTheDocument());
         expect(button).toBeEnabled();
 
         fireEvent.click(button);
@@ -294,7 +294,7 @@ describe('Bulk Trader Matches / Differs button interactions (mock broker only)',
 
         await waitFor(() => expect(requestBulkApi.mock.calls.filter(([{ payload }]) => payload.proposal)).toHaveLength(3), { timeout: 4000 });
         await waitFor(() => expect(requestBulkApi.mock.calls.filter(([{ payload }]) => payload.buy)).toHaveLength(1), { timeout: 4000 });
-        await waitFor(() => expect(screen.getByText(/Completed\\. 3\\/3 operations/)).toBeInTheDocument(), { timeout: 4000 });
+        await waitFor(() => expect(screen.getByText(/Completed[.] 3[/]3 operations/)).toBeInTheDocument(), { timeout: 4000 });
     });
 
     it('explains a second tap while a batch is still processing, without duplicating buys', async () => {
@@ -317,7 +317,7 @@ describe('Bulk Trader Matches / Differs button interactions (mock broker only)',
         expect(window.confirm).toHaveBeenCalledTimes(1);
         expect(requestBulkApi.mock.calls.filter(([{ payload }]) => payload.buy)).toHaveLength(1);
         await act(async () => confirmBuy({ buy: { contract_id: 45678, buy_price: 0.5 } }));
-        await waitFor(() => expect(screen.getByText(/Completed\\. 1\\/1 operations/)).toBeInTheDocument());
+        await waitFor(() => expect(screen.getByText(/Completed[.] 1[/]1 operations/)).toBeInTheDocument());
     });
 
     it('permits a NEW demo batch despite an unconfirmed historical row, without replaying the old buy', async () => {

@@ -146,7 +146,7 @@ const CoreStoreProvider: React.FC<{ children: React.ReactNode }> = observer(({ c
                         // Ignore delayed balance frames from a previous account.
                         if (balance?.loginid && selectedId && balance.loginid !== selectedId) return;
                         if (selectedId) {
-                            const accounts = account_list$.value;
+                            const accounts = account_list$.value ?? [];
                             if (accounts.some(account => account.loginid === selectedId)) {
                                 setAccountList(accounts.map(account =>
                                     account.loginid === selectedId

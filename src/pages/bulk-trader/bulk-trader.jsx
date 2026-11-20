@@ -944,7 +944,7 @@ const BulkTrader = observer(() => {
                 <div className='bulk-trader__total'>
                     <span>TOTAL STAKE</span>
                     <strong>{valid ? exposure.toFixed(2) : '—'} {currency}</strong>
-                    <small>Intended maximum across {valid ? numberTrades : '—'} separate orders</small>
+                    <small>Entered stake total for {valid ? numberTrades : '—'} orders; actual quotes may differ</small>
                 </div>
                 <p className='bulk-trader__trade-label'>Run bulk trades — these buttons only submit the selected Bulk Trader orders.</p>
                 <div className='bulk-trader__buttons'>
@@ -963,8 +963,9 @@ const BulkTrader = observer(() => {
                     Stop bulk orders ({progress}/{quantity} processed; {inFlight} in flight)
                 </button>}
                 {isReal && !isSimulated && <p className='bulk-trader__notice' role='alert'>
-                    REAL MONEY: orders debit the selected account. Limits: {REAL_LIMITS.trades} trades, trades per batch. There is no app-imposed stake or exposure cap;
-                    Deriv can reject purchases for insufficient funds. Orders already sent cannot be recalled.
+                    REAL MONEY: orders debit the selected account. Up to {REAL_LIMITS.trades} trades per batch.
+                    There is no app-imposed stake or exposure cap. Deriv can reject purchases for insufficient
+                    funds or market rules. Orders already submitted cannot be recalled.
                 </p>}
                 {accountMode === 'unavailable' && <p className='bulk-trader__notice' role='status'>
                     Account verification is unavailable. Press a trade button to see the reason;

@@ -59,22 +59,19 @@ const getDefaultServerURL = () => {
  * 4. Get default account (first from list)
  * 5. Fetch OTP and WebSocket URL for that account
  *
- * @returns Promise with WebSocket URL or fallback to default server
+ * @returns Public URL when logged out, or the authenticated account's OTP WebSocket URL
  */
 export const getSocketURL = async (): Promise<string> => {
-    try {
-        // Check if user is authenticated
-        const authInfo = OAuthTokenExchangeService.getAuthInfo();
-        if (!authInfo || !authInfo.access_token) {
-            return getDefaultServerURL();
-        }
+    const authInfo = OAuthTokenExchangeService.getAuthInfo();
+    if (!authInfo?.access_token) return getDefaultServerURL();
 
-        // Use the DerivWSAccountsService to get authenticated WebSocket URL
-        const wsUrl = await DerivWSAccountsService.getAuthenticatedWebSocketURL(authInfo.access_token);
-        return wsUrl;
+    try {
+        return await DerivWSAccountsService.getAuthenticatedWebSocketURL(authInfo.access_token);
     } catch (error) {
-        console.error('[DerivWS] Error in getSocketURL:', error);
-        return getDefaultServerURL();
+        // A public market-data socket cannot read private balances. Do not
+        // hide a failed authenticated connection behind a misleading $0.00.
+        console.error('[DerivWS] Authenticated account connection failed:', error);
+        throw error;
     }
 };
 

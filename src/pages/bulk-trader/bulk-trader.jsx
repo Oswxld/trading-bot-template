@@ -516,7 +516,17 @@ const BulkTrader = observer(() => {
     };
 
     const begin = async (contractType, buttonLabel) => {
-        if (runRef.current || preflightRef.current) return;
+        if (runRef.current) {
+            // Keep the action interactive so a second tap explains why the
+            // previous batch has not finished, instead of silently doing nothing.
+            setReportsOpen(true);
+            setMessage('The previous batch is still processing its outstanding requests. Wait for its completion summary before starting another batch, or press Stop.');
+            return;
+        }
+        if (preflightRef.current) {
+            setMessage('The previous batch is still checking the selected account. No new orders have been sent.');
+            return;
+        }
         if (!valid) {
             setMessage('Enter a positive stake, trades (1–50), duration (1–10 ticks) and history ticks (10–5,000).');
             return;
@@ -555,9 +565,17 @@ const BulkTrader = observer(() => {
             setMessage('Stop your running Deriv bot before bulk trading on the same account.');
             return;
         }
-        if (recordsRef.current.some(item => item.status === 'unconfirmed')) {
+        const previousUnconfirmed = recordsRef.current.some(item => item.status === 'unconfirmed');
+        // Unconfirmed records are never retried. A live demo trader can submit
+        // an entirely NEW batch once the old operations have finished, without
+        // having to erase their journal. Real-money accounts must reconcile
+        // ambiguous buys first; keep simulation mode's existing safeguards.
+        if (previousUnconfirmed && (isReal || isSimulated)) {
             setMessage('An earlier purchase has no confirmation. Check the Deriv account statement before starting another batch. Only reset this local report after reconciling those purchases.');
             return;
+        }
+        if (previousUnconfirmed) {
+            log('A previous demo purchase is still unconfirmed. Beginning a separate new batch; previous purchases will NOT be retried automatically.');
         }
         // Verify balance with Deriv's authenticated socket, not a cached UI number.
         preflightRef.current = true;
@@ -636,7 +654,6 @@ const BulkTrader = observer(() => {
         let failures = 0;
         let skipped = 0;
         let unconfirmed = 0;
-        let errorCount = 0;
         let firstFailureReason = '';
 
         const isSafe = () => mountedRef.current && activeAccountRef.current === activeAccountId &&
@@ -781,7 +798,6 @@ const BulkTrader = observer(() => {
                         logRun(`Trade #${i + 1} was skipped before its request was sent.`);
                         return;
                     }
-                    errorCount++;
                     failures++;
                     if (outcome.status === 'unconfirmed') unconfirmed++;
                     upsertRunRecord({
@@ -793,7 +809,10 @@ const BulkTrader = observer(() => {
                     // A buy with a missing acknowledgement might have
                     // executed. Stop further purchases, drain outstanding
                     // operations, never retry this buy automatically.
-                    if (outcome.stop || errorCount >= 2) stopRef.current = true;
+                    // Ordinary broker proposal/buy rejections fail only that
+                    // operation. Halt the batch solely when the request result
+                    // is unsafe or ambiguous (lost connection, missing buy ack).
+                    if (outcome.stop) stopRef.current = true;
                 } finally {
                     if (subscriptionId && api.connection?.readyState === 1) {
                         try { api.send({ forget: subscriptionId }); } catch { /* websocket closed */ }
@@ -836,7 +855,12 @@ const BulkTrader = observer(() => {
         } finally {
             runRef.current = false;
             releaseBulkRun(activeAccountId);
-            if (mountedRef.current && activeAccountRef.current === activeAccountId) setInFlight(0);
+            if (mountedRef.current && activeAccountRef.current === activeAccountId) {
+                setInFlight(0);
+                // A finished batch must never strand its buttons in the disabled
+                // "running" state, even after an unexpected async exception.
+                setStatus(current => current === 'running' ? 'stopped' : current);
+            }
         }
     };
 
@@ -950,10 +974,8 @@ const BulkTrader = observer(() => {
                 <div className='bulk-trader__buttons'>
                     {currentSelection.actions.map(([type, label], index) => (
                         <button key={type} type='button' className={index === 0 ? 'bulk-trader__buy-a' : 'bulk-trader__buy-b'}
-                            disabled={isRunning || isPreflighting || !valid ||
-                                numberTrades > maxOrders ||
-                                (availableContracts && !availableContracts.has(type))}
-                            title={availableContracts && !availableContracts.has(type) ? 'Not offered on this market' : ''}
+                            disabled={isPreflighting}
+                            title={availableContracts && !availableContracts.has(type) ? 'Tap to see why this contract is unavailable' : ''}
                             onClick={() => begin(type, label)}>
                             {label}
                         </button>
@@ -979,7 +1001,7 @@ const BulkTrader = observer(() => {
                     <p className='bulk-trader__notice' role='status'>
                         Neither contract is offered on the selected market. Choose another market or trade type.
                     </p>}
-                {message && <p className='bulk-trader__feedback' role='status'>{message}</p>}
+                {message && <p className='bulk-trader__feedback' role='status' aria-live='polite'>{message}</p>}
             </div>
 
             <BulkReports records={records} journal={journal} accountId={activeAccountId}

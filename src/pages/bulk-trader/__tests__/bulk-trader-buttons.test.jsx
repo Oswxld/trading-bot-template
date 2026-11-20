@@ -92,11 +92,13 @@ describe('Bulk Trader Matches / Differs button interactions (mock broker only)',
     beforeEach(() => {
         jest.clearAllMocks();
         localStorage.clear();
+        sessionStorage.clear();
         window.confirm = jest.fn(() => false);
     });
     afterEach(() => {
         cleanup();
         localStorage.clear();
+        sessionStorage.clear();
     });
 
     it('restores demo button access without a cached OAuth list and submits a mocked Differs purchase', async () => {
@@ -247,4 +249,102 @@ describe('Bulk Trader Matches / Differs button interactions (mock broker only)',
             Object.defineProperty(window, 'innerWidth', { configurable: true, value: previousWidth });
         }
     });
+
+    it('allows another demo batch immediately after a rejected proposal', async () => {
+        init({ id: 'VRTC7001' });
+        window.confirm.mockReturnValue(true);
+        const normalRequest = requestBulkApi.getMockImplementation();
+        let attempts = 0;
+        requestBulkApi.mockImplementation(options => {
+            if (options.payload.proposal && attempts++ === 0) {
+                return Promise.reject(Object.assign(new Error('Deriv rejected the first proposal'), {
+                    bulkRequest: { kind: 'api_rejected', requestType: 'proposal', dispatched: true },
+                }));
+            }
+            return normalRequest(options);
+        });
+
+        render(<BulkTrader />);
+        const button = screen.getByRole('button', { name: 'Matches' });
+        fireEvent.click(button);
+        await waitFor(() => expect(screen.getByText(/Completed\\. 1\\/1 operations/)).toBeInTheDocument());
+        expect(button).toBeEnabled();
+
+        fireEvent.click(button);
+        await waitFor(() => expect(window.confirm).toHaveBeenCalledTimes(2));
+        await waitFor(() => expect(requestBulkApi.mock.calls.some(([{ payload }]) => payload.buy)).toBe(true));
+    });
+
+    it('continues a demo batch through two ordinary broker rejections', async () => {
+        init({ id: 'VRTC7001' });
+        window.confirm.mockReturnValue(true);
+        const normalRequest = requestBulkApi.getMockImplementation();
+        let proposals = 0;
+        requestBulkApi.mockImplementation(options => {
+            if (options.payload.proposal && proposals++ < 2) {
+                return Promise.reject(Object.assign(new Error('Quote rejected'), {
+                    bulkRequest: { kind: 'api_rejected', requestType: 'proposal', dispatched: true },
+                }));
+            }
+            return normalRequest(options);
+        });
+        render(<BulkTrader />);
+        fireEvent.change(screen.getByLabelText('NO OF TRADES'), { target: { value: '3' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Differs' }));
+
+        await waitFor(() => expect(requestBulkApi.mock.calls.filter(([{ payload }]) => payload.proposal)).toHaveLength(3), { timeout: 4000 });
+        await waitFor(() => expect(requestBulkApi.mock.calls.filter(([{ payload }]) => payload.buy)).toHaveLength(1), { timeout: 4000 });
+        await waitFor(() => expect(screen.getByText(/Completed\\. 3\\/3 operations/)).toBeInTheDocument(), { timeout: 4000 });
+    });
+
+    it('explains a second tap while a batch is still processing, without duplicating buys', async () => {
+        init({ id: 'VRTC7001' });
+        window.confirm.mockReturnValue(true);
+        const normalRequest = requestBulkApi.getMockImplementation();
+        let confirmBuy;
+        requestBulkApi.mockImplementation(options => {
+            if (options.payload.buy) {
+                return new Promise(resolve => { confirmBuy = resolve; });
+            }
+            return normalRequest(options);
+        });
+        render(<BulkTrader />);
+        const button = screen.getByRole('button', { name: 'Matches' });
+        fireEvent.click(button);
+        await waitFor(() => expect(typeof confirmBuy).toBe('function'));
+        fireEvent.click(button);
+        expect(screen.getByText(/previous batch is still processing/i)).toBeInTheDocument();
+        expect(window.confirm).toHaveBeenCalledTimes(1);
+        expect(requestBulkApi.mock.calls.filter(([{ payload }]) => payload.buy)).toHaveLength(1);
+        await act(async () => confirmBuy({ buy: { contract_id: 45678, buy_price: 0.5 } }));
+        await waitFor(() => expect(screen.getByText(/Completed\\. 1\\/1 operations/)).toBeInTheDocument());
+    });
+
+    it('permits a NEW demo batch despite an unconfirmed historical row, without replaying the old buy', async () => {
+        init({ id: 'VRTC7001' });
+        window.confirm.mockReturnValue(true);
+        sessionStorage.setItem('bulk-trader:records:VRTC7001', JSON.stringify([
+            { localId: 'old-batch:0', status: 'unconfirmed', reason: 'Previous buy acknowledgement missing' },
+        ]));
+        render(<BulkTrader />);
+        fireEvent.click(screen.getByRole('button', { name: 'Matches' }));
+        await waitFor(() => expect(window.confirm).toHaveBeenCalledTimes(1));
+        await waitFor(() => expect(requestBulkApi.mock.calls.filter(([{ payload }]) => payload.buy)).toHaveLength(1));
+    });
+
+    it('still blocks a new real-money batch while a previous purchase is unconfirmed', async () => {
+        init({
+            id: 'CR7001', clientVirtual: 0,
+            cachedAccount: { account_id: 'CR7001', currency: 'USD', account_type: 'real' },
+        });
+        sessionStorage.setItem('bulk-trader:records:CR7001', JSON.stringify([
+            { localId: 'old-batch:0', status: 'unconfirmed', reason: 'Previous buy acknowledgement missing' },
+        ]));
+        render(<BulkTrader />);
+        fireEvent.click(screen.getByRole('button', { name: 'Matches' }));
+        expect(screen.getByText(/earlier purchase has no confirmation/i)).toBeInTheDocument();
+        expect(window.confirm).not.toHaveBeenCalled();
+        expect(requestBulkApi.mock.calls.some(([{ payload }]) => payload.buy)).toBe(false);
+    });
+
 });

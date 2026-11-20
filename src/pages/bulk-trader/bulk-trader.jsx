@@ -809,10 +809,10 @@ const BulkTrader = observer(() => {
                     // A buy with a missing acknowledgement might have
                     // executed. Stop further purchases, drain outstanding
                     // operations, never retry this buy automatically.
-                    // Ordinary broker proposal/buy rejections fail only that
-                    // operation. Halt the batch solely when the request result
-                    // is unsafe or ambiguous (lost connection, missing buy ack).
-                    if (outcome.stop) stopRef.current = true;
+                    // Ordinary live broker rejections fail only that operation.
+                    // Always halt on an ambiguous buy or lost connection. Keep
+                    // the local Admin Test Kit's existing two-error behavior.
+                    if (outcome.stop || (isSimulated && failures >= 2)) stopRef.current = true;
                 } finally {
                     if (subscriptionId && api.connection?.readyState === 1) {
                         try { api.send({ forget: subscriptionId }); } catch { /* websocket closed */ }

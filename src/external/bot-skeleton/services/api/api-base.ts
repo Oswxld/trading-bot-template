@@ -399,8 +399,8 @@ class APIBase {
             const account_type = getAccountType(authorizedLoginId);
             const currentAccount = authorizedLoginId
                 ? {
-                      balance: brokerBalance ?? balance.balance,
-                      currency: balance.currency || 'USD',
+                      balance: brokerBalance ?? balance?.balance ?? 0,
+                      currency: balance?.currency || 'USD',
                       is_virtual: account_type === 'real' ? 0 : 1,
                       loginid: authorizedLoginId,
                   }

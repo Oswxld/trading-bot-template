@@ -4,9 +4,13 @@ import { observer } from 'mobx-react-lite';
 import { addComma, getCurrencyDisplayCode, getDecimalPlaces } from '@/components/shared';
 import Text from '@/components/shared_ui/text';
 import { api_base } from '@/external/bot-skeleton/services/api/api-base';
+import { setAccountList } from '@/external/bot-skeleton/services/api/observables/connection-status-stream';
 import { useApiBase } from '@/hooks/useApiBase';
 import { useStore } from '@/hooks/useStore';
 import { isAdminTestActive, switchAdminTestAccount } from '@/services/admin-test-kit';
+import { DerivWSAccountsService } from '@/services/derivws-accounts.service';
+import { OAuthTokenExchangeService } from '@/services/oauth-token-exchange.service';
+import { parseFiniteBalance } from '@/utils/balance-utils';
 import { isDemoAccount } from '@/utils/account-helpers';
 import { Localize } from '@deriv-com/translations';
 import { TAccountSwitcher } from './common/types';
@@ -16,7 +20,7 @@ import './account-switcher.scss';
 const AccountSwitcher = observer(({ activeAccount }: TAccountSwitcher) => {
     const [isOpen, setIsOpen] = useState(false);
     const wrapperRef = useRef<HTMLDivElement>(null);
-    const { accountList, activeLoginid } = useApiBase();
+    const { accountList, activeLoginid, isAuthorized } = useApiBase();
     const { client, run_panel } = useStore() ?? {};
 
     const is_bot_running = run_panel?.is_running || api_base.is_running;
@@ -38,6 +42,32 @@ const AccountSwitcher = observer(({ activeAccount }: TAccountSwitcher) => {
             document.removeEventListener('keydown', handleKeyDown);
         };
     }, []);
+
+    // Opening the real account menu refreshes *both* demo and real balances.
+    // This is read-only, OAuth-backed, and bypassed entirely by the simulator.
+    useEffect(() => {
+        if (!isOpen || !isAuthorized || isAdminTestActive()) return;
+        const info = OAuthTokenExchangeService.getAuthInfo();
+        if (!info?.access_token) return;
+        const originalAccountId = localStorage.getItem('active_loginid');
+        let cancelled = false;
+        void DerivWSAccountsService.fetchAccountsList(info.access_token)
+            .then(accounts => {
+                if (cancelled || isAdminTestActive() ||
+                    localStorage.getItem('active_loginid') !== originalAccountId) return;
+                const refreshed = accounts
+                    .filter(account => !account.status || account.status === 'active')
+                    .map(account => ({
+                        loginid: account.account_id,
+                        balance: parseFiniteBalance(account.balance) ?? 0,
+                        currency: account.currency || 'USD',
+                        is_virtual: account.account_type === 'demo' ? 1 : 0,
+                    }));
+                if (refreshed.length) setAccountList(refreshed);
+            })
+            .catch(error => console.warn('[DerivWS] Could not refresh account balances:', error));
+        return () => { cancelled = true; };
+    }, [isOpen, isAuthorized]);
 
     const toggleDropdown = useCallback(() => {
         if (is_bot_running || isSingleAccount) return;
@@ -70,7 +100,9 @@ const AccountSwitcher = observer(({ activeAccount }: TAccountSwitcher) => {
             .map(account => ({
                 loginid: account.loginid,
                 currency: account.currency,
-                balance: addComma(Number(account.balance ?? 0).toFixed(getDecimalPlaces(account.currency))),
+                balance: parseFiniteBalance(account.balance) === null
+                    ? '—'
+                    : addComma((parseFiniteBalance(account.balance) ?? 0).toFixed(getDecimalPlaces(account.currency))),
                 isVirtual: isDemoAccount(account.loginid),
                 isActive: account.loginid === activeLoginid,
             }))

@@ -1,6 +1,7 @@
 import {
     ADMIN_TEST_KEY, TEST_DEMO_ID, TEST_REAL_ID,
     isAdminTestAvailable, isAdminTestActive, enterAdminTest, exitAdminTest,
+    autoEnterAdminTestForAccounts,
     switchAdminTestAccount, setAdminTestBalance,
     setAdminTestWinProbability, getAdminTestWinProbability,
     getAdminTestBalances, getAdminTestAccounts, createAdminTestApi,
@@ -25,6 +26,53 @@ describe('browser-local admin test kit (no broker connection)', () => {
     it('is available in a browser without requiring a localhost-only hostname', () => {
         expect(isAdminTestAvailable()).toBe(true);
         expect(isAdminTestActive()).toBe(false);
+    });
+
+    it('auto-enters only for the configured ID in the freshly authenticated Deriv accounts', () => {
+        const previous = process.env.AUTO_ADMIN_DERIV_ACCOUNT_ID;
+        process.env.AUTO_ADMIN_DERIV_ACCOUNT_ID = 'owner-deriv-account';
+        try {
+            // Cached browser login IDs, spoofed profile fields, and unauthenticated
+            // account arrays are not sufficient to auto-activate simulation.
+            localStorage.setItem('active_loginid', 'owner-deriv-account');
+            expect(autoEnterAdminTestForAccounts([{ account_id: 'other-account' }])).toBe(false);
+            expect(autoEnterAdminTestForAccounts([{ id: 'owner-deriv-account' }])).toBe(false);
+            expect(autoEnterAdminTestForAccounts([{ account_id: 'owner-deriv-account' }])).toBe(false);
+            expect(isAdminTestActive()).toBe(false);
+
+            sessionStorage.setItem('auth_info', 'valid-oauth-session-placeholder');
+            sessionStorage.setItem('deriv_accounts', JSON.stringify([{ account_id: 'owner-deriv-account' }]));
+            localStorage.setItem('account_type', 'real');
+            expect(autoEnterAdminTestForAccounts([{ account_id: 'OWNER-DERIV-ACCOUNT' }])).toBe(true);
+            expect(isAdminTestActive()).toBe(true);
+            expect(sessionStorage.getItem('yolo:admin-auto-open')).toBeNull();
+            expect(localStorage.getItem('active_loginid')).toBe(TEST_DEMO_ID);
+            expect(sessionStorage.getItem('auth_info')).toBeNull();
+
+            // Reloads/account switches don't trigger a second entry.
+            expect(autoEnterAdminTestForAccounts([{ account_id: 'owner-deriv-account' }])).toBe(false);
+            expect(exitAdminTest()).toBe(true);
+            expect(sessionStorage.getItem('yolo:admin-auto-open')).toBeNull();
+            expect(localStorage.getItem('active_loginid')).toBe('owner-deriv-account');
+            expect(sessionStorage.getItem('auth_info')).toBe('valid-oauth-session-placeholder');
+            expect(JSON.parse(sessionStorage.getItem('deriv_accounts'))[0].account_id)
+                .toBe('owner-deriv-account');
+        } finally {
+            if (previous === undefined) delete process.env.AUTO_ADMIN_DERIV_ACCOUNT_ID;
+            else process.env.AUTO_ADMIN_DERIV_ACCOUNT_ID = previous;
+        }
+    });
+
+    it('does not automatically enter when owner matching is not configured', () => {
+        const previous = process.env.AUTO_ADMIN_DERIV_ACCOUNT_ID;
+        delete process.env.AUTO_ADMIN_DERIV_ACCOUNT_ID;
+        try {
+            sessionStorage.setItem('auth_info', 'token-placeholder');
+            expect(autoEnterAdminTestForAccounts([{ account_id: 'owner-deriv-account' }])).toBe(false);
+            expect(isAdminTestActive()).toBe(false);
+        } finally {
+            if (previous !== undefined) process.env.AUTO_ADMIN_DERIV_ACCOUNT_ID = previous;
+        }
     });
 
     it('creates two clearly simulated and separate accounts without OAuth login', () => {

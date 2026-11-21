@@ -54,15 +54,15 @@ describe('real-account bulk safety', () => {
         expect(assess({receivedAccount:'CR987'}).allowed).toBe(false);
         expect(assess({accountId:'CR987'}).allowed).toBe(false);
     });
-    it('restricts stake, quantity and aggregate exposure', () => {
-        expect(assess({stake:11}).allowed).toBe(false);
+    it('keeps an operational 50-trade cap without imposing monetary exposure caps', () => {
+        expect(assess({stake:11}).allowed).toBe(true);
         expect(assess({quantity:51}).allowed).toBe(false);
         expect(assess({stake:0.5,quantity:50,balance:500}).allowed).toBe(true);
-        expect(assess({stake:10,quantity:20,balance:5000}).allowed).toBe(false);
-        expect(assess({stake:1,quantity:6,balance:50}).allowed).toBe(false);
+        expect(assess({stake:10,quantity:20,balance:5000}).allowed).toBe(true);
+        expect(assess({stake:1,quantity:6,balance:50}).allowed).toBe(true);
         expect(assess({stake:1,quantity:5,balance:50}).allowed).toBe(true);
     });
-    it('permits bounded orders with verified credentials and balance', () => {
-        expect(assess({stake:0.5,quantity:10,balance:100})).toMatchObject({allowed:true,exposure:5,permitted:10});
+    it('permits freely chosen stake after real-account identity and balance verification', () => {
+        expect(assess({stake:0.5,quantity:10,balance:100})).toMatchObject({allowed:true,exposure:5,available:100});
     });
 });

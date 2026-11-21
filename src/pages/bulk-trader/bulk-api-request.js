@@ -62,16 +62,17 @@ export const requestBulkApi = ({
             throw new Error('Missing request correlation ID.');
         }
         api.connection?.addEventListener?.('close', onSocketClose);
-        subscription = api.onMessage().subscribe(event => {
-            const data = event?.data || event;
-            if (Number(data?.req_id) !== reqId) return;
+        const acceptResponse = reply => {
+            const data = reply?.data || reply;
+            if (Number(data?.req_id ?? data?.echo_req?.req_id) !== reqId) return;
             if (data.error) {
                 noteRateLimitOnce(data.error);
                 done(failure('api_rejected', messageFor(data.error), data.error.code));
             } else {
                 done(null, data);
             }
-        });
+        };
+        subscription = api.onMessage().subscribe(acceptResponse);
 
         const send = () => {
             if (finished) return;
@@ -81,9 +82,10 @@ export const requestBulkApi = ({
                 'Deriv did not confirm this request within the timeout. Check the account statement before buying again.'
             )), timeout);
             const result = api.send({ ...payload, req_id: reqId });
-            // A send promise rejection is not proof that Deriv did not buy.
-            // Confirmations are matched using onMessage and req_id.
-            result?.catch?.(error => {
+            // DerivAPIBasic can resolve this promise without broadcasting the
+            // one-shot reply to every onMessage observer. Match req_id from
+            // either path, never resending an unconfirmed purchase.
+            result?.then?.(acceptResponse, error => {
                 noteRateLimitOnce(error);
                 done(failure('send_rejected', messageFor(error), error?.code));
             });

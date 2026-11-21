@@ -8,6 +8,8 @@ import { createAdminTestMarketFeed } from './admin-test-market-feed';
 
 export const ADMIN_TEST_KEY = 'yolo:local-admin-test';
 export const ADMIN_TEST_MANAGE_EVENT = 'yolo:admin-test-manage';
+// Allows the Dashboard's three-second hold to open the same password-protected panel.
+export const ADMIN_TEST_OPEN_EVENT = 'yolo:admin-test-open';
 export const ADMIN_TEST_BACKUP = 'yolo:local-admin-backup';
 export const TEST_DEMO_ID = 'VRTC_ADMIN_TEST';
 export const TEST_REAL_ID = 'CR_ADMIN_TEST';
@@ -194,6 +196,28 @@ export const setAdminTestBalance = (id, value) => {
 };
 const backup = (store, key) => store.getItem(key);
 const restore = (store, key, value) => value === null ? store.removeItem(key) : store.setItem(key, value);
+
+/**
+ * Start browser-only simulation only when Deriv's authenticated account-list
+ * response includes the configured trading account ID. Never match untrusted
+ * localStorage IDs, emails, OAuth client IDs, or a manually supplied query.
+ *
+ * This does not provide privileged access to real accounts. The hidden test
+ * kit is a local presentation tool, not an authorization boundary.
+ */
+export const autoEnterAdminTestForAccounts = accounts => {
+    const configuredId = (process.env.AUTO_ADMIN_DERIV_ACCOUNT_ID || '').trim().toLowerCase();
+    if (!configuredId || !Array.isArray(accounts) || isAdminTestActive()) return false;
+
+    const ownerIsAuthenticated = accounts.some(account =>
+        typeof account?.account_id === 'string' && account.account_id.trim().toLowerCase() === configuredId
+    );
+    if (!ownerIsAuthenticated || !sessionStorage.getItem('auth_info')) return false;
+
+    // Enter simulation silently. The owner may open the kit manually using
+    // the dot or Dashboard long-press; login must never pop open the dialog.
+    return enterAdminTest();
+};
 
 export const enterAdminTest = () => {
     if (!isAdminTestAvailable() || isAdminTestActive()) return false;

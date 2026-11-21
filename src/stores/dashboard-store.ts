@@ -2,6 +2,7 @@ import DOMPurify from 'dompurify';
 import { action, makeObservable, observable, reaction } from 'mobx';
 import { botNotification } from '@/components/bot-notification/bot-notification';
 import { notification_message, NOTIFICATION_TYPE } from '@/components/bot-notification/bot-notification-utils';
+import { TAB_LAYOUT_VERSION } from '@/constants/bot-contents';
 import { TStores } from '@deriv/stores/types';
 import * as strategy_description from '../constants/quick-strategies';
 import { TDescriptionItem } from '../pages/bot-builder/quick-strategy/types';
@@ -348,6 +349,7 @@ export default class DashboardStore implements IDashboardStore {
     setActiveTab = (active_tab: number): void => {
         this.active_tab = active_tab;
         localStorage.setItem('active_tab', active_tab.toString());
+        localStorage.setItem('active_tab_layout_version', TAB_LAYOUT_VERSION);
     };
 
     setActiveTabTutorial = (active_tab_tutorials: number): void => {

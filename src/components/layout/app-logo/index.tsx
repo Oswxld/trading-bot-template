@@ -15,7 +15,7 @@ export const AppLogo = () => {
     return (
         <div className='app-header__brand'>
             <a href={logoUrl} className='app-header__logo' aria-label={localize('Home')}>
-                <BrandLogo width={180} height={36} />
+                <BrandLogo width={210} height={36} />
             </a>
             {isAdminTestActive() && (
                 <button

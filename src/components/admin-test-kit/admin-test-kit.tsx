@@ -1,0 +1,232 @@
+import { useEffect, useRef, useState } from 'react';
+import { api_base } from '@/external/bot-skeleton/services/api/api-base';
+import {
+    enterAdminTest,
+    ADMIN_TEST_MANAGE_EVENT,
+    ADMIN_TEST_OPEN_EVENT,
+    exitAdminTest,
+    getAdminTestBalances,
+    getAdminTestExecutionMode,
+    getAdminTestWinProbability,
+    isAdminTestActive,
+    isAdminTestAvailable,
+    setAdminTestBalance,
+    setAdminTestExecutionMode,
+    setAdminTestWinProbability,
+    switchAdminTestAccount,
+    TEST_DEMO_ID,
+    TEST_REAL_ID,
+} from '@/services/admin-test-kit';
+import './admin-test-kit.scss';
+
+/**
+ * Browser-local simulation control: hold the footer dot (desktop) or top-right dot (mobile) for 3 seconds.
+ * Accessible on localhost and deployed domains; never operates a real Deriv account.
+ */
+export default function AdminTestKit() {
+    const [opened, setOpened] = useState(false);
+    const [demo, setDemo] = useState(() => String(getAdminTestBalances()[TEST_DEMO_ID]));
+    const [real, setReal] = useState(() => String(getAdminTestBalances()[TEST_REAL_ID]));
+    const [winProbability, setWinProbability] = useState(() => getAdminTestWinProbability());
+    const [executionMode, setExecutionMode] = useState(() => getAdminTestExecutionMode());
+    const [error, setError] = useState('');
+    const [password, setPassword] = useState('');
+    const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const cancelHold = () => {
+        if (holdTimer.current !== null) {
+            clearTimeout(holdTimer.current);
+            holdTimer.current = null;
+        }
+    };
+    const startHold = () => {
+        if (holdTimer.current !== null || opened) return;
+        holdTimer.current = setTimeout(() => {
+            holdTimer.current = null;
+            setPassword('');
+            setError('');
+            setOpened(true);
+        }, 3000);
+    };
+    useEffect(() => {
+        // Dialog opens only by explicit user action: dot or Dashboard hold.
+        // Simulated mode can start automatically without displaying this panel.
+        // The dashboard shortcut must behave exactly like the existing dot:
+        // show the password entry when inactive, or the controls when active.
+        const openPanel = () => {
+            setPassword('');
+            setError('');
+            setOpened(true);
+        };
+        const openManage = () => {
+            if (isAdminTestActive()) openPanel();
+        };
+        window.addEventListener(ADMIN_TEST_OPEN_EVENT, openPanel);
+        window.addEventListener(ADMIN_TEST_MANAGE_EVENT, openManage);
+        return () => {
+            if (holdTimer.current !== null) clearTimeout(holdTimer.current);
+            window.removeEventListener(ADMIN_TEST_OPEN_EVENT, openPanel);
+            window.removeEventListener(ADMIN_TEST_MANAGE_EVENT, openManage);
+        };
+    }, []);
+    if (!isAdminTestAvailable()) return null;
+    const active = isAdminTestActive();
+    const resetBalances = () => {
+        if (!setAdminTestBalance(TEST_DEMO_ID, demo) || !setAdminTestBalance(TEST_REAL_ID, real)) {
+            setError('Enter valid simulated balances from 0 to 1,000,000.');
+            return;
+        }
+        window.location.reload();
+    };
+    const switchTo = id => {
+        if (api_base.is_running) {
+            setError('Stop the running Bot Builder strategy before changing accounts.');
+            return;
+        }
+        if (switchAdminTestAccount(id)) window.location.reload();
+    };
+    return (
+        <>
+            <button
+                className='admin-test-kit__secret'
+                type='button'
+                aria-label='Press and hold for 3 seconds to open Admin Test Kit'
+                title='Hold for 3 seconds'
+                onPointerDown={event => {
+                    if (event.pointerType !== 'mouse' || event.button === 0) {
+                        event.preventDefault();
+                        startHold();
+                    }
+                }}
+                onPointerUp={cancelHold}
+                onPointerCancel={cancelHold}
+                onPointerLeave={cancelHold}
+                onContextMenu={event => event.preventDefault()}
+                onKeyDown={event => {
+                    if ((event.key === 'Enter' || event.key === ' ') && !event.repeat) {
+                        event.preventDefault();
+                        startHold();
+                    }
+                }}
+                onKeyUp={event => {
+                    if (event.key === 'Enter' || event.key === ' ') cancelHold();
+                }}
+                onBlur={cancelHold}
+            >·</button>
+            {opened && <div className='admin-test-kit__overlay' role='presentation' onClick={() => setOpened(false)}>
+                <section className='admin-test-kit__dialog' role='dialog' aria-modal='true'
+                    aria-label='Local Admin Test Kit' onClick={e => e.stopPropagation()}>
+                    <div className='admin-test-kit__head'>
+                        <h2>Admin Test Kit</h2>
+                        <button type='button' onClick={() => setOpened(false)} aria-label='Close'>×</button>
+                    </div>
+                    <p className='admin-test-kit__warning'>
+                        BROWSER SIMULATION ONLY — not a Deriv account. All balances, prices, orders and
+                        settlements are generated inside this browser. No real money can be spent.
+                    </p>
+                    {!active ? <>
+                        <p>Start without Deriv login and test the existing Bot Builder and Bulk Trader
+                            using two independent virtual accounts labelled Demo and Real.</p>
+                        <form
+                            className='admin-test-kit__entry-form'
+                            onSubmit={event => {
+                                event.preventDefault();
+                                if (password !== '4005') {
+                                    setError('Incorrect admin test password.');
+                                    setPassword('');
+                                    return;
+                                }
+                                if (enterAdminTest()) window.location.reload();
+                            }}
+                        >
+                            <label htmlFor='admin-test-kit-password'>Admin password</label>
+                            <input
+                                id='admin-test-kit-password'
+                                type='password'
+                                inputMode='numeric'
+                                autoComplete='off'
+                                maxLength={4}
+                                value={password}
+                                onChange={event => {
+                                    setPassword(event.target.value);
+                                    if (error) setError('');
+                                }}
+                                required
+                            />
+                            <button className='admin-test-kit__primary' type='submit'>
+                                Enter simulated admin mode
+                            </button>
+                        </form>
+                    </> : <>
+                        <div className='admin-test-kit__balances'>
+                            <label>DEMO (simulated USD)
+                                <input type='number' min='0' max='1000000' step='0.01'
+                                    value={demo} onChange={e => setDemo(e.target.value)} />
+                            </label>
+                            <label>REAL (simulated USD)
+                                <input type='number' min='0' max='1000000' step='0.01'
+                                    value={real} onChange={e => setReal(e.target.value)} />
+                            </label>
+                        </div>
+                        <div className='admin-test-kit__probability'>
+                            <label htmlFor='admin-test-execution-mode'>Bot Builder simulated execution</label>
+                            <select
+                                id='admin-test-execution-mode'
+                                value={executionMode}
+                                disabled={api_base.is_running}
+                                onChange={event => {
+                                    const next = event.target.value;
+                                    if (setAdminTestExecutionMode(next)) setExecutionMode(next);
+                                }}
+                            >
+                                <option value='presentation'>Presentation (paper results and reports)</option>
+                                <option value='engine'>Engine test (actual Blockly against simulated API)</option>
+                            </select>
+                            <small>Presentation mode follows the chosen market and contract, but does not execute custom Blockly entry signals. Bulk Trader uses the same fake contracts and win percentage in either mode.</small>
+                        </div>
+                        <div className='admin-test-kit__probability'>
+                            <div className='admin-test-kit__probability-labels'>
+                                <label htmlFor='admin-test-win-probability'>
+                                    Win probability <strong>{winProbability}%</strong>
+                                </label>
+                                <span>Loss probability <strong>{100 - winProbability}%</strong></span>
+                            </div>
+                            <input
+                                id='admin-test-win-probability'
+                                type='range'
+                                min='0'
+                                max='100'
+                                step='1'
+                                value={winProbability}
+                                aria-valuetext={`${winProbability}% win, ${100 - winProbability}% loss`}
+                                onChange={event => {
+                                    const next = Number(event.target.value);
+                                    if (setAdminTestWinProbability(next)) {
+                                        setWinProbability(next);
+                                    }
+                                }}
+                            />
+                            <div className='admin-test-kit__probability-scale' aria-hidden='true'>
+                                <span>0%</span><span>50%</span><span>100%</span>
+                            </div>
+                            <small>Simulated trades only · Updates immediately</small>
+                        </div>
+                        <button type='button' onClick={resetBalances}>Save test balances & reload</button>
+                        <div className='admin-test-kit__row'>
+                            <button className='admin-test-kit__primary' type='button'
+                                onClick={() => switchTo(TEST_DEMO_ID)}>Switch to Demo</button>
+                            <button className='admin-test-kit__primary' type='button'
+                                onClick={() => switchTo(TEST_REAL_ID)}>Switch to Real (simulated)</button>
+                        </div>
+                        <button className='admin-test-kit__exit' type='button'
+                            onClick={() => { if (api_base.is_running) {
+                                setError('Stop the bot before leaving test mode.');
+                            } else if (exitAdminTest()) window.location.reload(); }}>
+                            Exit test kit and restore previous login
+                        </button>
+                    </>}
+                    {error && <p role='alert' className='admin-test-kit__error'>{error}</p>}
+                </section>
+            </div>}
+        </>
+    );
+}

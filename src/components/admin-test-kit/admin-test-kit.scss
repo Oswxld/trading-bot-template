@@ -1,0 +1,154 @@
+@use 'components/shared/styles/mixins' as *;
+
+.admin-test-kit {
+    &__secret {
+        display: inline-flex;
+        flex: 0 0 24px;
+        align-items: center;
+        justify-content: center;
+        align-self: center;
+        width: 24px;
+        height: 28px;
+        margin-inline-start: 0.2rem;
+        padding: 0;
+        touch-action: none;
+        user-select: none;
+        -webkit-user-select: none;
+        border: 0;
+        background: transparent;
+        color: var(--text-less-prominent, #888);
+        opacity: .45;
+        font-size: 22px;
+        cursor: pointer;
+        line-height: 1;
+
+        // The footer is desktop-only, so mount the dot in the layout on mobile.
+        @include mobile-or-tablet-screen {
+            position: fixed;
+            inset-block-start: max(0.3rem, env(safe-area-inset-top));
+            inset-inline-end: max(0.3rem, env(safe-area-inset-right));
+            z-index: 10001;
+            flex: none;
+            width: 24px;
+            height: 24px;
+            margin: 0;
+            border-radius: 50%;
+            opacity: 0.7;
+            background: var(--general-main-1, #fff);
+        }
+    }
+    &__overlay {
+        position: fixed;
+        z-index: 20000;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+        background: rgba(0, 0, 0, .78);
+    }
+    &__dialog {
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+        width: min(100%, 460px);
+        max-height: 90vh;
+        overflow-y: auto;
+        border-radius: 10px;
+        background: #181b22;
+        color: white;
+        padding: 23px;
+        box-shadow: 0 8px 30px #0008;
+        font-size: 14px;
+        line-height: 1.5;
+        button {
+            padding: 9px 12px;
+            border: 1px solid #69717e;
+            border-radius: 6px;
+            background: #282d36;
+            color: white;
+            font: inherit;
+            cursor: pointer;
+        }
+    }
+    &__entry-form {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+
+        label {
+            font-weight: 600;
+        }
+
+        input {
+            box-sizing: border-box;
+            width: 100%;
+            min-height: 44px;
+            padding: 0.9rem 1rem;
+            border: 1px solid #69717e;
+            border-radius: 6px;
+            background: #fff;
+            color: #111;
+            font: inherit;
+        }
+    }
+
+    &__head { display: flex; align-items: center; justify-content: space-between; gap: 8px;
+        h2 { margin: 0; font-size: 22px; }
+    }
+    &__warning { margin: 0; padding: 10px; background: #3d2023; border: 1px solid #e45b5b; border-radius: 6px; }
+    &__balances { display: grid; gap: 10px; grid-template-columns: repeat(2, minmax(0, 1fr));
+        label { font-size: 12px; }
+        input { margin-top: 5px; box-sizing: border-box; width: 100%; padding: 9px; font: inherit;
+            background: #fff; color: #111; border: 1px solid #777; border-radius: 5px;
+        }
+    }
+    &__probability {
+        display: flex;
+        flex-direction: column;
+        gap: 7px;
+        padding: 12px;
+        border-radius: 7px;
+        border: 1px solid #414956;
+        background: #20252d;
+        font-size: 12px;
+
+        &-labels {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            flex-wrap: wrap;
+            strong {
+                color: #76e0cb;
+                font-size: 14px;
+                margin-inline-start: 3px;
+            }
+        }
+
+        &-scale {
+            display: flex;
+            justify-content: space-between;
+            opacity: .75;
+            font-size: 11px;
+        }
+
+        input[type='range'] {
+            display: block;
+            width: 100%;
+            margin: 3px 0 0;
+            accent-color: #76e0cb;
+            cursor: pointer;
+        }
+
+        small {
+            color: #aeb8c5;
+            font-size: 11px;
+        }
+    }
+
+    &__row { display: flex; gap: 10px; flex-wrap: wrap; }
+    &__primary { background: #136962 !important; border-color: #228e83 !important; }
+    &__exit { background: #681d2a !important; border-color: #a83245 !important; }
+    &__error { margin: 0; color: #ff9696; font-weight: 700; }
+}

@@ -1,5 +1,6 @@
 // Account and device utility functions
 // Moved from src/analytics/utils.ts during analytics cleanup
+import { isAdminTestActive, TEST_DEMO_ID, TEST_REAL_ID } from '@/services/admin-test-kit';
 
 export const MAX_MOBILE_WIDTH = 926;
 export const ACCOUNT_TYPE_KEY = 'account_type';
@@ -53,6 +54,13 @@ export const getAccountType = (loginid?: string): string | undefined => {
  * @returns account_id string or null
  */
 export const getAccountId = (): string | null => {
+    // Never allow a stale OAuth account_id query parameter to override the
+    // simulated account while local Admin Test Kit is enabled.
+    if (isAdminTestActive()) {
+        const simulatedId = localStorage.getItem('active_loginid');
+        return simulatedId === TEST_DEMO_ID || simulatedId === TEST_REAL_ID ? simulatedId : null;
+    }
+
     // 1. Check URL parameter
     const urlParams = new URLSearchParams(window.location.search);
     const accountIdFromUrl = urlParams.get('account_id');

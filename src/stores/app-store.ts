@@ -1,6 +1,7 @@
 import { action, makeObservable, reaction } from 'mobx';
 import { api_base, ApiHelpers, DBot, runIrreversibleEvents } from '@/external/bot-skeleton';
 import { setCurrency } from '@/external/bot-skeleton/scratch/utils';
+import { isAdminTestActive } from '@/services/admin-test-kit';
 import { TApiHelpersStore } from '@/types/stores.types';
 import RootStore from './root-store';
 
@@ -72,8 +73,20 @@ export default class AppStore {
     };
 
     onUnmount = () => {
-        DBot.terminateBot();
-        DBot.terminateConnection();
+        if (isAdminTestActive()) {
+            // Leaving the Blockly view must not close the shared simulated API.
+            // Bulk Trader, balance updates, and open test contracts own this
+            // in-memory session independently of the Bot Builder component.
+            // Stop only the interpreter; don't start a replacement tick monitor
+            // for a workspace that is being disposed.
+            this.root_store.run_panel.setIsRunning(false);
+            api_base.setIsRunning(false);
+            void DBot.terminateBot(false);
+        } else {
+            // Preserve the existing real Deriv account teardown unchanged.
+            DBot.terminateBot();
+            DBot.terminateConnection();
+        }
         if (window.Blockly?.derivWorkspace) {
             clearInterval(window.Blockly?.derivWorkspace.save_workspace_interval);
             window.Blockly.derivWorkspace?.dispose();

@@ -1,6 +1,7 @@
 // Updated to use brand configuration for footer elements visibility
 // Controls language settings and theme toggle via brand.config.json
 import brandConfig from '@/../brand.config.json';
+import AdminTestKit from '@/components/admin-test-kit/admin-test-kit';
 import { useApiBase } from '@/hooks/useApiBase';
 import useModalManager from '@/hooks/useModalManager';
 import { getActiveTabUrl } from '@/utils/getActiveTabUrl';
@@ -48,6 +49,7 @@ const Footer = () => {
             <ServerTime />
             <div className='app-footer__vertical-line' />
             <NetworkStatus />
+            <AdminTestKit />
 
             {/* [AI] Only show language modal if language settings are enabled */}
             {enableLanguageSettings && isModalOpenFor('DesktopLanguagesModal') && (

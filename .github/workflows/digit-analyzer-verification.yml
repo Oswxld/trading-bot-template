@@ -1,0 +1,127 @@
+name: Digit Analyzer regression verification
+
+on:
+  push:
+    branches:
+      - 'feature/digit-analyzer/develop'
+      - 'clients/pitprinter/develop'
+      - 'clients/kevin-forex-trader/develop'
+    paths:
+      - '.github/workflows/digit-analyzer-verification.yml'
+      - 'src/features/digit-analyzer/**'
+      - 'src/constants/bot-contents.ts'
+      - 'src/constants/__tests__/analysis-navigation.test.ts'
+      - 'src/pages/main/**'
+      - 'src/stores/dashboard-store.ts'
+      - 'src/utils/getActiveTabUrl.ts'
+      - 'src/utils/__tests__/getActiveTabUrl.test.ts'
+      - 'tests/digit-analyzer-navigation.browser.spec.cjs'
+      - 'scripts/verify-typecheck-regressions.cjs'
+      - 'package.json'
+      - 'package-lock.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: digit-analyzer-verification-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Navigation, dashboard, type-check and production build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout development branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies (existing lockfile is out of sync)
+        run: npm install --no-audit --no-fund --legacy-peer-deps
+
+      - name: Digit Analyzer navigation and dashboard tests
+        run: |
+          npx jest \
+            src/constants/__tests__/analysis-navigation.test.ts \
+            src/utils/__tests__/getActiveTabUrl.test.ts \
+            src/features/digit-analyzer/__tests__/digit-analyzer.test.tsx \
+            src/features/digit-analyzer/__tests__/dashboard-panels.test.tsx \
+            src/features/digit-analyzer/__tests__/public-market-data-client.test.ts \
+            src/features/digit-analyzer/__tests__/normalize-symbol.test.ts \
+            src/features/digit-analyzer/__tests__/market-catalog.test.ts \
+            src/features/digit-analyzer/__tests__/use-market-catalog.test.tsx \
+            src/features/digit-analyzer/__tests__/normalize-tick.test.ts \
+            src/features/digit-analyzer/__tests__/live-tick-stream.test.ts \
+            src/features/digit-analyzer/__tests__/use-live-ticks.test.tsx \
+            src/features/digit-analyzer/__tests__/normalize-history.test.ts \
+            src/features/digit-analyzer/__tests__/historical-ticks.test.ts \
+            src/features/digit-analyzer/__tests__/rolling-tick-window.test.ts \
+            src/features/digit-analyzer/__tests__/synchronized-tick-window.test.ts \
+            src/features/digit-analyzer/__tests__/synchronized-live-hook.test.tsx \
+            src/features/digit-analyzer/__tests__/data-integrity.test.ts \
+            src/features/digit-analyzer/__tests__/digit-frequency.test.ts \
+            src/features/digit-analyzer/__tests__/digit-percentages.test.ts \
+            src/features/digit-analyzer/__tests__/digit-parity.test.ts \
+            src/features/digit-analyzer/__tests__/digit-over-under.test.ts \
+            src/features/digit-analyzer/__tests__/digit-matches-differs.test.ts \
+            src/features/digit-analyzer/__tests__/dashboard-statistics-integration.test.tsx \
+            src/features/digit-analyzer/__tests__/statistical-regression.test.ts \
+            src/features/digit-analyzer/__tests__/digit-pattern-score-model.test.ts \
+            src/features/digit-analyzer/__tests__/digit-pattern-score.test.ts \
+            src/features/digit-analyzer/__tests__/digit-pattern-leaders.test.ts \
+            src/features/digit-analyzer/__tests__/digit-pattern-dashboard.test.tsx \
+            src/features/digit-analyzer/__tests__/digit-pattern-walkforward.test.ts \
+            --ci --runInBand --coverage=false
+
+      - name: Trading and Admin Test Kit smoke tests
+        if: always()
+        run: |
+          npx jest \
+            src/pages/bulk-trader/__tests__/bulk-trader-buttons.test.jsx \
+            src/services/__tests__/admin-test-kit.test.js \
+            src/services/__tests__/admin-test-market-feed.test.js \
+            src/pages/bulk-trader/__tests__/bulk-trader-integration.test.js \
+            --ci --runInBand --coverage=false
+
+      - name: TypeScript regression check against master
+        if: always()
+        run: node scripts/verify-typecheck-regressions.cjs
+
+      - name: Production build
+        if: always()
+        run: npm run build
+
+      - name: Browser smoke for desktop and mobile navigation
+        if: always()
+        run: |
+          test -f dist/index.html
+          npm install --no-save --no-audit --no-fund --legacy-peer-deps @playwright/test@1.57.0
+          npx playwright install --with-deps chromium
+          npx http-server dist -a 127.0.0.1 -p 4173 -s > /tmp/digit-analyzer-http.log 2>&1 &
+          for i in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:4173/ > /dev/null; then break; fi
+            sleep 1
+          done
+          npx playwright test tests/digit-analyzer-navigation.browser.spec.cjs --reporter=line --workers=1 --timeout=90000
+        env:
+          CI: 'true'
+
+      - name: Save browser failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: digit-analyzer-browser-diagnostics
+          path: |
+            test-results/
+            /tmp/digit-analyzer-http.log
+          if-no-files-found: ignore
+          retention-days: 3

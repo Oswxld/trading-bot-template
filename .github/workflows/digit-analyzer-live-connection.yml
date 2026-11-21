@@ -1,0 +1,50 @@
+name: Digit Analyzer real Deriv public WebSocket probe
+
+on:
+  # Opt-in live check; the push trigger covers only changes to the probe itself.
+  push:
+    branches:
+      - 'feature/digit-analyzer/develop'
+    paths:
+      - '.github/workflows/digit-analyzer-live-connection.yml'
+      - 'src/features/digit-analyzer/__tests__/live-public-market.integration.test.ts'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: digit-analyzer-real-deriv-probe-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  live-public-feed:
+    name: Connect to real public Deriv API and verify ticks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    env:
+      RUN_DERIV_LIVE_PROBE: '1'
+      CI: 'true'
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund --legacy-peer-deps
+
+      - name: Real Deriv connection, active symbols, ticks and forget
+        run: |
+          npx jest \
+            src/features/digit-analyzer/__tests__/live-public-market.integration.test.ts \
+            --ci --runInBand --coverage=false --verbose
+
+      - name: Print failure summary
+        if: failure()
+        run: |
+          echo "::error::Live Deriv public WebSocket verification failed. Review errors above. No simulated fallback was used."

@@ -1,6 +1,7 @@
 import { action, computed, makeObservable, observable, reaction } from 'mobx';
 import { formatDate, isEnded } from '@/components/shared';
 import { LogTypes } from '@/external/bot-skeleton';
+import { getAdminTestContracts, isAdminTestActive, markAdminTestBotReportCleared } from '@/services/admin-test-kit';
 import { ProposalOpenContract } from '@deriv/api-types';
 import { TPortfolioPosition, TStores } from '@deriv/stores/types';
 import { TContractInfo } from '../components/summary/summary-card.types';
@@ -36,8 +37,10 @@ export default class TransactionsStore {
             is_called_proposal_open_contract: observable,
             is_transaction_details_modal_open: observable,
             transactions: computed,
+            active_report_account: computed,
             onBotContractEvent: action.bound,
             pushTransaction: action.bound,
+            recoverAdminTestReports: action.bound,
             clear: action.bound,
             registerReactions: action.bound,
             recoverPendingContracts: action.bound,
@@ -48,16 +51,27 @@ export default class TransactionsStore {
     }
     TRANSACTION_CACHE = 'transaction_cache';
 
-    elements: TElement = getStoredItemsByUser(this.TRANSACTION_CACHE, this.core?.client?.loginid, []);
+    elements: TElement = isAdminTestActive()
+        ? getStoredItemsByKey(this.TRANSACTION_CACHE, {})
+        : getStoredItemsByUser(this.TRANSACTION_CACHE, this.core?.client?.loginid, []);
     active_transaction_id: null | number = null;
     recovered_completed_transactions: number[] = [];
     recovered_transactions: number[] = [];
     is_called_proposal_open_contract = false;
     is_transaction_details_modal_open = false;
 
+    // OAuth-backed client state can be populated AFTER a local simulator
+    // purchase. In Admin Test Mode the validated local active account is the
+    // reporting key; do not rely on the asynchronous OAuth-style client store.
+    get active_report_account(): string {
+        return (isAdminTestActive()
+            ? localStorage.getItem('active_loginid')
+            : this.core?.client?.loginid) || '';
+    }
+
     get transactions(): TTransaction[] {
-        if (this.core?.client?.loginid) return this.elements[this.core?.client?.loginid] ?? [];
-        return [];
+        const account = this.active_report_account;
+        return account ? this.elements[account] ?? [] : [];
     }
 
     get statistics() {
@@ -72,7 +86,9 @@ export default class TransactionsStore {
                 const profit = Number(contract.profit) || 0;
                 const is_completed = contract.is_completed || false;
                 const buy_price = Number(contract.buy_price) || 0;
-                const payout = Number(contract.payout) || Number(contract.bid_price) || 0;
+                const payout = isAdminTestActive()
+                    ? Number((contract as any).sell_price ?? 0)
+                    : Number(contract.payout) || Number(contract.bid_price) || 0;
                 const bid_price = Number(contract.bid_price) || 0;
 
                 if (is_completed) {
@@ -112,7 +128,7 @@ export default class TransactionsStore {
     pushTransaction(data: TContractInfo) {
         const is_completed = isEnded(data as ProposalOpenContract);
         const { run_id } = this.root_store.run_panel;
-        const current_account = this.core?.client?.loginid as string;
+        const current_account = this.active_report_account;
 
         const contract: TContractInfo = {
             ...data,
@@ -173,10 +189,25 @@ export default class TransactionsStore {
         }
 
         this.elements = { ...this.elements }; // force update
+        if (isAdminTestActive()) {
+            // registerReactions() historically runs before makeObservable().
+            // Persist simulated Bot Builder rows explicitly so remount/reload
+            // cannot silently discard an otherwise successful trade.
+            const cached = getStoredItemsByKey(this.TRANSACTION_CACHE, {});
+            cached[current_account] = (this.elements[current_account] || []).slice(0, 5000);
+            setStoredItemsByKey(this.TRANSACTION_CACHE, cached);
+        }
     }
 
     clear() {
-        if (this.elements && this.elements[this.core?.client?.loginid as string]?.length > 0) {
+        if (isAdminTestActive()) {
+            const account = this.active_report_account;
+            markAdminTestBotReportCleared(account);
+            this.elements = { ...this.elements, [account]: [] };
+            const cached = getStoredItemsByKey(this.TRANSACTION_CACHE, {});
+            cached[account] = [];
+            setStoredItemsByKey(this.TRANSACTION_CACHE, cached);
+        } else if (this.elements && this.elements[this.core?.client?.loginid as string]?.length > 0) {
             this.elements[this.core?.client?.loginid as string] = [];
         }
         this.recovered_completed_transactions = this.recovered_completed_transactions?.slice(0, 0);
@@ -189,10 +220,12 @@ export default class TransactionsStore {
 
         // Write transactions to session storage on each change in transaction elements.
         const disposeTransactionElementsListener = reaction(
-            () => this.elements[client?.loginid as string],
+            () => this.elements[this.active_report_account],
             elements => {
                 const stored_transactions = getStoredItemsByKey(this.TRANSACTION_CACHE, {});
-                stored_transactions[client.loginid as string] = elements?.slice(0, 5000) ?? [];
+                const currentAccount = this.active_report_account;
+                if (!currentAccount) return;
+                stored_transactions[currentAccount] = elements?.slice(0, 5000) ?? [];
                 setStoredItemsByKey(this.TRANSACTION_CACHE, stored_transactions);
             }
         );
@@ -211,7 +244,52 @@ export default class TransactionsStore {
         };
     }
 
+    recoverAdminTestReports() {
+        if (!isAdminTestActive()) return;
+        const account = this.active_report_account;
+        if (!account || localStorage.getItem('active_loginid') !== account) return;
+        const paperContracts = getAdminTestContracts(account, {
+            source: 'bot_builder', sinceReportReset: true,
+        });
+
+        for (const contract of paperContracts) {
+            const previous = (this.elements[account] || []).find(row =>
+                row.type === transaction_elements.CONTRACT &&
+                typeof row.data === 'object' &&
+                row.data?.transaction_ids?.buy === contract.transaction_ids?.buy
+            );
+            const wasCompleted = previous && typeof previous.data === 'object'
+                ? Boolean(previous.data.is_completed) : false;
+
+            if (!previous || (contract.is_sold && !wasCompleted)) {
+                this.pushTransaction(contract as TContractInfo);
+                // A settlement missed while Bot Builder was unmounted needs
+                // a corresponding journal result. Avoid duplicates if the
+                // normal engine already processed the completed contract.
+                if (contract.is_sold && !wasCompleted) {
+                    if (!previous) {
+                        this.root_store.journal?.onLogSuccess({
+                            log_type: LogTypes.PURCHASE,
+                            extra: {
+                                currency: contract.currency,
+                                transaction_id: contract.transaction_ids.buy,
+                            } as any,
+                        });
+                    }
+                    this.root_store.journal?.onLogSuccess({
+                        log_type: Number(contract.profit) > 0 ? LogTypes.PROFIT : LogTypes.LOST,
+                        extra: { currency: contract.currency, profit: contract.profit },
+                    });
+                }
+            }
+        }
+    }
+
     recoverPendingContracts(contract = null) {
+        if (isAdminTestActive()) {
+            this.recoverAdminTestReports();
+            return;
+        }
         this.transactions.forEach(({ data: trx }) => {
             if (
                 typeof trx === 'string' ||

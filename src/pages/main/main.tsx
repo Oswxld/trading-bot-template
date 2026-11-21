@@ -10,7 +10,7 @@ import MobileWrapper from '@/components/shared_ui/mobile-wrapper';
 import Tabs from '@/components/shared_ui/tabs/tabs';
 import TradeTypeConfirmationModal from '@/components/trade-type-confirmation-modal';
 import TradingViewModal from '@/components/trading-view-chart/trading-view-modal';
-import { DBOT_TABS, TAB_IDS } from '@/constants/bot-contents';
+import { DBOT_TABS, TAB_HASHES, TAB_IDS } from '@/constants/bot-contents';
 import { api_base, updateWorkspaceName } from '@/external/bot-skeleton';
 import { CONNECTION_STATUS } from '@/external/bot-skeleton/services/api/observables/connection-status-stream';
 import { isDbotRTL } from '@/external/bot-skeleton/utils/workspace';
@@ -45,7 +45,9 @@ import RunStrategy from '../dashboard/run-strategy';
 import './main.scss';
 
 const ChartWrapper = lazy(() => import('../chart/chart-wrapper'));
+const DigitAnalyzer = lazy(() => import('../../features/digit-analyzer'));
 const BulkTrader = lazy(() => import('../bulk-trader/bulk-trader'));
+const TradingBots = lazy(() => import('../trading-bots'));
 
 const Tutorial = lazy(() => import('../tutorials'));
 
@@ -80,12 +82,13 @@ const AppWrapper = observer(() => {
     const { clear } = summary_card;
     const { DASHBOARD, BOT_BUILDER } = DBOT_TABS;
     const init_render = React.useRef(true);
-    const hash = ['dashboard', 'bot_builder', 'chart', 'bulk_trader', 'tutorial'];
+    const hash = TAB_HASHES;
     const { isDesktop } = useDevice();
     const location = useLocation();
     const navigate = useNavigate();
-    const [left_tab_shadow, setLeftTabShadow] = useState<boolean>(false);
-    const [right_tab_shadow, setRightTabShadow] = useState<boolean>(false);
+    const tabsNavigationRef = React.useRef<HTMLDivElement>(null);
+    const [canScrollTabsLeft, setCanScrollTabsLeft] = useState(false);
+    const [canScrollTabsRight, setCanScrollTabsRight] = useState(false);
 
     // Trade type modal state
     const [tradeTypeModalState, setTradeTypeModalState] = useState(getModalState());
@@ -142,40 +145,42 @@ const AppWrapper = observer(() => {
         resetUrlParamProcessing();
     }, [location.search]);
 
+    // Show navigation arrows only when the mobile tab strip actually overflows.
+    // Unlike the old IntersectionObserver shadows, these track horizontal scrolling.
     React.useEffect(() => {
-        const el_dashboard = document.getElementById('id-dbot-dashboard');
-        const el_tutorial = document.getElementById('id-tutorials');
+        if (isDesktop) return;
 
-        const observer_dashboard = new window.IntersectionObserver(
-            ([entry]) => {
-                if (entry.isIntersecting) {
-                    setLeftTabShadow(false);
-                    return;
-                }
-                setLeftTabShadow(true);
-            },
-            {
-                root: null,
-                threshold: 0.5, // set offset 0.1 means trigger if atleast 10% of element in viewport
-            }
-        );
+        const scroller = tabsNavigationRef.current?.querySelector<HTMLElement>('.dc-tabs__list--main__tabs');
+        if (!scroller) return;
 
-        const observer_tutorial = new window.IntersectionObserver(
-            ([entry]) => {
-                if (entry.isIntersecting) {
-                    setRightTabShadow(false);
-                    return;
-                }
-                setRightTabShadow(true);
-            },
-            {
-                root: null,
-                threshold: 0.5, // set offset 0.1 means trigger if atleast 10% of element in viewport
-            }
-        );
-        observer_dashboard.observe(el_dashboard);
-        observer_tutorial.observe(el_tutorial);
-    });
+        const updateArrows = () => {
+            const maxScroll = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+            setCanScrollTabsLeft(maxScroll > 2 && scroller.scrollLeft > 2);
+            setCanScrollTabsRight(maxScroll > 2 && scroller.scrollLeft < maxScroll - 2);
+        };
+
+        const frame = window.requestAnimationFrame(updateArrows);
+        const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(updateArrows);
+        observer?.observe(scroller);
+        scroller.addEventListener('scroll', updateArrows, { passive: true });
+        window.addEventListener('resize', updateArrows);
+
+        return () => {
+            window.cancelAnimationFrame(frame);
+            observer?.disconnect();
+            scroller.removeEventListener('scroll', updateArrows);
+            window.removeEventListener('resize', updateArrows);
+        };
+    }, [isDesktop]);
+
+    const scrollTabs = (direction: -1 | 1) => {
+        const scroller = tabsNavigationRef.current?.querySelector<HTMLElement>('.dc-tabs__list--main__tabs');
+        if (!scroller) return;
+        scroller.scrollBy({
+            left: direction * Math.max(140, Math.round(scroller.clientWidth * 0.7)),
+            behavior: 'smooth',
+        });
+    };
 
     React.useEffect(() => {
         if (connectionStatus !== CONNECTION_STATUS.OPENED) {
@@ -188,19 +193,6 @@ const AppWrapper = observer(() => {
             }
         }
     }, [clear, connectionStatus, setWebSocketState, stopBot]);
-
-    // Update tab shadows height to match bot builder height
-    const updateTabShadowsHeight = () => {
-        const botBuilderEl = document.getElementById('id-bot-builder');
-        const leftShadow = document.querySelector('.tabs-shadow--left') as HTMLElement;
-        const rightShadow = document.querySelector('.tabs-shadow--right') as HTMLElement;
-
-        if (botBuilderEl && leftShadow && rightShadow) {
-            const height = botBuilderEl.offsetHeight;
-            leftShadow.style.height = `${height}px`;
-            rightShadow.style.height = `${height}px`;
-        }
-    };
 
     React.useEffect(() => {
         let pollTimeoutId: ReturnType<typeof setTimeout> | null = null;
@@ -273,7 +265,6 @@ const AppWrapper = observer(() => {
 
     React.useEffect(() => {
         // Run on mount and when active tab changes
-        updateTabShadowsHeight();
 
         if (is_open) {
             setTourDialogVisibility(false);
@@ -374,8 +365,7 @@ const AppWrapper = observer(() => {
                         'main__container--active': active_tour && active_tab === DASHBOARD && !isDesktop,
                     })}
                 >
-                    <div>
-                        {!isDesktop && left_tab_shadow && <span className='tabs-shadow tabs-shadow--left' />}{' '}
+                    <div className='main__tabs-navigation' ref={tabsNavigationRef}>
                         <Tabs active_index={active_tab} className='main__tabs' onTabItemClick={handleTabChange} top>
                             <div
                                 label={
@@ -431,6 +421,19 @@ const AppWrapper = observer(() => {
                             <div
                                 label={
                                     <>
+                                        <span aria-hidden='true' style={{ fontSize: '18px', lineHeight: 1 }}>▦</span>
+                                        <Localize i18n_default_text='Analysis' />
+                                    </>
+                                }
+                                id='id-analysis'
+                            >
+                                <Suspense fallback={<ChunkLoader message={localize('Loading Digit Analyzer...')} />}>
+                                    <DigitAnalyzer />
+                                </Suspense>
+                            </div>
+                            <div
+                                label={
+                                    <>
                                         <span aria-hidden='true' style={{ fontSize: '18px', lineHeight: 1 }}>◈</span>
                                         <Localize i18n_default_text='Bulk Trader' />
                                     </>
@@ -442,6 +445,19 @@ const AppWrapper = observer(() => {
                                         <BulkTrader />
                                     </Suspense>
                                 </BulkTraderErrorBoundary>
+                            </div>
+                            <div
+                                label={
+                                    <>
+                                        <span aria-hidden='true' style={{ fontSize: '18px', lineHeight: 1 }}>🤖</span>
+                                        <Localize i18n_default_text='Trading Bots' />
+                                    </>
+                                }
+                                id='id-trading-bots'
+                            >
+                                <Suspense fallback={<ChunkLoader message={localize('Loading trading bots...')} />}>
+                                    <TradingBots />
+                                </Suspense>
                             </div>
                             <div
                                 label={
@@ -468,12 +484,33 @@ const AppWrapper = observer(() => {
                                 </div>
                             </div>
                         </Tabs>
-                        {!isDesktop && right_tab_shadow && <span className='tabs-shadow tabs-shadow--right' />}{' '}
+                        {!isDesktop && canScrollTabsLeft && (
+                            <button
+                                type='button'
+                                className='main__tabs-scroll-button main__tabs-scroll-button--left'
+                                aria-label='Scroll navigation tabs left'
+                                title='More tabs to the left'
+                                onClick={() => scrollTabs(-1)}
+                            >
+                                ‹
+                            </button>
+                        )}
+                        {!isDesktop && canScrollTabsRight && (
+                            <button
+                                type='button'
+                                className='main__tabs-scroll-button main__tabs-scroll-button--right'
+                                aria-label='Scroll navigation tabs right'
+                                title='More tabs to the right'
+                                onClick={() => scrollTabs(1)}
+                            >
+                                ›
+                            </button>
+                        )}
                     </div>
                 </div>
             </div>
             <DesktopWrapper>
-                {active_tab !== DBOT_TABS.BULK_TRADER && (
+                {![DBOT_TABS.ANALYSIS, DBOT_TABS.BULK_TRADER, DBOT_TABS.TRADING_BOTS].includes(active_tab) && (
                     <div className='main__run-strategy-wrapper'>
                         <RunStrategy />
                         <RunPanel />
@@ -483,7 +520,7 @@ const AppWrapper = observer(() => {
                 <TradingViewModal />
             </DesktopWrapper>
             <MobileWrapper>
-                {active_tab !== DBOT_TABS.BULK_TRADER && !is_open && <RunPanel />}
+                {![DBOT_TABS.ANALYSIS, DBOT_TABS.BULK_TRADER, DBOT_TABS.TRADING_BOTS].includes(active_tab) && !is_open && <RunPanel />}
             </MobileWrapper>
             <Dialog
                 cancel_button_text={cancel_button_text || localize('Cancel')}

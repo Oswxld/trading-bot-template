@@ -1,8 +1,14 @@
 /* [AI] - Analytics removed - utility functions moved to @/utils/account-helpers */
 import { getAccountId, getAccountType, isDemoAccount, removeUrlParameter } from '@/utils/account-helpers';
+import { parseFiniteBalance } from '@/utils/balance-utils';
 /* [/AI] */
 import CommonStore from '@/stores/common-store';
 import { DerivWSAccountsService } from '@/services/derivws-accounts.service';
+import {
+    isAdminTestActive,
+    isAdminTestTransportReady,
+    isAdminTestSessionReady,
+} from '@/services/admin-test-kit';
 import { TAuthData } from '@/types/api-types';
 import { clearAuthData } from '@/utils/auth-utils';
 import { handleBackendError, isBackendError } from '@/utils/error-handler';
@@ -64,6 +70,9 @@ class APIBase {
     active_symbols_promise: Promise<any[] | undefined> | null = null;
     common_store: CommonStore | undefined;
     reconnection_attempts: number = 0;
+    private reconnecting_local_simulator = false;
+    private local_simulation_recovery: Promise<boolean> | null = null;
+    private local_simulation_authorization: Promise<any> | null = null;
 
     // Constants for timeouts - extracted magic numbers for better maintainability
     private readonly ACTIVE_SYMBOLS_TIMEOUT_MS = 10000; // 10 seconds
@@ -98,6 +107,12 @@ class APIBase {
     }
 
     private async handleTokenExchangeIfNeeded() {
+        // Simulated accounts must never be replaced by a stale OAuth URL
+        // account_id. Authorize exclusively through the in-memory API.
+        if (isAdminTestActive()) {
+            if (getAccountId()) await this.authorizeAndSubscribe();
+            return;
+        }
         const urlParams = new URLSearchParams(window.location.search);
         const account_id = urlParams.get('account_id');
         const accountType = urlParams.get('account_type');
@@ -172,6 +187,14 @@ class APIBase {
             }
 
             this.api = await generateDerivApiInstance();
+            if (isAdminTestActive()) {
+                // A new local connection has no subscriptions or authorization.
+                // Never let stale state from the replaced simulator satisfy
+                // isAdminTestSessionReady() before reauthorization.
+                this.is_authorized = false;
+                this.account_info = {};
+                setIsAuthorized(false);
+            }
 
             this.api?.connection.addEventListener('open', this.onsocketopen.bind(this));
             this.api?.connection.addEventListener('close', this.onsocketclose.bind(this));
@@ -227,7 +250,74 @@ class APIBase {
         }
     }
 
+    /**
+     * Re-establish the local-only mock API and wait until the selected simulated
+     * account is authorized. Never allow a real Deriv socket to satisfy this
+     * check. Shared by the automatic reconnect handler and Bot Builder Run.
+     */
+    async ensureAdminTestSession(): Promise<boolean> {
+        if (!isAdminTestActive()) return false;
+        if (this.local_simulation_recovery) return this.local_simulation_recovery;
+
+        this.reconnecting_local_simulator = true;
+        const recover = async () => {
+            const socket = this.api?.connection;
+            const mock = this.api as (TApiBaseApi & {
+                isAdminSimulation?: boolean;
+                simulatedAccountId?: string;
+            }) | null;
+            if (!mock || mock.isAdminSimulation !== true ||
+                mock.simulatedAccountId !== getAccountId() ||
+                (socket && socket.readyState > 1)) {
+                await this.init(true);
+            }
+
+            const connection = this.api?.connection;
+            if (!connection) return false;
+            if (connection.readyState === 0) {
+                const opened = await new Promise<boolean>(resolve => {
+                    let timer: ReturnType<typeof setTimeout>;
+                    const onOpen = () => done(true);
+                    const onClose = () => done(false);
+                    const done = (ready: boolean) => {
+                        clearTimeout(timer);
+                        connection.removeEventListener('open', onOpen);
+                        connection.removeEventListener('close', onClose);
+                        resolve(ready);
+                    };
+                    connection.addEventListener('open', onOpen);
+                    connection.addEventListener('close', onClose);
+                    timer = setTimeout(() => done(false), 5000);
+                });
+                if (!opened) return false;
+            }
+
+            if (!isAdminTestTransportReady(this)) return false;
+            if (!isAdminTestSessionReady(this)) await this.authorizeAndSubscribe();
+            return isAdminTestSessionReady(this);
+        };
+
+        this.local_simulation_recovery = recover().finally(() => {
+            this.reconnecting_local_simulator = false;
+            this.local_simulation_recovery = null;
+        });
+        return this.local_simulation_recovery;
+    }
+
     reconnectIfNotConnected = () => {
+        if (isAdminTestActive()) {
+            // The Admin Test Kit has a local-only transport and no OAuth
+            // credentials. Losing/replacing its in-memory connection must NOT
+            // clear the selected account or turn the header into Log in.
+            // Multiple close/focus listeners may fire during Bot Builder runs;
+            // allow only one connection replacement at a time.
+            if ((!this.api || this.api.connection?.readyState > 1) && !this.reconnecting_local_simulator) {
+                void this.ensureAdminTestSession()
+                    .catch(error => console.error('Local simulation reconnect failed:', error));
+            }
+            return;
+        }
+
         if (this.api?.connection?.readyState && this.api?.connection?.readyState > 1) {
             this.reconnection_attempts += 1;
 
@@ -252,6 +342,22 @@ class APIBase {
     };
 
     async authorizeAndSubscribe() {
+        if (!isAdminTestActive()) return this.authorizeAndSubscribeInner();
+        // Never authorize an Admin Test Kit account on a genuine broker socket.
+        if (!isAdminTestTransportReady(this)) return;
+        // onsocketopen(), session recovery, and Run can all request local
+        // authorization together. Send a single balance/subscription handshake.
+        if (this.local_simulation_authorization) return this.local_simulation_authorization;
+        const pending = this.authorizeAndSubscribeInner();
+        this.local_simulation_authorization = pending;
+        try {
+            return await pending;
+        } finally {
+            if (this.local_simulation_authorization === pending) this.local_simulation_authorization = null;
+        }
+    }
+
+    private async authorizeAndSubscribeInner() {
         if (!this.api) return;
 
         this.account_id = getAccountId() || '';
@@ -272,20 +378,31 @@ class APIBase {
                 return { ...error, localizedMessage: errorMessage };
             }
 
-            this.account_info = {
-                balance: balance?.balance,
-                currency: balance?.currency,
-                loginid: balance?.loginid,
-            };
-            this.token = balance?.loginid;
+            const liveAccount = !isAdminTestActive();
+            const brokerBalance = liveAccount ? parseFiniteBalance(balance?.balance) : null;
+            const authorizedLoginId = balance?.loginid || (liveAccount ? this.account_id : '');
+            if (liveAccount && (
+                brokerBalance === null ||
+                !authorizedLoginId ||
+                (balance?.loginid && this.account_id && balance.loginid !== this.account_id)
+            )) {
+                throw new Error('Deriv did not return a valid balance for the selected account.');
+            }
 
-            const account_type = getAccountType(balance?.loginid);
-            const currentAccount = balance?.loginid
+            this.account_info = {
+                balance: brokerBalance ?? balance?.balance,
+                currency: balance?.currency,
+                loginid: authorizedLoginId,
+            };
+            this.token = authorizedLoginId;
+
+            const account_type = getAccountType(authorizedLoginId);
+            const currentAccount = authorizedLoginId
                 ? {
-                      balance: balance.balance,
-                      currency: balance.currency || 'USD',
+                      balance: brokerBalance ?? balance?.balance ?? 0,
+                      currency: balance?.currency || 'USD',
                       is_virtual: account_type === 'real' ? 0 : 1,
-                      loginid: balance.loginid,
+                      loginid: authorizedLoginId,
                   }
                 : null;
 
@@ -297,7 +414,11 @@ class APIBase {
                     ? storedAccounts
                           .filter(a => !a.status || a.status === 'active')
                           .map(a => ({
-                              balance: parseFloat(a.balance) || 0,
+                              // The selected account is refreshed by its live, OTP-bound
+                              // broker response, not an earlier REST snapshot.
+                              balance: liveAccount && a.account_id === authorizedLoginId
+                                  ? brokerBalance ?? 0
+                                  : parseFiniteBalance(a.balance) ?? 0,
                               currency: a.currency || 'USD',
                               is_virtual: a.account_type === 'demo' ? 1 : 0,
                               loginid: a.account_id,
@@ -308,15 +429,15 @@ class APIBase {
 
             setAccountList(accountList); // Observable stream
             setAuthData({
-                balance: balance?.balance,
+                balance: brokerBalance ?? balance?.balance,
                 currency: balance?.currency,
-                loginid: balance?.loginid,
+                loginid: authorizedLoginId,
                 is_virtual: account_type === 'real' ? 0 : 1,
                 account_list: accountList,
             });
 
             // // Set account_type in localStorage based on loginid prefix using centralized utility
-            const loginid = balance?.loginid || '';
+            const loginid = authorizedLoginId;
             const isDemo = isDemoAccount(loginid);
 
             if (isDemo) {
@@ -328,17 +449,17 @@ class APIBase {
             globalObserver.emit('api.authorize', {
                 account_list: accountList,
                 current_account: {
-                    loginid: balance?.loginid,
+                    loginid: authorizedLoginId,
                     currency: balance?.currency || 'USD',
                     is_virtual: account_type === 'real' ? 0 : 1,
-                    balance: typeof balance?.balance === 'number' ? balance.balance : undefined,
+                    balance: brokerBalance ?? (typeof balance?.balance === 'number' ? balance.balance : undefined),
                 },
             });
 
             // Update the WebSocket login ID in the client store
             const currentClientStore = globalObserver.getState('client.store');
-            if (currentClientStore && balance?.loginid) {
-                currentClientStore.setWebSocketLoginId(balance.loginid);
+            if (currentClientStore && authorizedLoginId) {
+                currentClientStore.setWebSocketLoginId(authorizedLoginId);
             }
 
             setIsAuthorized(true);
@@ -346,8 +467,8 @@ class APIBase {
             localStorage.setItem('client_account_details', JSON.stringify(accountList));
             localStorage.setItem('client.country', balance?.country);
 
-            if (balance?.loginid) {
-                localStorage.setItem('active_loginid', balance.loginid);
+            if (authorizedLoginId) {
+                localStorage.setItem('active_loginid', authorizedLoginId);
             }
 
             if (this.has_active_symbols) {
@@ -358,7 +479,9 @@ class APIBase {
             this.subscribe();
         } catch (e) {
             this.is_authorized = false;
-            clearAuthData();
+            // A transient error in the local in-memory test transport is
+            // not an OAuth failure. Never erase the selected fake account.
+            if (!isAdminTestActive()) clearAuthData();
             setIsAuthorized(false);
             globalObserver.emit('Error', e);
         } finally {

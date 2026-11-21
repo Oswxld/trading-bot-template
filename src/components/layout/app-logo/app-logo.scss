@@ -1,13 +1,84 @@
 .app-header {
+    &__brand {
+        display: inline-flex;
+        align-items: center;
+        min-height: 40px;
+        flex: 0 0 auto;
+    }
+
+    &__admin-mode-shortcut {
+        display: inline-flex;
+        justify-content: center;
+        align-items: center;
+        width: 20px;
+        height: 28px;
+        padding: 0;
+        margin-inline-start: 1px;
+        margin-inline-end: 1.2rem;
+        color: var(--text-general, #222);
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+        font-size: 1.2rem;
+        font-weight: 800;
+        opacity: 0.65;
+        background: transparent;
+        border: none;
+        cursor: pointer;
+    }
+
+    &__admin-mode-shortcut:hover,
+    &__admin-mode-shortcut:focus-visible {
+        opacity: 1;
+    }
+
     &__logo {
-        padding-inline-start: 3.2rem;
-        padding-inline-end: 2rem;
-        height: 32px;
+        padding-inline-start: 2.4rem;
+        padding-inline-end: 0.4rem;
+        min-height: 40px;
         display: flex;
         align-items: center;
+        text-decoration: none;
 
         &-text {
             margin-left: 8px;
         }
+    }
+}
+
+.apex-brand-logo {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.8rem;
+    max-width: 100%;
+    min-width: 0;
+    vertical-align: middle;
+    white-space: nowrap;
+
+    &__mark {
+        display: block;
+        width: auto;
+        height: 100%;
+        aspect-ratio: 1;
+        flex: none;
+        object-fit: contain;
+        background: #000;
+        border-radius: 3px;
+    }
+
+    &__text {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+        font-size: 1.45rem;
+        line-height: 1.15;
+        font-weight: 800;
+        letter-spacing: 0.015em;
+        color: var(--text-general, #222);
+        text-transform: uppercase;
+    }
+}
+
+.mobile-menu__header .apex-brand-logo {
+    gap: 0.6rem;
+
+    &__text {
+        font-size: 1.2rem;
     }
 }

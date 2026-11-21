@@ -171,4 +171,43 @@ describe('Bulk Trader correlated Deriv request safety', () => {
             status: 'failed', stop: true, requiresStatementCheck: false,
         });
     });
+
+    it('accepts an authoritative proposal from the send promise when onMessage has no reply', async () => {
+        const ws = makeMockApi();
+        const pending = requestBulkApi({
+            api: ws.api, payload: { proposal: 1, amount: 0.5 },
+            reqId: 1010, timeout: 1000,
+        });
+        await flush();
+        ws.pending[0].resolve({ req_id: 1010, msg_type: 'proposal', proposal: { id: 'broker-id', ask_price: '0.51' } });
+        await expect(pending).resolves.toMatchObject({ proposal: { ask_price: '0.51' } });
+        expect(ws.sent).toHaveLength(1);
+        expect(ws.listeners.size).toBe(0);
+    });
+
+    it('accepts a buy acknowledgement from the send promise without purchasing again', async () => {
+        const ws = makeMockApi();
+        const pending = requestBulkApi({
+            api: ws.api, payload: { buy: 'broker-id', price: 0.51 },
+            reqId: 1011, timeout: 1000,
+        });
+        await flush();
+        ws.pending[0].resolve({ req_id: 1011, msg_type: 'buy', buy: { contract_id: 100011 } });
+        await expect(pending).resolves.toMatchObject({ buy: { contract_id: 100011 } });
+        expect(ws.sent.filter(x => x.buy)).toHaveLength(1);
+    });
+
+    it('ignores replies from other requests before accepting the matching req_id', async () => {
+        const ws = makeMockApi();
+        const pending = requestBulkApi({
+            api: ws.api, payload: { buy: 'broker-id', price: 0.5 },
+            reqId: 1012, timeout: 1000,
+        });
+        await flush();
+        ws.pending[0].resolve({ req_id: 9876, buy: { contract_id: 9876 } });
+        ws.reply(1012, { buy: { contract_id: 1012 } });
+        await expect(pending).resolves.toMatchObject({ buy: { contract_id: 1012 } });
+        expect(ws.sent).toHaveLength(1);
+    });
+
 });

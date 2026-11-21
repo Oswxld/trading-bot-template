@@ -3,6 +3,7 @@ import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import {
     enterAdminTest,
     ADMIN_TEST_MANAGE_EVENT,
+    ADMIN_TEST_OPEN_EVENT,
     exitAdminTest,
     getAdminTestBalances,
     getAdminTestExecutionMode,
@@ -47,15 +48,23 @@ export default function AdminTestKit() {
         }, 3000);
     };
     useEffect(() => {
-        const openManage = () => {
-            if (isAdminTestActive()) {
-                setError('');
-                setOpened(true);
-            }
+        // Dialog opens only by explicit user action: dot or Dashboard hold.
+        // Simulated mode can start automatically without displaying this panel.
+        // The dashboard shortcut must behave exactly like the existing dot:
+        // show the password entry when inactive, or the controls when active.
+        const openPanel = () => {
+            setPassword('');
+            setError('');
+            setOpened(true);
         };
+        const openManage = () => {
+            if (isAdminTestActive()) openPanel();
+        };
+        window.addEventListener(ADMIN_TEST_OPEN_EVENT, openPanel);
         window.addEventListener(ADMIN_TEST_MANAGE_EVENT, openManage);
         return () => {
             if (holdTimer.current !== null) clearTimeout(holdTimer.current);
+            window.removeEventListener(ADMIN_TEST_OPEN_EVENT, openPanel);
             window.removeEventListener(ADMIN_TEST_MANAGE_EVENT, openManage);
         };
     }, []);

@@ -59,22 +59,19 @@ const getDefaultServerURL = () => {
  * 4. Get default account (first from list)
  * 5. Fetch OTP and WebSocket URL for that account
  *
- * @returns Promise with WebSocket URL or fallback to default server
+ * @returns Public URL when logged out, or the authenticated account's OTP WebSocket URL
  */
 export const getSocketURL = async (): Promise<string> => {
-    try {
-        // Check if user is authenticated
-        const authInfo = OAuthTokenExchangeService.getAuthInfo();
-        if (!authInfo || !authInfo.access_token) {
-            return getDefaultServerURL();
-        }
+    const authInfo = OAuthTokenExchangeService.getAuthInfo();
+    if (!authInfo?.access_token) return getDefaultServerURL();
 
-        // Use the DerivWSAccountsService to get authenticated WebSocket URL
-        const wsUrl = await DerivWSAccountsService.getAuthenticatedWebSocketURL(authInfo.access_token);
-        return wsUrl;
+    try {
+        return await DerivWSAccountsService.getAuthenticatedWebSocketURL(authInfo.access_token);
     } catch (error) {
-        console.error('[DerivWS] Error in getSocketURL:', error);
-        return getDefaultServerURL();
+        // A public market-data socket cannot read private balances. Do not
+        // hide a failed authenticated connection behind a misleading $0.00.
+        console.error('[DerivWS] Authenticated account connection failed:', error);
+        throw error;
     }
 };
 
@@ -222,6 +219,19 @@ export const clearCSRFToken = (): void => {
     sessionStorage.removeItem('oauth_csrf_token_timestamp');
 };
 
+/**
+ * Exact public OAuth callback registered with Deriv for Apex Wealth.
+ * The Vercel apex-to-www redirect is currently enabled, so users visit www,
+ * but authorization and code exchange must both use the registered apex URL.
+ * Other hosts (including localhost) keep their own origin for development.
+ */
+export const getOAuthRedirectURI = (): string => {
+    if (['apexwealth.site', 'www.apexwealth.site'].includes(window.location.hostname)) {
+        return 'https://apexwealth.site';
+    }
+    return window.location.origin;
+};
+
 export const generateOAuthURL = async (prompt?: string) => {
     try {
         // Use brand config for login URLs
@@ -244,9 +254,11 @@ export const generateOAuthURL = async (prompt?: string) => {
             storeCodeVerifier(codeVerifier);
 
             // Build redirect URL
-            const protocol = window.location.protocol;
-            const host = window.location.host;
-            const redirectUrl = `${protocol}//${host}`;
+            // On Apex Wealth, the public apex URL is the Deriv-registered callback.
+            // Vercel currently forwards that URL to www; the browser retains its
+            // PKCE/CSRF data on www and gets the same callback query parameters.
+            // OAuth must still advertise the registered (non-www) URI.
+            const redirectUrl = getOAuthRedirectURI();
             const scopes = 'trade';
 
             // Build OAuth URL with PKCE parameters

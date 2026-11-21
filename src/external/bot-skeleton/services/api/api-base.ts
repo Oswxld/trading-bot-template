@@ -1,5 +1,6 @@
 /* [AI] - Analytics removed - utility functions moved to @/utils/account-helpers */
 import { getAccountId, getAccountType, isDemoAccount, removeUrlParameter } from '@/utils/account-helpers';
+import { parseFiniteBalance } from '@/utils/balance-utils';
 /* [/AI] */
 import CommonStore from '@/stores/common-store';
 import { DerivWSAccountsService } from '@/services/derivws-accounts.service';
@@ -377,20 +378,31 @@ class APIBase {
                 return { ...error, localizedMessage: errorMessage };
             }
 
-            this.account_info = {
-                balance: balance?.balance,
-                currency: balance?.currency,
-                loginid: balance?.loginid,
-            };
-            this.token = balance?.loginid;
+            const liveAccount = !isAdminTestActive();
+            const brokerBalance = liveAccount ? parseFiniteBalance(balance?.balance) : null;
+            const authorizedLoginId = balance?.loginid || (liveAccount ? this.account_id : '');
+            if (liveAccount && (
+                brokerBalance === null ||
+                !authorizedLoginId ||
+                (balance?.loginid && this.account_id && balance.loginid !== this.account_id)
+            )) {
+                throw new Error('Deriv did not return a valid balance for the selected account.');
+            }
 
-            const account_type = getAccountType(balance?.loginid);
-            const currentAccount = balance?.loginid
+            this.account_info = {
+                balance: brokerBalance ?? balance?.balance,
+                currency: balance?.currency,
+                loginid: authorizedLoginId,
+            };
+            this.token = authorizedLoginId;
+
+            const account_type = getAccountType(authorizedLoginId);
+            const currentAccount = authorizedLoginId
                 ? {
-                      balance: balance.balance,
-                      currency: balance.currency || 'USD',
+                      balance: brokerBalance ?? balance?.balance ?? 0,
+                      currency: balance?.currency || 'USD',
                       is_virtual: account_type === 'real' ? 0 : 1,
-                      loginid: balance.loginid,
+                      loginid: authorizedLoginId,
                   }
                 : null;
 
@@ -402,7 +414,11 @@ class APIBase {
                     ? storedAccounts
                           .filter(a => !a.status || a.status === 'active')
                           .map(a => ({
-                              balance: parseFloat(a.balance) || 0,
+                              // The selected account is refreshed by its live, OTP-bound
+                              // broker response, not an earlier REST snapshot.
+                              balance: liveAccount && a.account_id === authorizedLoginId
+                                  ? brokerBalance ?? 0
+                                  : parseFiniteBalance(a.balance) ?? 0,
                               currency: a.currency || 'USD',
                               is_virtual: a.account_type === 'demo' ? 1 : 0,
                               loginid: a.account_id,
@@ -413,15 +429,15 @@ class APIBase {
 
             setAccountList(accountList); // Observable stream
             setAuthData({
-                balance: balance?.balance,
+                balance: brokerBalance ?? balance?.balance,
                 currency: balance?.currency,
-                loginid: balance?.loginid,
+                loginid: authorizedLoginId,
                 is_virtual: account_type === 'real' ? 0 : 1,
                 account_list: accountList,
             });
 
             // // Set account_type in localStorage based on loginid prefix using centralized utility
-            const loginid = balance?.loginid || '';
+            const loginid = authorizedLoginId;
             const isDemo = isDemoAccount(loginid);
 
             if (isDemo) {
@@ -433,17 +449,17 @@ class APIBase {
             globalObserver.emit('api.authorize', {
                 account_list: accountList,
                 current_account: {
-                    loginid: balance?.loginid,
+                    loginid: authorizedLoginId,
                     currency: balance?.currency || 'USD',
                     is_virtual: account_type === 'real' ? 0 : 1,
-                    balance: typeof balance?.balance === 'number' ? balance.balance : undefined,
+                    balance: brokerBalance ?? (typeof balance?.balance === 'number' ? balance.balance : undefined),
                 },
             });
 
             // Update the WebSocket login ID in the client store
             const currentClientStore = globalObserver.getState('client.store');
-            if (currentClientStore && balance?.loginid) {
-                currentClientStore.setWebSocketLoginId(balance.loginid);
+            if (currentClientStore && authorizedLoginId) {
+                currentClientStore.setWebSocketLoginId(authorizedLoginId);
             }
 
             setIsAuthorized(true);
@@ -451,8 +467,8 @@ class APIBase {
             localStorage.setItem('client_account_details', JSON.stringify(accountList));
             localStorage.setItem('client.country', balance?.country);
 
-            if (balance?.loginid) {
-                localStorage.setItem('active_loginid', balance.loginid);
+            if (authorizedLoginId) {
+                localStorage.setItem('active_loginid', authorizedLoginId);
             }
 
             if (this.has_active_symbols) {

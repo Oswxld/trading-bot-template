@@ -233,43 +233,28 @@ export class DerivWSAccountsService {
     }
 
     /**
-     * Complete flow to get authenticated WebSocket URL with optimized caching
-     * 1. Check if accounts are already in sessionStorage (skip fetch on refresh)
-     * 2. If not in storage, fetch accounts list
-     * 3. Store accounts in sessionStorage
-     * 4. Get default account (first from list)
-     * 5. Fetch OTP and WebSocket URL for that account (always fresh OTP)
+     * Get a fresh authenticated account list before issuing an account-bound OTP.
+     * Cached account balances are only a snapshot and may predate a transfer.
+     * Never silently connect a different account if the selected one disappears.
      *
      * @param accessToken Bearer token from OAuth authentication
      * @returns Promise with WebSocket URL
      */
     static async getAuthenticatedWebSocketURL(accessToken: string): Promise<string> {
         try {
-            let accounts: DerivAccount[] | null = null;
+            // A fresh list is essential when a user transfers funds while signed in,
+            // or switches between the demo and funded real Options account.
+            const accounts = await this.fetchAccountsList(accessToken);
+            if (!accounts.length) throw new Error('No Deriv Options accounts available');
 
-            // Step 1: Check if accounts are already stored (optimization for refresh)
-            const storedAccounts = this.getStoredAccounts();
-            if (storedAccounts && storedAccounts.length > 0) {
-                accounts = storedAccounts;
-            } else {
-                // Step 2: Fetch accounts list if not in storage
-                accounts = await this.fetchAccountsList(accessToken);
-
-                if (!accounts || accounts.length === 0) {
-                    throw new Error('No accounts available');
-                }
+            const activeLoginId = localStorage.getItem('active_loginid');
+            const selected = activeLoginId ? accounts.find(a => a.account_id === activeLoginId) : accounts[0];
+            if (!selected) {
+                throw new Error('Selected Deriv account is no longer available. Please sign in again.');
             }
 
-            // Step 3: Resolve which account to connect as.
-            // On an account switch the caller has already written the new loginid to
-            // localStorage before triggering a WebSocket regeneration, so we honour
-            // that selection here instead of always falling back to accounts[0].
-            const activeLoginId = localStorage.getItem('active_loginid');
-            const targetAccount =
-                (activeLoginId && accounts.find(a => a.account_id === activeLoginId)) || accounts[0];
-
-            // Step 4: Fetch OTP and WebSocket URL for the resolved account (always fresh OTP)
-            const websocketURL = await this.fetchOTPWebSocketURL(accessToken, targetAccount.account_id);
+            // The OTP is bound to exactly the selected account; no demo fallback.
+            const websocketURL = await this.fetchOTPWebSocketURL(accessToken, selected.account_id);
             return websocketURL;
         } catch (error) {
             console.error('[DerivWS] Error in authenticated WebSocket URL flow:', error);

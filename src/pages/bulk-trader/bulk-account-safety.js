@@ -1,10 +1,8 @@
 /** Fail closed on missing account type or currency; never guess mode from ID prefix. */
+// Operational batch/concurrency bounds, not spending limits.
 export const REAL_LIMITS = Object.freeze({
     trades: 50,
-    concurrent: 2,
-    stake: 10,
-    batch: 100,
-    percent: 0.1,
+    concurrent: 5,
 });
 
 /**
@@ -43,9 +41,8 @@ export const identifyBulkAccount = (account, id, {
 };
 
 /**
- * Real orders require a fresh balance response on the selected authenticated
- * WebSocket. The intended aggregate stake is capped to 10% of funds and by
- * absolute account-currency limits. These controls do not prevent market loss.
+ * Verify broker account and currency before real purchases; leave the requested
+ * stake and aggregate exposure to the user and Deriv's account/market checks.
  */
 export const checkRealExposure = ({
     stake, quantity, balance, receivedCurrency, receivedAccount, accountId, currency,
@@ -59,17 +56,13 @@ export const checkRealExposure = ({
     if (!Number.isFinite(available) || available <= 0) {
         return fail('A positive, freshly verified account balance is required to trade real money.');
     }
-    if (!Number.isFinite(stake) || stake <= 0 || stake > REAL_LIMITS.stake ||
+    if (!Number.isFinite(stake) || stake <= 0 ||
         !Number.isInteger(quantity) || quantity < 1 || quantity > REAL_LIMITS.trades) {
-        return fail('Stake or number of real-account trades exceeds safety limits.');
+        return fail('Enter a positive stake and 1–50 trades.');
     }
     const exposure = stake * quantity;
-    if (!Number.isFinite(exposure) || exposure > REAL_LIMITS.batch + 1e-8) {
-        return fail(`Total real-account stake must not exceed ${REAL_LIMITS.batch} ${currency}.`);
+    if (!Number.isFinite(exposure) || exposure <= 0) {
+        return fail('Total stake must be a finite positive amount.');
     }
-    const permitted = Math.min(REAL_LIMITS.batch, available * REAL_LIMITS.percent);
-    if (exposure > permitted + 1e-8) {
-        return fail(`Total stake ${exposure.toFixed(2)} ${currency} exceeds 10% of account balance (${permitted.toFixed(2)} ${currency}).`);
-    }
-    return { allowed: true, exposure, available, permitted };
+    return { allowed: true, exposure, available };
 };

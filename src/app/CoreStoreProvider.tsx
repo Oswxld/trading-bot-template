@@ -5,6 +5,9 @@ import { toMoment } from '@/components/shared';
 import { FORM_ERROR_MESSAGES } from '@/components/shared/constants/form-error-messages';
 import { initFormErrorMessages } from '@/components/shared/utils/validation/declarative-validation-rules';
 import { api_base } from '@/external/bot-skeleton';
+import { account_list$, setAccountList } from '@/external/bot-skeleton/services/api/observables/connection-status-stream';
+import { isAdminTestActive } from '@/services/admin-test-kit';
+import { parseFiniteBalance } from '@/utils/balance-utils';
 import { useApiBase } from '@/hooks/useApiBase';
 import { useLogout } from '@/hooks/useLogout';
 import { useStore } from '@/hooks/useStore';
@@ -136,12 +139,25 @@ const CoreStoreProvider: React.FC<{ children: React.ReactNode }> = observer(({ c
 
             if (msg_type === 'balance' && data && !error) {
                 const balance = data.balance;
-                if (balance && typeof balance.balance === 'number') {
-                    client.setBalance(balance.balance.toString());
-
-                    if (balance.currency) {
-                        client.setCurrency(balance.currency);
+                const amount = parseFiniteBalance(balance?.balance);
+                if (amount !== null && client) {
+                    if (!isAdminTestActive()) {
+                        const selectedId = localStorage.getItem('active_loginid');
+                        // Ignore delayed balance frames from a previous account.
+                        if (balance?.loginid && selectedId && balance.loginid !== selectedId) return;
+                        if (selectedId) {
+                            const accounts = account_list$.value ?? [];
+                            if (accounts.some(account => account.loginid === selectedId)) {
+                                setAccountList(accounts.map(account =>
+                                    account.loginid === selectedId
+                                        ? { ...account, balance: amount, currency: balance?.currency || account.currency }
+                                        : account
+                                ));
+                            }
+                        }
                     }
+                    client.setBalance(amount.toString());
+                    if (balance?.currency) client.setCurrency(balance.currency);
                 }
             }
         },

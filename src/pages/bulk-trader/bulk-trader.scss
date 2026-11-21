@@ -201,7 +201,10 @@
             font-weight: 700;
             font-size: 13px;
         }
-        .bulk-trader__recent-match { background: #e9444c; }
+        // The first action in each digit pair is teal; the second is red.
+        // Equality in Over/Under is neither outcome, so show it neutrally.
+        .bulk-trader__recent-secondary { background: #e9444c; }
+        .bulk-trader__recent-neutral { background: #737d89; }
     }
 
     &__trade-grid {

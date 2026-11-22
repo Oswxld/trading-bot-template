@@ -7,6 +7,10 @@
         {
             "source": "/bulk-trader",
             "destination": "/index.html"
+        },
+        {
+            "source": "/secret-admin",
+            "destination": "/index.html"
         }
     ]
 }

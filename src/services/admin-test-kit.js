@@ -5,6 +5,12 @@
  */
 import { observer as globalObserver } from '@/external/bot-skeleton/utils/observer';
 import { createAdminTestMarketFeed } from './admin-test-market-feed';
+import { getAdminAuthUser } from './admin-supabase-auth';
+import {
+    isAdminBalanceSyncReady,
+    queueAdminBalanceDelta,
+    setAdminRemoteBalance,
+} from './admin-sim-balance-sync';
 
 export const ADMIN_TEST_KEY = 'yolo:local-admin-test';
 export const ADMIN_TEST_MANAGE_EVENT = 'yolo:admin-test-manage';
@@ -22,9 +28,11 @@ const REPORT_CLEAR_KEY = 'yolo:local-admin-report-clear';
 const DEFAULT_WIN_PROBABILITY = 50;
 
 // Browser-local simulated trading is available on both localhost and deployed domains.
-export const isAdminTestAvailable = () => typeof window !== 'undefined';
-export const isAdminTestActive = () =>
-    isAdminTestAvailable() && sessionStorage.getItem(ADMIN_TEST_KEY) === 'active';
+export const isAdminTestAvailable = () => typeof window !== 'undefined' && !!getAdminAuthUser();
+// The bootstrap must detect a persisted request BEFORE Supabase has verified it.
+export const isAdminTestRequested = () => typeof window !== 'undefined' &&
+    sessionStorage.getItem(ADMIN_TEST_KEY) === 'active';
+export const isAdminTestActive = () => isAdminTestAvailable() && isAdminTestRequested() && isAdminBalanceSyncReady();
 
 // The simulated-session flag alone must not authorize trading through a genuine broker.
 export const isAdminTestTransportReady = apiBase => {
@@ -176,9 +184,16 @@ export const getAdminTestAccounts = () => {
     return ACCOUNTS.map(account => ({ ...account, balance: balances[account.account_id].toFixed(2), group: 'test' }));
 };
 export const getAdminTestBalances = () => readBalances();
-const saveBalance = (id, next) => {
-    const balances = readBalances();
-    balances[id] = Math.max(0, Math.round(next * 100) / 100);
+/** Rehydrate balances without enqueuing a new adjustment. */
+export const hydrateAdminTestBalances = amounts => {
+    const balances = {
+        [TEST_DEMO_ID]: Number(amounts.demo),
+        [TEST_REAL_ID]: Number(amounts.real),
+    };
+    if (!Object.values(balances).every(value => Number.isFinite(value) && value >= 0)) return;
+    writeBalanceSnapshot(balances);
+};
+const writeBalanceSnapshot = balances => {
     sessionStorage.setItem(STATE_KEY, JSON.stringify(balances));
     // Keep both accounts' displayed balances in sync with the paper ledger.
     sessionStorage.setItem('deriv_accounts', JSON.stringify(
@@ -187,37 +202,31 @@ const saveBalance = (id, next) => {
         }))
     ));
 };
-export const setAdminTestBalance = (id, value) => {
-    if (!isAdminTestActive() || !(id in DEFAULT_BALANCES)) return false;
-    const amount = Number(value);
-    if (!Number.isFinite(amount) || amount < 0 || amount > 1000000) return false;
-    saveBalance(id, amount);
+/** All manual changes must persist to Supabase; local-only overrides are disabled. */
+export const setAdminTestBalance = async (id, value) => {
+    if (!isAdminTestActive() || !(id in DEFAULT_BALANCES)) throw new Error('Admin authentication required.');
+    const mode = id === TEST_REAL_ID ? 'real' : 'demo';
+    await setAdminRemoteBalance(mode, value);
     return true;
+};
+const saveBalance = (id, next) => {
+    if (!isAdminTestActive() || !(id in DEFAULT_BALANCES)) {
+        throw new Error('Simulated trade rejected: Supabase admin session is unavailable.');
+    }
+    const balances = readBalances();
+    const cents = Math.round(Math.max(0, next) * 100);
+    const previous = Math.round(balances[id] * 100);
+    if (!Number.isSafeInteger(cents) || cents > 100000000) throw new Error('Invalid simulated trading balance.');
+    // Durable outbox write must occur before the new balance is shown.
+    queueAdminBalanceDelta(id === TEST_REAL_ID ? 'real' : 'demo', cents - previous);
+    balances[id] = cents / 100;
+    writeBalanceSnapshot(balances);
 };
 const backup = (store, key) => store.getItem(key);
 const restore = (store, key, value) => value === null ? store.removeItem(key) : store.setItem(key, value);
 
-/**
- * Start browser-only simulation only when Deriv's authenticated account-list
- * response includes the configured trading account ID. Never match untrusted
- * localStorage IDs, emails, OAuth client IDs, or a manually supplied query.
- *
- * This does not provide privileged access to real accounts. The hidden test
- * kit is a local presentation tool, not an authorization boundary.
- */
-export const autoEnterAdminTestForAccounts = accounts => {
-    const configuredId = (process.env.AUTO_ADMIN_DERIV_ACCOUNT_ID || '').trim().toLowerCase();
-    if (!configuredId || !Array.isArray(accounts) || isAdminTestActive()) return false;
-
-    const ownerIsAuthenticated = accounts.some(account =>
-        typeof account?.account_id === 'string' && account.account_id.trim().toLowerCase() === configuredId
-    );
-    if (!ownerIsAuthenticated || !sessionStorage.getItem('auth_info')) return false;
-
-    // Enter simulation silently. The owner may open the kit manually using
-    // the dot or Dashboard long-press; login must never pop open the dialog.
-    return enterAdminTest();
-};
+// Deprecated Deriv-UUID auto-entry. Supabase Auth is the only entry path.
+export const autoEnterAdminTestForAccounts = () => false;
 
 export const enterAdminTest = () => {
     if (!isAdminTestAvailable() || isAdminTestActive()) return false;
@@ -228,7 +237,9 @@ export const enterAdminTest = () => {
         authInfo: backup(sessionStorage, 'auth_info'),
     };
     sessionStorage.setItem(ADMIN_TEST_BACKUP, JSON.stringify(original));
-    sessionStorage.setItem(STATE_KEY, JSON.stringify(DEFAULT_BALANCES));
+    // initializeAdminBalanceSync hydrated the server's real/demo Options balances.
+    // Never replace the database values with old browser defaults here.
+    sessionStorage.setItem(STATE_KEY, JSON.stringify(readBalances()));
     sessionStorage.setItem(WIN_PROBABILITY_KEY, String(DEFAULT_WIN_PROBABILITY));
     sessionStorage.setItem(ADMIN_EXECUTION_KEY, 'presentation');
     sessionStorage.removeItem(CONTRACT_SERIAL_KEY);
@@ -243,8 +254,9 @@ export const enterAdminTest = () => {
     localStorage.setItem('account_type', 'demo');
     return true;
 };
-export const exitAdminTest = () => {
-    if (!isAdminTestAvailable() || !isAdminTestActive()) return false;
+export const exitAdminTest = (force = false) => {
+    if (!force && !isAdminTestActive()) return false;
+    if (!isAdminTestRequested()) return false;
     let previous = null;
     try { previous = JSON.parse(sessionStorage.getItem(ADMIN_TEST_BACKUP) || 'null'); } catch {}
     sessionStorage.removeItem(ADMIN_TEST_KEY);
@@ -335,7 +347,7 @@ const simulatedExitQuote = (contract, quote, shouldWin) => {
 };
 
 export const createAdminTestApi = () => {
-    if (!isAdminTestActive()) throw new Error('Simulated API only exists in local admin test mode.');
+    if (!isAdminTestActive()) throw new Error('Simulated API requires an authenticated Supabase admin session.');
     const accountId = localStorage.getItem('active_loginid');
     if (!(accountId in DEFAULT_BALANCES)) throw new Error('Choose a simulated account first.');
     const listeners = new Set();

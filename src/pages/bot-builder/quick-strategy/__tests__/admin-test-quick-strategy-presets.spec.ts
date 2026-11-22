@@ -1,3 +1,14 @@
+
+/** Legacy simulator fixtures use a mocked, verified Supabase session. */
+jest.mock('@/services/admin-supabase-auth', () => ({
+    getAdminAuthUser: jest.fn(() => ({ id: '123e4567-e89b-42d3-a456-426614174000' })),
+}));
+jest.mock('@/services/admin-sim-balance-sync', () => ({
+    isAdminBalanceSyncReady: jest.fn(() => true),
+    queueAdminBalanceDelta: jest.fn(),
+    setAdminRemoteBalance: jest.fn(async () => undefined),
+}));
+
 import { readFileSync } from 'fs';
 import path from 'path';
 import { STRATEGIES } from '../config';

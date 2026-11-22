@@ -9,6 +9,10 @@ import { useLanguageFromURL } from '@/hooks/useLanguageFromURL';
 import { useOAuthCallback } from '@/hooks/useOAuthCallback';
 import { StoreProvider } from '@/hooks/useStore';
 import { OAuthTokenExchangeService } from '@/services/oauth-token-exchange.service';
+import { restoreAdminAuth } from '@/services/admin-supabase-auth';
+import { initializeAdminBalanceSync } from '@/services/admin-sim-balance-sync';
+import { exitAdminTest, hydrateAdminTestBalances, isAdminTestRequested } from '@/services/admin-test-kit';
+import SecretAdmin from '@/pages/secret-admin/secret-admin';
 import { initializeI18n, localize, TranslationProvider } from '@deriv-com/translations';
 import CoreStoreProvider from './CoreStoreProvider';
 import './app-root.scss';
@@ -31,6 +35,8 @@ const LanguageHandler = ({ children }: { children: React.ReactNode }) => {
 
 const router = createBrowserRouter(
     createRoutesFromElements(
+        <>
+        <Route path='/secret-admin' element={<SecretAdmin />} />
         <Route
             path='/'
             element={
@@ -56,8 +62,36 @@ const router = createBrowserRouter(
             <Route index element={<AppRoot />} />
             <Route path='bulk-trader' element={<Navigate to='/#bulk_trader' replace />} />
         </Route>
+        </>
     )
 );
+
+/** Always verify the Supabase access token and restore queued balances before
+ * any simulated Deriv socket, Bot Builder or Bulk Trader is mounted.
+ */
+const AdminSessionGate = ({ children }: { children: React.ReactNode }) => {
+    const [ready, setReady] = React.useState(() => !isAdminTestRequested());
+    React.useEffect(() => {
+        if (!isAdminTestRequested()) return;
+        let mounted = true;
+        void (async () => {
+            try {
+                const user = await restoreAdminAuth();
+                if (!user) throw new Error('Admin login expired');
+                await initializeAdminBalanceSync(hydrateAdminTestBalances);
+            } catch (error) {
+                console.warn('Supabase admin session could not be restored:', error);
+                // Never allow a cached browser flag to start the simulated transport.
+                exitAdminTest(true);
+            } finally {
+                if (mounted) setReady(true);
+            }
+        })();
+        return () => { mounted = false; };
+    }, []);
+    if (!ready) return <ChunkLoader message='Verifying simulated admin session…' />;
+    return <>{children}</>;
+};
 
 /**
  * Main App component
@@ -84,11 +118,6 @@ function App() {
                 .then(response => {
                     if (response.access_token) {
                         cleanupURL();
-                        // Only after the OAuth code is removed, restart with the
-                        // locally simulated transport and open the kit once.
-                        if (response.admin_auto_simulation) {
-                            window.location.reload();
-                        }
                     } else if (response.error) {
                         console.error('❌ Token exchange failed:', response.error);
                         console.error('Error description:', response.error_description);
@@ -106,7 +135,7 @@ function App() {
         }
     }, [isProcessing, isValid, params.code, error, cleanupURL]);
 
-    return <RouterProvider router={router} />;
+    return <AdminSessionGate><RouterProvider router={router} /></AdminSessionGate>;
 }
 
 export default App;

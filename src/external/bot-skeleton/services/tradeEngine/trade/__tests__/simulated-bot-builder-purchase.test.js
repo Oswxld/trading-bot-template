@@ -1,3 +1,16 @@
+
+/** Legacy simulated-engine fixtures run under a verified mock Supabase session.
+ * Production never grants Admin Test Kit access without real Supabase Auth.
+ */
+jest.mock('@/services/admin-supabase-auth', () => ({
+    getAdminAuthUser: jest.fn(() => ({ id: '123e4567-e89b-42d3-a456-426614174000' })),
+}));
+jest.mock('@/services/admin-sim-balance-sync', () => ({
+    isAdminBalanceSyncReady: jest.fn(() => true),
+    queueAdminBalanceDelta: jest.fn(),
+    setAdminRemoteBalance: jest.fn(async () => undefined),
+}));
+
 import TradeEngine from '../index';
 import { createScope } from '../../utils/cliTools';
 import { start, purchaseSuccessful, sell } from '../state/actions';

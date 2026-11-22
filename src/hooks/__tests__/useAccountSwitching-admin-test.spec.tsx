@@ -1,3 +1,14 @@
+
+/** Legacy simulator fixtures use a mocked, verified Supabase session. */
+jest.mock('@/services/admin-supabase-auth', () => ({
+    getAdminAuthUser: jest.fn(() => ({ id: '123e4567-e89b-42d3-a456-426614174000' })),
+}));
+jest.mock('@/services/admin-sim-balance-sync', () => ({
+    isAdminBalanceSyncReady: jest.fn(() => true),
+    queueAdminBalanceDelta: jest.fn(),
+    setAdminRemoteBalance: jest.fn(async () => undefined),
+}));
+
 import { renderHook } from '@testing-library/react';
 import { enterAdminTest, exitAdminTest, switchAdminTestAccount, TEST_DEMO_ID, TEST_REAL_ID } from '@/services/admin-test-kit';
 import { getAccountId } from '@/utils/account-helpers';
@@ -56,6 +67,15 @@ describe('account switching isolation for the Admin Test Kit', () => {
 
         expect(getAccountId()).toBe(TEST_REAL_ID);
         expect(localStorage.getItem('active_loginid')).toBe(TEST_REAL_ID);
+    });
+
+    it('does not replace the simulated account while a Supabase session is still being verified', () => {
+        window.history.replaceState({}, '', '/?account=USD');
+        sessionStorage.setItem('yolo:local-admin-test', 'active');
+        localStorage.setItem('active_loginid', TEST_REAL_ID);
+        renderHook(() => useAccountSwitching());
+        expect(localStorage.getItem('active_loginid')).toBe(TEST_REAL_ID);
+        expect(localStorage.getItem('authToken')).toBeNull();
     });
 
     it('preserves ordinary Deriv account switching when Admin Test Kit is off', () => {

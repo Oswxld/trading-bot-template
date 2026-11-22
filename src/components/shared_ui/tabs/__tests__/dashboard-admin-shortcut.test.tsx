@@ -3,6 +3,7 @@ import Tab from '../tab';
 
 jest.mock('@/services/admin-test-kit', () => ({
     ADMIN_TEST_OPEN_EVENT: 'yolo:admin-test-open',
+    isAdminTestActive: jest.fn(() => true),
 }));
 jest.mock('@/utils/tmp/dummy', () => ({ Icon: () => null }));
 jest.mock('../../counter', () => () => null);
@@ -25,6 +26,8 @@ describe('Dashboard shortcut to existing Admin Test Kit', () => {
     beforeEach(() => {
         jest.useFakeTimers();
         dashboardProps.onClick.mockClear();
+        const { isAdminTestActive } = require('@/services/admin-test-kit');
+        isAdminTestActive.mockReturnValue(true);
         onAdminOpen.mockClear();
         window.addEventListener('yolo:admin-test-open', onAdminOpen);
     });
@@ -70,6 +73,17 @@ describe('Dashboard shortcut to existing Admin Test Kit', () => {
         fireEvent.pointerMove(dashboard, { pointerType: 'touch', clientX: 50, clientY: 50 });
         act(() => jest.advanceTimersByTime(3100));
         expect(onAdminOpen).not.toHaveBeenCalled();
+    });
+
+    it('never activates the dashboard shortcut for an unauthenticated visitor', () => {
+        const { isAdminTestActive } = require('@/services/admin-test-kit');
+        isAdminTestActive.mockReturnValue(false);
+        render(<Tab {...dashboardProps} />);
+        const dashboard = screen.getByText('Dashboard');
+        fireEvent.pointerDown(dashboard, { pointerType: 'mouse', button: 0 });
+        act(() => jest.advanceTimersByTime(4000));
+        expect(onAdminOpen).not.toHaveBeenCalled();
+        isAdminTestActive.mockReturnValue(true);
     });
 
     it('does not add the shortcut to any other tab', () => {

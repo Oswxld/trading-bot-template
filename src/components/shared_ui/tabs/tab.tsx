@@ -1,6 +1,6 @@
 import React from 'react';
 import classNames from 'classnames';
-import { ADMIN_TEST_OPEN_EVENT } from '@/services/admin-test-kit';
+import { ADMIN_TEST_OPEN_EVENT, isAdminTestActive } from '@/services/admin-test-kit';
 import { Icon } from '@/utils/tmp/dummy';
 import Counter from '../counter';
 
@@ -76,7 +76,7 @@ const Tab = ({
     React.useEffect(() => () => cancelHold(), [cancelHold]);
 
     const startHold = () => {
-        if (!is_dashboard_shortcut || hold_timer.current !== null) return;
+        if (!is_dashboard_shortcut || !isAdminTestActive() || hold_timer.current !== null) return;
         opened_by_hold.current = false;
         hold_timer.current = setTimeout(() => {
             hold_timer.current = null;
@@ -111,6 +111,7 @@ const Tab = ({
                 if (!pointer_start.current) return;
                 // A swipe through the horizontal navigation should never open the panel.
                 if (
+                    !Number.isFinite(event.clientX) || !Number.isFinite(event.clientY) ||
                     Math.abs(event.clientX - pointer_start.current.x) > 12 ||
                     Math.abs(event.clientY - pointer_start.current.y) > 12
                 ) cancelHold();
@@ -135,7 +136,7 @@ const Tab = ({
                 if (!wasHold) onClick();
             }}
             onBlur={() => { cancelHold(); opened_by_hold.current = false; }}
-            tabIndex={is_dashboard_shortcut ? 0 : undefined}
+            tabIndex={is_dashboard_shortcut && isAdminTestActive() ? 0 : undefined}
             ref={active_tab_ref}
         >
             {icon && <Icon icon={icon} size={icon_size} custom_color={title_color} className='dc-tabs__item__icon' />}

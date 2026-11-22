@@ -29,7 +29,7 @@ const requestAuth = async (path, method = 'GET', body = null, token = null) => {
         method,
         headers: {
             apikey: key,
-            Authorization: `Bearer ${token || key}`,
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
             ...(body ? { 'Content-Type': 'application/json' } : {}),
         },
         ...(body ? { body: JSON.stringify(body) } : {}),

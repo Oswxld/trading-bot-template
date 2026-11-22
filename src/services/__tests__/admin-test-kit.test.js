@@ -17,7 +17,7 @@ import {
     autoEnterAdminTestForAccounts,
     switchAdminTestAccount, setAdminTestBalance,
     setAdminTestWinProbability, getAdminTestWinProbability,
-    getAdminTestBalances, getAdminTestAccounts, createAdminTestApi,
+    getAdminTestBalances, getAdminTestAccounts, hydrateAdminTestBalances, createAdminTestApi,
     isAdminTestTransportReady, isAdminTestSessionReady,
 } from '../admin-test-kit';
 
@@ -411,7 +411,8 @@ describe('browser-local admin test kit (no broker connection)', () => {
 
     it('rejects requests that would spend more simulated funds than available', async () => {
         enterAdminTest();
-        setAdminTestBalance(TEST_DEMO_ID, 0.25);
+        // Reproduce a server snapshot with a small remaining balance.
+        hydrateAdminTestBalances({ demo: 0.25, real: 500 });
         const api = createAdminTestApi();
         await opened(api);
         const offer = await api.send({

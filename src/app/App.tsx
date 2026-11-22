@@ -118,11 +118,6 @@ function App() {
                 .then(response => {
                     if (response.access_token) {
                         cleanupURL();
-                        // Only after the OAuth code is removed, restart with the
-                        // locally simulated transport and open the kit once.
-                        if (response.admin_auto_simulation) {
-                            window.location.reload();
-                        }
                     } else if (response.error) {
                         console.error('❌ Token exchange failed:', response.error);
                         console.error('Error description:', response.error_description);

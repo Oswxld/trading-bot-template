@@ -1,0 +1,33 @@
+# This workflow is inherited by the fork when it is created from master.
+# It runs ONLY on oswaldthegreat/trading-bot-template, never on the source repo.
+# GitHub disables Actions on newly created forks; enable Actions once in the fork.
+name: Sync fork master from Oswxld
+
+on:
+  schedule:
+    # Every 15 minutes, off the top of the hour to reduce scheduler congestion.
+    - cron: '7,22,37,52 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: upstream-master-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: github.repository == 'oswaldthegreat/trading-bot-template'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Fast-forward fork from original master
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          # GitHub's official fork-sync endpoint: no force-push or reset.
+          # If the fork diverges, this fails rather than deleting fork changes.
+          gh api --method POST "repos/${TARGET_REPOSITORY}/merge-upstream" -f branch=master

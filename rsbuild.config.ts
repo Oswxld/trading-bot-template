@@ -29,8 +29,11 @@ export default defineConfig({
             // Rsbuild CLI loads .env before evaluating this configuration.
             'process.env.APP_ENV': JSON.stringify(process.env.APP_ENV ?? ''),
             'process.env.CLIENT_ID': JSON.stringify(process.env.CLIENT_ID ?? ''),
-            // Public simulation-only owner matcher; does not grant API privileges.
-            'process.env.AUTO_ADMIN_DERIV_ACCOUNT_ID': JSON.stringify(process.env.AUTO_ADMIN_DERIV_ACCOUNT_ID ?? ''),
+            // Public Supabase configuration (never add a service-role secret here).
+            'process.env.PUBLIC_SUPABASE_URL': JSON.stringify(process.env.PUBLIC_SUPABASE_URL ?? ''),
+            'process.env.PUBLIC_SUPABASE_ANON_KEY': JSON.stringify(process.env.PUBLIC_SUPABASE_ANON_KEY ?? ''),
+            // Stable UUID unique per client deployment, for idempotent sync cursors.
+            'process.env.PUBLIC_SIM_CLIENT_ID': JSON.stringify(process.env.PUBLIC_SIM_CLIENT_ID ?? ''),
             // Public partner tracking parameters are embedded only in Deriv's Sign Up redirect.
             'process.env.AFFILIATE_TOKEN': JSON.stringify(process.env.AFFILIATE_TOKEN ?? ''),
             'process.env.AFFILIATE_TOKEN_PARAM': JSON.stringify(process.env.AFFILIATE_TOKEN_PARAM ?? 't'),

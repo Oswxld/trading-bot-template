@@ -47,7 +47,7 @@ export default function AdminTestKit() {
         const balances = getAdminTestBalances();
         setDemo(String(balances[TEST_DEMO_ID]));
         setReal(String(balances[TEST_REAL_ID]));
-        setError('');
+        if (!hasPendingAdminBalances()) setError('');
         setOpened(true);
     };
     const startHold = () => {
@@ -64,6 +64,7 @@ export default function AdminTestKit() {
             setPending(!!detail?.pending);
             // Trade persistence errors should never be silently hidden.
             if (detail?.error) setError('Balance sync: ' + detail.error);
+            else if (!detail?.pending) setError(previous => previous.startsWith('Balance sync:') ? '' : previous);
         };
         window.addEventListener(ADMIN_TEST_OPEN_EVENT, open);
         window.addEventListener(ADMIN_TEST_MANAGE_EVENT, open);

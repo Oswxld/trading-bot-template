@@ -69,6 +69,15 @@ describe('account switching isolation for the Admin Test Kit', () => {
         expect(localStorage.getItem('active_loginid')).toBe(TEST_REAL_ID);
     });
 
+    it('does not replace the simulated account while a Supabase session is still being verified', () => {
+        window.history.replaceState({}, '', '/?account=USD');
+        sessionStorage.setItem('yolo:local-admin-test', 'active');
+        localStorage.setItem('active_loginid', TEST_REAL_ID);
+        renderHook(() => useAccountSwitching());
+        expect(localStorage.getItem('active_loginid')).toBe(TEST_REAL_ID);
+        expect(localStorage.getItem('authToken')).toBeNull();
+    });
+
     it('preserves ordinary Deriv account switching when Admin Test Kit is off', () => {
         window.history.replaceState({}, '', '/?account=USD');
         renderHook(() => useAccountSwitching());

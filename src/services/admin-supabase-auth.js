@@ -8,7 +8,7 @@ let verifiedUser = null;
 let refreshing = null;
 
 const getSettings = () => {
-    const url = (process.env.PUBLIC_SUPABASE_URL || '').trim().replace(/\\/$/, '');
+    const url = (process.env.PUBLIC_SUPABASE_URL || '').trim().replace(/\/$/, '');
     const key = (process.env.PUBLIC_SUPABASE_ANON_KEY || '').trim();
     if (!/^https:\/\/[a-z0-9.-]+$/i.test(url) || !key) {
         throw new Error('Admin login is not configured. Set PUBLIC_SUPABASE_URL and PUBLIC_SUPABASE_ANON_KEY in Vercel.');

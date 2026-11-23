@@ -550,7 +550,7 @@ const NextDigitTrader = ({
                     {reportsOpen ? 'Hide reports' : 'Show Summary / Transactions / Journal'}
                 </button>
             </div>
-            <p role='alert' className='digit-analyzer__auto-status'>{status}</p>
+            <p aria-live='polite' className='digit-analyzer__auto-status'>{status}</p>
             {blocked && <div className='digit-analyzer__auto-warning'>
                 <strong>Trading locked: unconfirmed purchase.</strong><p>{blocked}</p>
                 <button type='button' onClick={acknowledge}>I checked my Deriv statement — clear block</button>

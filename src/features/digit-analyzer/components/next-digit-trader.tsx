@@ -295,6 +295,10 @@ const NextDigitTrader = ({
                     finish(run, `Session ended: ${run.count} trades, net ${run.profit.toFixed(2)} ${run.currency}.`);
                 }
             } catch (error) {
+                if (error instanceof Error && 'staleSignal' in error && run.running && canObserve()) {
+                    if (mountedRef.current) setStatus('Signal expired before purchase. Waiting for a new live tick.');
+                    return;
+                }
                 const uncertain = error !== null && typeof error === 'object' &&
                     'unconfirmed' in error && error.unconfirmed === true;
                 if (uncertain) {

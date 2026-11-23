@@ -278,6 +278,25 @@ const NextDigitTrader = ({
             setStatus('Selected Deriv account is not connected, or another bot is running.');
             return;
         }
+        // Show the real-money authorization dialog directly from the user's
+        // click. Browsers can suppress native confirms invoked after awaited
+        // broker requests, leaving Run apparently inactive.
+        const accepted = window.confirm(
+            `ENABLE AUTHENTICATED DERIV AUTO TRADING\n\n` +
+            `Account: ${current.id} (${current.mode.toUpperCase()})\n` +
+            `Market: ${marketName} (${symbol})\n` +
+            `Contract: 1-tick DIGIT MATCHES from live next-digit transition analysis\n` +
+            `Stake: ${amount.toFixed(2)} ${current.currency} per purchase\n` +
+            `Maximum trades: ${limit} (max gross stake ${(amount * limit).toFixed(2)} ${current.currency})\n` +
+            `Loss stop: ${maxLoss.toFixed(2)} ${current.currency}\n\n` +
+            `No win rate is guaranteed. This places ACTUAL Deriv orders on the selected ${current.mode} account. Continue?`
+        );
+        if (!accepted) {
+            setStatus('Run canceled. No purchases sent.');
+            log(current.id, 'User declined automatic trading authorization.');
+            return;
+        }
+        log(current.id, 'User confirmed automatic trading for the selected account.');
         armingRef.current = true;
         setArming(true);
         setStatus('Verifying Deriv account, contract availability and available balance…');
@@ -301,17 +320,6 @@ const NextDigitTrader = ({
             if (!safeSocket(current.id, current.currency, api) || symbolRef.current !== symbol) {
                 throw new Error('Account or market changed during verification. No trading started.');
             }
-            const accepted = window.confirm(
-                `ENABLE AUTHENTICATED DERIV AUTO TRADING\n\n` +
-                `Account: ${current.id} (${current.mode.toUpperCase()})\n` +
-                `Market: ${marketName} (${symbol})\n` +
-                `Contract: 1-tick DIGIT MATCHES from live next-digit transition analysis\n` +
-                `Stake: ${amount.toFixed(2)} ${current.currency} per purchase\n` +
-                `Maximum trades: ${limit} (max gross stake ${(amount * limit).toFixed(2)} ${current.currency})\n` +
-                `Loss stop: ${maxLoss.toFixed(2)} ${current.currency}\n\n` +
-                `No win rate is guaranteed. This places ACTUAL Deriv orders on the selected ${current.mode} account. Continue?`
-            );
-            if (!accepted) { setStatus('Not armed. No purchases sent.'); return; }
             if (!safeSocket(current.id, current.currency, api) || symbolRef.current !== symbol) {
                 throw new Error('Account or market changed. Trading was not started.');
             }

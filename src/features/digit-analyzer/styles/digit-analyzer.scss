@@ -1216,21 +1216,51 @@
         border: 1px solid #64748b !important;
         color: #e2e8f0 !important;
     }
+    &__auto-click-feedback {
+        color: #a7f3d0;
+        background: #052e2a;
+        border-left: 3px solid #34d399;
+        border-radius: .5rem;
+        padding: .9rem 1rem;
+        font-size: 1.2rem;
+        line-height: 1.5;
+        margin-top: 1rem;
+    }
     &__auto-reports {
-        margin-top: 1.6rem;
+        // Analysis is a vertically scrollable feature screen, unlike Bulk Trader's
+        // fixed right-hand drawer. Never position the reports offscreen on mobile.
+        display: block;
+        position: relative;
+        width: 100%;
         min-width: 0;
+        overflow: visible;
+        margin-top: 1.2rem;
+        scroll-margin-top: 1rem;
+
         .bulk-reports__panel {
+            position: relative;
+            inset: auto;
             top: auto;
+            right: auto;
+            bottom: auto;
+            left: auto;
+            z-index: 1;
             width: 100%;
-            height: min(660px, 75vh);
-            min-height: 380px;
             max-width: 100%;
+            height: min(660px, 72vh);
+            min-height: 360px;
+            max-height: none;
+            margin: 0;
             border-color: #475569;
         }
         .bulk-reports__panel--maximized {
+            position: fixed;
+            inset: 7rem 1rem 1rem;
+            z-index: 100;
             width: auto;
-            height: auto;
             max-width: none;
+            height: auto;
+            max-height: none;
         }
         .bulk-reports__header {
             background: #0f766e;

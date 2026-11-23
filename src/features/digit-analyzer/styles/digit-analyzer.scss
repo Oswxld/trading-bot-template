@@ -954,3 +954,316 @@
         transition: none;
     }
 }
+
+
+// Best-next-digit live observation and opt-in real/demo broker purchase panels.
+.digit-analyzer {
+    &__next-panel,
+    &__next-trader {
+        margin-top: 1.6rem;
+        border-radius: 1.4rem;
+        padding: clamp(1.6rem, 2.5vw, 2.4rem);
+        background: linear-gradient(135deg, #081728 0%, #090d17 50%, #061a16 100%);
+        border: 1px solid #235568;
+        color: #f0f9ff;
+        box-shadow: 0 12px 34px #0002;
+    }
+
+    &__next-heading,
+    &__next-trader-header {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 1.2rem;
+        margin-bottom: 1.6rem;
+        h3 {
+            font-size: clamp(1.7rem, 2.3vw, 2.3rem);
+            color: #f9fcff;
+            margin: 0.4rem 0 0;
+        }
+        p {
+            font-size: 1.25rem;
+            line-height: 1.45;
+            color: #b6c5d3;
+        }
+    }
+    &__next-kicker {
+        color: #5eead4;
+        font-size: 1.1rem;
+        font-weight: 800;
+        letter-spacing: .06em;
+    }
+    &__next-chip,
+    &__auto-badge {
+        border: 1px solid #64748b;
+        background: #1e293b;
+        color: #cbd5e1;
+        border-radius: 999px;
+        padding: .7rem 1.1rem;
+        font-size: 1.05rem;
+        font-weight: 800;
+    }
+    &__auto-badge--on {
+        border-color: #10b981;
+        background: #064e3b;
+        color: #a7f3d0;
+    }
+    &__next-duo {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 1.2rem;
+    }
+    &__next-entry,
+    &__next-choice {
+        min-width: 0;
+        border: 1px solid #0e7490;
+        border-radius: 1.2rem;
+        padding: 1.6rem;
+        text-align: center;
+        background: linear-gradient(135deg, #083344, #020617);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: .4rem;
+        > span {
+            font-weight: 800;
+            letter-spacing: .045em;
+            font-size: 1.08rem;
+            color: #a5f3fc;
+        }
+        > strong {
+            font-family: monospace;
+            font-size: clamp(5rem, 11vw, 8rem);
+            font-weight: 900;
+            line-height: 1.2;
+            color: #22d3ee;
+            text-shadow: 0 0 2.4rem #0891b280;
+        }
+        p {
+            margin: 0;
+            color: #cbd5e1;
+            font-size: 1.15rem;
+            overflow-wrap: anywhere;
+        }
+    }
+    &__next-choice {
+        border-color: #10b981;
+        background: linear-gradient(135deg, #064e3b, #020617);
+        > span { color: #a7f3d0; }
+        > strong { color: #34d399; text-shadow: 0 0 2.4rem #05966990; }
+    }
+    &__next-context,
+    &__next-disclaimer,
+    &__auto-disclaimer,
+    &__auto-account,
+    &__auto-status,
+    &__next-empty {
+        font-size: 1.22rem;
+        line-height: 1.55;
+        margin: 1.3rem 0;
+        color: #d1d5db;
+        overflow-wrap: anywhere;
+    }
+    &__next-empty {
+        padding: 2rem;
+        border: 1px dashed #475569;
+        border-radius: 1rem;
+    }
+    &__next-scores {
+        display: grid;
+        grid-template-columns: repeat(10, minmax(0, 1fr));
+        gap: .7rem;
+        margin-top: 1.2rem;
+    }
+    &__next-score {
+        text-align: center;
+        min-width: 0;
+        background: #1e293b;
+        border: 1px solid #334155;
+        border-radius: .8rem;
+        padding: .8rem .25rem;
+        display: flex;
+        align-items: center;
+        flex-direction: column;
+        gap: .35rem;
+        strong { font: 900 2.1rem monospace; color: #e2e8f0; }
+        span { color: #a5b4fc; font: 700 1.1rem monospace; }
+        small { color: #a7f3d0; font-size: .8rem; }
+    }
+    &__next-score--leader {
+        border: 2px solid #22c55e;
+        background: #064e3b;
+        box-shadow: 0 0 12px #22c55e33;
+        strong, span { color: #6ee7b7; }
+    }
+
+    &__auto-form {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 1rem;
+        label {
+            min-width: 0;
+            color: #e2e8f0;
+            font-size: 1.2rem;
+            font-weight: 600;
+            display: flex;
+            flex-direction: column;
+            gap: .6rem;
+        }
+        input {
+            background: #0f172a;
+            color: #f8fafc;
+            border: 1px solid #64748b;
+            border-radius: .8rem;
+            padding: .9rem 1rem;
+            width: 100%;
+            min-height: 4.4rem;
+            font: 600 1.45rem monospace;
+            &:disabled { opacity: .55; }
+        }
+    }
+    &__auto-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1rem;
+        margin-top: 1.6rem;
+        button {
+            border: 0;
+            border-radius: .85rem;
+            background: #059669;
+            color: #fff;
+            padding: 1.1rem 1.7rem;
+            min-height: 4.4rem;
+            font-weight: 800;
+            font-size: 1.25rem;
+            cursor: pointer;
+            &:disabled { opacity: .46; cursor: not-allowed; }
+            &:focus-visible { outline: 2px solid #22d3ee; outline-offset: 2px; }
+        }
+        .digit-analyzer__auto-stop {
+            background: #9f1239;
+        }
+    }
+    &__auto-status {
+        border-left: 3px solid #22d3ee;
+        padding: .8rem 1rem;
+        background: #0f172a;
+    }
+    &__auto-warning {
+        margin-top: 1rem;
+        color: #fef3c7;
+        font-size: 1.2rem;
+        background: #451a03;
+        border: 1px solid #f59e0b;
+        border-radius: .8rem;
+        padding: 1.2rem;
+        button {
+            background: #fbbf24;
+            color: #451a03;
+            font-weight: 800;
+            border-radius: .6rem;
+            border: 0;
+            padding: 1rem;
+            cursor: pointer;
+        }
+    }
+    &__auto-summary {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 2rem;
+        border-top: 1px solid #334155;
+        padding-top: 1.2rem;
+        font-size: 1.3rem;
+    }
+    &__auto-history {
+        margin-top: 1.4rem;
+        h4 { color: #e2e8f0; font-size: 1.35rem; }
+        ul { list-style: none; padding: 0; margin: 0; }
+        li {
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: .4rem;
+            border-bottom: 1px solid #334155;
+            padding: .7rem .2rem;
+            font-size: 1.14rem;
+            color: #cbd5e1;
+            overflow-wrap: anywhere;
+            strong { color: #6ee7b7; }
+        }
+    }
+
+    @media (max-width: 750px) {
+        &__next-scores { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+        &__auto-form { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 420px) {
+        &__next-duo { gap: .65rem; }
+        &__next-entry, &__next-choice {
+            padding: 1rem .4rem;
+            > span { font-size: .86rem; }
+            > strong { font-size: 4.3rem; }
+            p { font-size: .92rem; }
+        }
+    }
+}
+
+.digit-analyzer {
+    &__auto-show-reports {
+        background: #1e293b !important;
+        border: 1px solid #64748b !important;
+        color: #e2e8f0 !important;
+    }
+    &__auto-click-feedback {
+        color: #a7f3d0;
+        background: #052e2a;
+        border-left: 3px solid #34d399;
+        border-radius: .5rem;
+        padding: .9rem 1rem;
+        font-size: 1.2rem;
+        line-height: 1.5;
+        margin-top: 1rem;
+    }
+    &__auto-reports {
+        // Analysis is a vertically scrollable feature screen, unlike Bulk Trader's
+        // fixed right-hand drawer. Never position the reports offscreen on mobile.
+        display: block;
+        position: relative;
+        width: 100%;
+        min-width: 0;
+        overflow: visible;
+        margin-top: 1.2rem;
+        scroll-margin-top: 1rem;
+
+        .bulk-reports__panel {
+            position: relative;
+            inset: auto;
+            top: auto;
+            right: auto;
+            bottom: auto;
+            left: auto;
+            z-index: 1;
+            width: 100%;
+            max-width: 100%;
+            height: min(660px, 72vh);
+            min-height: 360px;
+            max-height: none;
+            margin: 0;
+            border-color: #475569;
+        }
+        .bulk-reports__panel--maximized {
+            position: fixed;
+            inset: 7rem 1rem 1rem;
+            z-index: 100;
+            width: auto;
+            max-width: none;
+            height: auto;
+            max-height: none;
+        }
+        .bulk-reports__header {
+            background: #0f766e;
+        }
+    }
+}

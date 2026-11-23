@@ -32,6 +32,40 @@ describe('Digit Analyzer feature shell', () => {
         });
     });
 
+    it('shows Summary, Transactions and Journal immediately on Run, even when OAuth preflight fails', () => {
+        render(<DigitAnalyzer />);
+        const run = screen.getByRole('button', { name: 'Run Auto Trader' });
+        expect(run).toBeEnabled();
+
+        fireEvent.click(run);
+
+        const reports = screen.getByRole('complementary', { name: 'Next Digit Auto Trader Reports' });
+        expect(reports).toBeInTheDocument();
+        // The mobile drawer is fixed in Bulk Trader, but MUST be inline here.
+        expect(reports).toHaveStyle({ position: 'relative', width: '100%' });
+        expect(screen.getByText('REPORTS OPEN · Select Summary, Transactions or Journal below.')).toBeInTheDocument();
+        expect(within(reports).getByRole('button', { name: 'Summary' })).toBeInTheDocument();
+        expect(within(reports).getByRole('button', { name: 'Transactions' })).toBeInTheDocument();
+        expect(within(reports).getByRole('button', { name: 'Journal' })).toBeInTheDocument();
+        expect(within(reports).getByText('Select an available Deriv market before running the auto trader.')).toBeInTheDocument();
+        fireEvent.click(within(reports).getByRole('button', { name: 'Journal' }));
+        expect(within(reports).getByText('Run requested: validating the selected Deriv account and risk limits.')).toBeInTheDocument();
+        expect(within(reports).getByText('Select an available Deriv market before running the auto trader.')).toBeInTheDocument();
+    });
+
+    it('still allows Run to open reports when an unresolved purchase block exists', () => {
+        window.sessionStorage.setItem('next-digit:unconfirmed:', 'Test pending purchase');
+        try {
+            render(<DigitAnalyzer />);
+            const run = screen.getByRole('button', { name: 'Run Auto Trader' });
+            expect(run).toBeEnabled();
+            fireEvent.click(run);
+            expect(screen.getByRole('complementary', { name: 'Next Digit Auto Trader Reports' })).toBeVisible();
+        } finally {
+            window.sessionStorage.removeItem('next-digit:unconfirmed:');
+        }
+    });
+
     it('shows an honest loading state until public market metadata arrives', () => {
         render(<DigitAnalyzer />);
 

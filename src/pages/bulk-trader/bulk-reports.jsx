@@ -224,7 +224,7 @@ const exportCsv = (records, currency) => {
     URL.revokeObjectURL(url);
 };
 
-function BulkReports({ records, journal, accountId, currency, balance, isRunning, onReset, reportsOpen, onReportsToggle }) {
+function BulkReports({ records, journal, accountId, currency, balance, isRunning, onReset, reportsOpen, onReportsToggle, reportTitle = 'Bulk Trader Reports', emptyMessage = 'No bulk trades yet. Select an account and place a trade to see its summary.', inline = false, resetMessage = 'Reset the bulk trader report for this account? This only clears this website\'s local report. Deriv account statements are not changed.' }) {
     const [active, setActive] = useState(0);
     const [detail, setDetail] = useState(false);
     const [maximized, setMaximized] = useState(false);
@@ -246,7 +246,7 @@ function BulkReports({ records, journal, accountId, currency, balance, isRunning
 
     const onClear = () => {
         if (isRunning) return;
-        if (window.confirm('Reset the bulk trader report for this account? This only clears this website\'s local report. Deriv account statements are not changed.')) {
+        if (window.confirm(resetMessage)) {
             onReset();
         }
     };
@@ -260,10 +260,16 @@ function BulkReports({ records, journal, accountId, currency, balance, isRunning
             {reportsOpen && <aside
                 id='bulk-reports-panel'
                 className={`bulk-reports__panel${maximized ? ' bulk-reports__panel--maximized' : ''}`}
-                aria-label='Bulk Trader reports'
+                aria-label={reportTitle}
+                style={inline && !maximized ? {
+                    position: 'relative', inset: 'auto', top: 'auto', right: 'auto',
+                    bottom: 'auto', left: 'auto', width: '100%', maxWidth: '100%',
+                    height: 'min(660px, 72vh)', minHeight: '340px', maxHeight: 'none',
+                    zIndex: 1,
+                } : undefined}
             >
                 <header className='bulk-reports__header'>
-                    <strong>Bulk Trader Reports</strong>
+                    <strong>{reportTitle}</strong>
                     <div className='bulk-reports__header-actions'>
                         <button type='button' onClick={() => setMaximized(value => !value)}
                             aria-label={maximized ? 'Restore reports size' : 'Expand reports'}
@@ -301,7 +307,7 @@ function BulkReports({ records, journal, accountId, currency, balance, isRunning
                             <small>{mostRecent.contractId
                                 ? `Contract ${mostRecent.contractId}`
                                 : 'Waiting for Deriv purchase confirmation'}</small>
-                        </> : <span>No bulk trades yet. Select an account and place a trade to see its summary.</span>}
+                        </> : <span>{emptyMessage}</span>}
                     </div>}
 
                     {active === 1 && <div className='bulk-reports__transactions'>

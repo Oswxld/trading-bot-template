@@ -285,7 +285,7 @@ const NextDigitTrader = ({
     useEffect(() => {
         const current = runRef.current;
         if (current && (current.id !== account.id || current.symbol !== symbol ||
-            current.simulated !== account.simulated || !account.verified)) {
+            current.simulated !== account.simulated || current.mode !== account.mode || !account.verified)) {
             finish(current, 'Account, market or authentication changed. No new purchases will be sent.');
         }
         setHistory(readHistory(account.id));
@@ -295,7 +295,7 @@ const NextDigitTrader = ({
         setSummary({ count: 0, profit: 0 });
         // Account/market changes invalidate running instructions even between ticks.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [account.id, account.verified, account.simulated, symbol]);
+    }, [account.id, account.verified, account.mode, account.simulated, symbol]);
 
     useEffect(() => {
         mountedRef.current = true;
@@ -535,11 +535,11 @@ const NextDigitTrader = ({
                     canBuy, canObserve,
                     onProposal: ({ price }: { price: number }) => {
                         report(run.id, { ...pending, status: 'buying', price });
-                        log(run.id, `Deriv quoted ${price.toFixed(2)} ${run.currency} for Matches ${candidate}. Sending purchase.`);
+                        log(run.id, `${run.simulated ? 'SIMULATED quote' : 'Deriv quote'} ${price.toFixed(2)} ${run.currency} for Matches ${candidate}. Sending ${run.simulated ? 'paper' : 'broker'} purchase.`);
                     },
                     onBought: ({ contractId, price }: { contractId: string; price: number }) => {
                         report(run.id, { ...pending, status: 'open', contractId, price });
-                        log(run.id, `BUY CONFIRMED: contract #${contractId}; ${price.toFixed(2)} ${run.currency}. Awaiting broker settlement.`);
+                        log(run.id, `${run.simulated ? 'PAPER BUY CONFIRMED' : 'BUY CONFIRMED'}: contract #${contractId}; ${price.toFixed(2)} ${run.currency}. Awaiting ${run.simulated ? 'Admin Test Kit' : 'Deriv'} settlement.`);
                     },
                 });
                 const saved = readReportRows(run.id).find(row => row.localId === pending.localId) ?? pending;
@@ -549,7 +549,7 @@ const NextDigitTrader = ({
                     entrySpot: result.entrySpot, exitSpot: result.exitSpot,
                     payout: Math.max(0, result.price + result.profit),
                 });
-                log(run.id, `SETTLED #${result.contractId}: ${result.status.toUpperCase()}, net ${result.profit >= 0 ? '+' : ''}${result.profit.toFixed(2)} ${run.currency} (Deriv-confirmed).`);
+                log(run.id, `${run.simulated ? 'SIMULATED SETTLEMENT' : 'DERIV SETTLEMENT'} #${result.contractId}: ${result.status.toUpperCase()}, net ${result.profit >= 0 ? '+' : ''}${result.profit.toFixed(2)} ${run.currency} (${run.simulated ? 'Admin Test Kit win/loss slider controls simulated outcomes' : 'broker-confirmed'}).`);
                 const record: TradeRecord = { ...result, at: Date.now() };
                 storeHistory(run.id, record);
                 run.count += 1;
@@ -619,17 +619,17 @@ const NextDigitTrader = ({
             <div className='digit-analyzer__next-trader-header'>
                 <div>
                     <h3>Auto trade · Next digit</h3>
-                    <p>Uses only the actual Deriv tick stream above and the currently authenticated Deriv Options account.</p>
+                    <p>Predictions use genuine public Deriv ticks. Orders use either your authenticated broker account or the Admin Test Kit's isolated paper account.</p>
                 </div>
                 <span className={running ? 'digit-analyzer__auto-badge digit-analyzer__auto-badge--on' : 'digit-analyzer__auto-badge'}>
-                    {running ? 'LIVE AUTO TRADING' : 'AUTO TRADING OFF'}
+                    {running ? (account.simulated ? 'SIMULATED AUTO TRADING' : 'LIVE AUTO TRADING') : 'AUTO TRADING OFF'}
                 </span>
             </div>
             <p className='digit-analyzer__auto-account'>
                 Selected account: <strong>{account.verified
-                    ? `${account.id} · ${account.mode.toUpperCase()} · ${account.currency}`
+                    ? `${account.id} · ${account.simulated ? 'SIMULATED ' : ''}${account.mode.toUpperCase()} · ${account.currency}`
                     : account.reason}</strong>
-                {' '}Switch between your real and demo Options accounts using the header account switcher.
+                {' '}{account.simulated ? 'Switch simulated Real/Demo in Admin Test Kit. All orders, results and balances are simulated.' : 'Switch genuine Real/Demo Options accounts using the header account switcher.'}
             </p>
             <div className='digit-analyzer__auto-form'>
                 <label>Stake per order <input aria-label='Auto-trade stake' type='number' min='0.01' max='1000' step='0.01'
@@ -658,7 +658,7 @@ const NextDigitTrader = ({
                     journal={journal}
                     accountId={account.id}
                     currency={account.currency || 'USD'}
-                    balance={null}
+                    balance={account.simulated && account.verified ? getAdminTestBalances()[account.id] : null}
                     isRunning={running || arming}
                     onReset={resetReports}
                     reportsOpen={reportsOpen}
@@ -675,10 +675,11 @@ const NextDigitTrader = ({
                 <button type='button' onClick={acknowledge}>I checked my Deriv statement — clear block</button>
             </div>}
             <p className='digit-analyzer__auto-disclaimer'>
-                Real and demo here mean actual Deriv Options accounts, never simulated Admin Test accounts.
-                One purchase at a time; no automatic purchase retries. Stops after 3 consecutive losses,
+                {account.simulated
+                    ? 'ADMIN TEST KIT: real public Deriv ticks are used for analysis, but every purchase, balance, and win/loss is fictional. The Admin Test Kit probability slider controls settlements; they do NOT measure prediction accuracy. No genuine Deriv trade is submitted.'
+                    : 'LIVE DERIV: purchases, balances and settlements are broker-backed, not simulated. Past digit transitions do not establish a profitable predictive edge.'}
+                {' '}One purchase at a time; no automatic purchase retries. Stops after 3 consecutive losses,
                 your chosen loss threshold, or maximum trades. Trading stops if you leave this screen.
-                Past digit transitions do not establish a profitable predictive edge.
             </p>
             <div className='digit-analyzer__auto-summary'>
                 <strong>Confirmed settlements: {summary.count}</strong>

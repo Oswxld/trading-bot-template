@@ -14,7 +14,7 @@ const NextDigitPredictionPanel = ({ prediction }: { prediction: NextDigitPredict
                 <span className='digit-analyzer__next-chip'>OBSERVED PATTERN · NOT A GUARANTEE</span>
             </div>
             {!ready ? (
-                <div role='status' className='digit-analyzer__next-empty'>
+                <div className='digit-analyzer__next-empty'>
                     {prediction?.reason ?? 'Connecting to real Deriv tick history. No simulated predictions are displayed.'}
                 </div>
             ) : (

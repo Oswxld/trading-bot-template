@@ -52,11 +52,11 @@ const historyKey = (id: string) => `next-digit:history:${id}`;
 const blockedKey = (id: string) => `next-digit:unconfirmed:${id}`;
 const reportsKey = (id: string) => `next-digit:reports:${id}`;
 const journalKey = (id: string) => `next-digit:journal:${id}`;
-const readReportRows = (id: string): ReportRow[] => {
+const readReportRows = (id: string, recover = false): ReportRow[] => {
     if (!id) return [];
     try {
         const result = JSON.parse(sessionStorage.getItem(reportsKey(id)) || '[]');
-        return Array.isArray(result) ? recoverInterruptedBulkRecords(result).slice(0, 200) : [];
+        return Array.isArray(result) ? (recover ? recoverInterruptedBulkRecords(result) : result).slice(0, 200) : [];
     } catch { return []; }
 };
 const readJournal = (id: string): JournalRow[] => {
@@ -129,7 +129,7 @@ const NextDigitTrader = ({
     const [summary, setSummary] = useState({ count: 0, profit: 0 });
     const [history, setHistory] = useState<TradeRecord[]>(() => readHistory(readAccount().id));
     const [reportsOpen, setReportsOpen] = useState(false);
-    const [records, setRecords] = useState<ReportRow[]>(() => readReportRows(readAccount().id));
+    const [records, setRecords] = useState<ReportRow[]>(() => readReportRows(readAccount().id, true));
     const [journal, setJournal] = useState<JournalRow[]>(() => readJournal(readAccount().id));
     const [blocked, setBlocked] = useState(() =>
         typeof window !== 'undefined' ? sessionStorage.getItem(blockedKey(readAccount().id)) || '' : ''
@@ -196,7 +196,7 @@ const NextDigitTrader = ({
             finish(current, 'Account, market or authentication changed. No new purchases will be sent.');
         }
         setHistory(readHistory(account.id));
-        setRecords(readReportRows(account.id));
+        setRecords(readReportRows(account.id, true));
         setJournal(readJournal(account.id));
         setBlocked(account.id ? sessionStorage.getItem(blockedKey(account.id)) || '' : '');
         setSummary({ count: 0, profit: 0 });

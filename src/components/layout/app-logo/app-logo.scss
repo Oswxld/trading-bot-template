@@ -44,7 +44,7 @@
     }
 }
 
-.apex-brand-logo {
+.alphapips-brand-logo {
     display: inline-flex;
     align-items: center;
     gap: 0.8rem;
@@ -60,7 +60,7 @@
         aspect-ratio: 1;
         flex: none;
         object-fit: contain;
-        background: #000;
+        background: transparent;
         border-radius: 3px;
     }
 
@@ -75,7 +75,7 @@
     }
 }
 
-.mobile-menu__header .apex-brand-logo {
+.mobile-menu__header .alphapips-brand-logo {
     gap: 0.6rem;
 
     &__text {

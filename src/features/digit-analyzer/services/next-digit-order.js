@@ -23,8 +23,8 @@ export const preflightNextDigitAccount = async ({
     const balance = reply?.balance;
     if (!balance || String(balance.loginid || balance.account_id) !== String(accountId) ||
         balance.currency !== currency || !Number.isFinite(Number(balance.balance)) ||
-        Number(balance.balance) < stake * maxTrades) {
-        throw new Error('Broker balance, account or currency could not be verified, or balance is below the maximum session stake.');
+        Number(balance.balance) < stake) {
+        throw new Error('Broker balance, account or currency could not be verified, or insufficient funds for the first stake.');
     }
     return Number(balance.balance);
 };
@@ -39,7 +39,7 @@ export const preflightNextDigitAccount = async ({
  */
 export const placeNextDigitMatch = async ({
     api, symbol, accountId, currency, digit, stake, canBuy, canObserve,
-    onBought = () => {},
+    onBought = () => {}, onProposal = () => {},
 }) => {
     if (!/^[A-Za-z0-9_]{2,30}$/.test(symbol) ||
         !Number.isInteger(digit) || digit < 0 || digit > 9 ||
@@ -67,10 +67,12 @@ export const placeNextDigitMatch = async ({
         throw new Error('Deriv returned no valid or appropriately priced Digit Matches proposal.');
     }
     if (!canBuy()) {
-        const stale = new Error('Signal expired before purchase. No order sent; waiting for a fresh tick.');
+        const stale = new Error('Signal or account changed before purchase. No buy sent; waiting for a fresh tick.');
         stale.staleSignal = true;
         throw stale;
     }
+
+    try { onProposal({ price: ask, proposalId: String(proposal.id) }); } catch { /* UI callbacks never change broker execution. */ }
 
     let bought;
     try {
@@ -96,7 +98,7 @@ export const placeNextDigitMatch = async ({
     }
     const contractId = String(bought.buy.contract_id);
     const price = Number(bought.buy.buy_price ?? ask);
-    onBought({ contractId, price, symbol, digit, accountId });
+    try { onBought({ contractId, price, symbol, digit, accountId }); } catch { /* Broker confirmation still authoritative. */ }
 
     // Do not issue another order until Deriv confirms settlement.
     for (let poll = 0; poll < 15; poll += 1) {
@@ -118,6 +120,8 @@ export const placeNextDigitMatch = async ({
                     profit: Number(contract.profit),
                     status: Number(contract.profit) >= 0 ? 'won' : 'lost',
                     symbol, digit, accountId,
+                    entrySpot: contract.entry_spot ?? null,
+                    exitSpot: contract.exit_spot ?? null,
                 };
             }
         } catch (error) {

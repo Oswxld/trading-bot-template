@@ -145,10 +145,15 @@ const NextDigitTrader = ({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [account.id, account.verified, symbol]);
 
-    useEffect(() => () => {
-        mountedRef.current = false;
-        const current = runRef.current;
-        if (current) finish(current, 'Analysis closed. No further purchases.');
+    useEffect(() => {
+        mountedRef.current = true;
+        return () => {
+            mountedRef.current = false;
+            const current = runRef.current;
+            if (current) finish(current, 'Analysis closed. No further purchases.');
+        };
+        // Cleanup is a safety stop only; never reacquire a live trade on remount.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const stop = () => {
@@ -212,7 +217,7 @@ const NextDigitTrader = ({
                 throw new Error('Account or market changed during verification. No trading started.');
             }
             const accepted = window.confirm(
-                `ENABLE AUTOMATIC REAL DERIV API PURCHASES\n\n` +
+                `ENABLE AUTHENTICATED DERIV AUTO TRADING\n\n` +
                 `Account: ${current.id} (${current.mode.toUpperCase()})\n` +
                 `Market: ${marketName} (${symbol})\n` +
                 `Contract: 1-tick DIGIT MATCHES from live next-digit transition analysis\n` +

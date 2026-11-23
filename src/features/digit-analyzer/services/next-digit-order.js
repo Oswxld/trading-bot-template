@@ -39,7 +39,8 @@ export const preflightNextDigitAccount = async ({
  */
 export const placeNextDigitMatch = async ({
     api, symbol, accountId, currency, digit, stake, canBuy, canObserve,
-    onBought = () => {}, onProposal = () => {},
+    onBought = /** @type {(details: {contractId: string, price: number, symbol: string, digit: number, accountId: string}) => void} */ (() => {}),
+    onProposal = /** @type {(details: {price: number, proposalId: string}) => void} */ (() => {}),
 }) => {
     if (!/^[A-Za-z0-9_]{2,30}$/.test(symbol) ||
         !Number.isInteger(digit) || digit < 0 || digit > 9 ||

@@ -221,7 +221,13 @@ const NextDigitTrader = ({
     };
 
     const start = async () => {
-        if (armingRef.current || runRef.current?.busy || runRef.current?.running) return;
+        // Run always opens the familiar reports immediately, including failed preflight.
+        setReportsOpen(true);
+        if (armingRef.current || runRef.current?.busy || runRef.current?.running) {
+            setStatus('The previous run is still active or reconciling a contract.');
+            return;
+        }
+        log(readAccount().id, 'Run requested: validating the selected Deriv account and risk limits.');
         const amount = Number(stake);
         const limit = Number(maxTrades);
         const maxLoss = Number(stopLoss);
@@ -232,16 +238,20 @@ const NextDigitTrader = ({
             setStatus('Enter a stake (0–1000), 1–50 trades and a loss stop at least equal to one stake.');
             return;
         }
-        if (!symbol || prediction?.status !== 'ready' || tickStatus !== 'streaming' ||
-            !latestTick || !latestTick.id.startsWith(`${symbol}:`) ||
-            Date.now() - latestTick.epoch * 1000 > 5000) {
-            setStatus('Wait for a fresh, live Deriv tick and a next-digit result.');
+        if (!symbol) {
+            setStatus('Select an available Deriv market before running the auto trader.');
             return;
         }
+        // Run can arm while the read-only history and tick stream are loading.
+        // Purchases remain disabled until a NEW verified live tick and prediction arrive.
         const current = readAccount();
         if (!current.verified || current.mode === 'unavailable') {
             setStatus(current.reason);
             return;
+        }
+        if (readReportRows(current.id).some(row => row.status === 'buying' || row.status === 'unconfirmed') &&
+            !sessionStorage.getItem(blockedKey(current.id))) {
+            try { sessionStorage.setItem(blockedKey(current.id), 'An earlier purchase may not have confirmed. Check the Deriv statement before trading again.'); } catch { /* keep blocked in UI */ }
         }
         if (sessionStorage.getItem(blockedKey(current.id))) {
             setStatus('An unconfirmed purchase requires statement reconciliation first.');
@@ -256,6 +266,7 @@ const NextDigitTrader = ({
         armingRef.current = true;
         setArming(true);
         setStatus('Verifying Deriv account, contract availability and available balance…');
+        log(current.id, `Preflight: ${current.mode.toUpperCase()} ${current.id}, ${marketName}, maximum ${limit} trades at ${amount.toFixed(2)} ${current.currency}.`);
         try {
             const token = OAuthTokenExchangeService.getAccessToken();
             if (!token) throw new Error('Deriv OAuth session is missing. Please sign in again.');
@@ -302,9 +313,11 @@ const NextDigitTrader = ({
             runRef.current = run;
             setRunning(true);
             setSummary({ count: 0, profit: 0 });
-            setStatus(`Armed on ${current.mode.toUpperCase()} ${current.id}. Waiting for NEW live tick signals.`);
+            setStatus(`RUNNING on ${current.mode.toUpperCase()} ${current.id}. Waiting for a fresh Deriv tick and a valid next-digit prediction.`);
+            log(current.id, `AUTO TRADE RUNNING. Monitoring ${marketName} for real Deriv ticks. One matching purchase at a time; max ${limit} trades.`);
         } catch (error) {
             setStatus(messageOf(error));
+            log(current.id, `Run could not start: ${messageOf(error)}`);
         } finally {
             armingRef.current = false;
             if (mountedRef.current) setArming(false);

@@ -47,7 +47,8 @@ const storeHistory = (id: string, record: TradeRecord) => {
 /** Never infer the real/demo mode from a login prefix or a simulated account. */
 const readAccount = (): Account => {
     if (typeof window === 'undefined') return emptyAccount;
-    if (isAdminTestRequested() || isAdminTestActive() || api_base.api?.isAdminSimulation) {
+    if (isAdminTestRequested() || isAdminTestActive() ||
+        (api_base.api as (typeof api_base.api & { isAdminSimulation?: boolean }) | null)?.isAdminSimulation) {
         return { ...emptyAccount, reason: 'Admin Test Kit simulation is disabled for this live trader. Sign in with Deriv OAuth.' };
     }
     const id = localStorage.getItem('active_loginid') || '';
@@ -156,7 +157,7 @@ const NextDigitTrader = ({
     };
 
     const start = async () => {
-        if (armingRef.current || runRef.current?.running) return;
+        if (armingRef.current || runRef.current?.busy || runRef.current?.running) return;
         const amount = Number(stake);
         const limit = Number(maxTrades);
         const maxLoss = Number(stopLoss);

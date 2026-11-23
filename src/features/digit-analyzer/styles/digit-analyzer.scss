@@ -1209,3 +1209,31 @@
         }
     }
 }
+
+.digit-analyzer {
+    &__auto-show-reports {
+        background: #1e293b !important;
+        border: 1px solid #64748b !important;
+        color: #e2e8f0 !important;
+    }
+    &__auto-reports {
+        margin-top: 1.6rem;
+        min-width: 0;
+        .bulk-reports__panel {
+            top: auto;
+            width: 100%;
+            height: min(660px, 75vh);
+            min-height: 380px;
+            max-width: 100%;
+            border-color: #475569;
+        }
+        .bulk-reports__panel--maximized {
+            width: auto;
+            height: auto;
+            max-width: none;
+        }
+        .bulk-reports__header {
+            background: #0f766e;
+        }
+    }
+}

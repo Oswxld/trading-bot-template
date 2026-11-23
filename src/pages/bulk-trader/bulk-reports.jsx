@@ -261,9 +261,6 @@ function BulkReports({ records, journal, accountId, currency, balance, isRunning
                 id='bulk-reports-panel'
                 className={`bulk-reports__panel${maximized ? ' bulk-reports__panel--maximized' : ''}`}
                 aria-label={reportTitle}
-                // The Analysis Tool lives inside a scrolling view. Inline styles
-                // override Bulk Trader's fixed mobile drawer rules regardless of
-                // SCSS import order; ordinary Bulk Trader uses its default layout.
                 style={inline && !maximized ? {
                     position: 'relative', inset: 'auto', top: 'auto', right: 'auto',
                     bottom: 'auto', left: 'auto', width: '100%', maxWidth: '100%',

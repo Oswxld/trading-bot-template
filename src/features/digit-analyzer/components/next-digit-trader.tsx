@@ -29,6 +29,7 @@ type ReportRow = {
     entrySpot: number | string | null;
     exitSpot: number | string | null;
     reason?: string;
+    reconciled?: boolean;
 };
 type JournalRow = { id: number; timestamp: number; message: string };
 type RunState = {
@@ -263,7 +264,7 @@ const NextDigitTrader = ({
             setStatus(current.reason);
             return;
         }
-        if (readReportRows(current.id).some(row => row.status === 'buying' || row.status === 'unconfirmed') &&
+        if (readReportRows(current.id).some(row => !row.reconciled && (row.status === 'buying' || row.status === 'unconfirmed')) &&
             !sessionStorage.getItem(blockedKey(current.id))) {
             try { sessionStorage.setItem(blockedKey(current.id), 'An earlier purchase may not have confirmed. Check the Deriv statement before trading again.'); } catch { /* keep blocked in UI */ }
         }
@@ -452,6 +453,15 @@ const NextDigitTrader = ({
         if (!account.id || !window.confirm(
             'Only clear this block AFTER checking your Deriv account statement and reconciling any pending order. Continue?'
         )) return;
+        // Acknowledgement must persist on the unsettled rows as well: otherwise
+        // the next Run would immediately recreate the lock from old 'buying' rows.
+        const rows = readReportRows(account.id).map(row =>
+            (row.status === 'buying' || row.status === 'unconfirmed')
+                ? { ...row, status: 'unconfirmed', reconciled: true, reason: row.reason || 'Statement manually reconciled by user; no settlement inferred.' }
+                : row
+        );
+        try { sessionStorage.setItem(reportsKey(account.id), JSON.stringify(rows)); } catch { /* block key is still cleared */ }
+        setRecords(rows);
         sessionStorage.removeItem(blockedKey(account.id));
         setBlocked('');
         setStatus('Statement reconciliation acknowledged. Trading remains OFF until you press Start.');

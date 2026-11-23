@@ -17,7 +17,7 @@ export const BrandLogo = ({
     className = '',
 }: TBrandLogoProps) => (
     <span className={`alphapips-brand-logo ${className}`} style={{ width, height }} aria-label='Alphapips Trading and Web3 Hub'>
-        <span className='alphapips-brand-logo__mark' aria-hidden='true' />
+        <span className='alphapips-brand-logo__mark' aria-hidden='true' style={{ backgroundImage: "url('/alphapips-brand.webp')" }} />
         <span className='alphapips-brand-logo__text'>Alphapips</span>
     </span>
 );

@@ -66,7 +66,11 @@ export const placeNextDigitMatch = async ({
     if (!proposal?.id || !Number.isFinite(ask) || ask <= 0 || ask > stake * 1.05) {
         throw new Error('Deriv returned no valid or appropriately priced Digit Matches proposal.');
     }
-    if (!canBuy()) throw new Error('Trading stopped before purchase; no buy sent.');
+    if (!canBuy()) {
+        const stale = new Error('Signal expired before purchase. No order sent; waiting for a fresh tick.');
+        stale.staleSignal = true;
+        throw stale;
+    }
 
     let bought;
     try {

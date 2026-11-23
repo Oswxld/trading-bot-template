@@ -1,6 +1,8 @@
 /**
- * Alphapips temporary wordmark. Replace the AP monogram when the client
- * supplies the official brand artwork; do not reuse another client's logo.
+ * Official Alphapips artwork supplied by the client.
+ * The header uses its bull-and-candlestick portion at small sizes, with a
+ * readable text label. The original composition is available as a complete
+ * logo asset at /alphapips-brand.webp and is also used for social previews.
  */
 type TBrandLogoProps = {
     width?: number;
@@ -14,15 +16,8 @@ export const BrandLogo = ({
     height = 36,
     className = '',
 }: TBrandLogoProps) => (
-    <span className={`alphapips-brand-logo ${className}`} style={{ width, height }} aria-label='Alphapips'>
-        <img
-            className='alphapips-brand-logo__mark'
-            src='/alphapips-mark.svg'
-            alt=''
-            width={height}
-            height={height}
-            decoding='async'
-        />
+    <span className={`alphapips-brand-logo ${className}`} style={{ width, height }} aria-label='Alphapips Trading and Web3 Hub'>
+        <span className='alphapips-brand-logo__mark' aria-hidden='true' />
         <span className='alphapips-brand-logo__text'>Alphapips</span>
     </span>
 );

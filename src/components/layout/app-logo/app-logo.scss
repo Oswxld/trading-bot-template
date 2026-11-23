@@ -59,9 +59,14 @@
         height: 100%;
         aspect-ratio: 1;
         flex: none;
-        object-fit: contain;
-        background: transparent;
-        border-radius: 3px;
+        // Crop the supplied complete logo to its bull-and-gold-candles emblem
+        // at header sizes; the unmodified composition remains in the asset.
+        background-color: #101114;
+        background-image: url('/alphapips-brand.webp');
+        background-repeat: no-repeat;
+        background-size: 190% auto;
+        background-position: center 2%;
+        border-radius: 4px;
     }
 
     &__text {

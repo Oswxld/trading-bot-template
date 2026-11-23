@@ -552,6 +552,25 @@ const NextDigitTrader = ({
                     {reportsOpen ? 'Hide reports' : 'Show Summary / Transactions / Journal'}
                 </button>
             </div>
+            <div className='digit-analyzer__auto-click-feedback' aria-live='polite'>
+                {reportsOpen ? 'REPORTS OPEN · Select Summary, Transactions or Journal below.' : 'Run opens your trade reports immediately, even before a Deriv signal arrives.'}
+            </div>
+            <div ref={reportsRef} className='digit-analyzer__auto-reports'>
+                <BulkReports
+                    records={records}
+                    journal={journal}
+                    accountId={account.id}
+                    currency={account.currency || 'USD'}
+                    balance={null}
+                    isRunning={running || arming}
+                    onReset={resetReports}
+                    reportsOpen={reportsOpen}
+                    onReportsToggle={setReportsOpen}
+                    reportTitle='Next Digit Auto Trader Reports'
+                    emptyMessage={status}
+                    resetMessage={"Clear this auto trader account's local report? Deriv contracts and statements will not be changed."}
+                />
+            </div>
             <p aria-live='polite' className='digit-analyzer__auto-status'>{status}</p>
             {blocked && <div className='digit-analyzer__auto-warning'>
                 <strong>Trading locked: unconfirmed purchase.</strong><p>{blocked}</p>
@@ -576,22 +595,7 @@ const NextDigitTrader = ({
                     </li>
                 )}</ul>
             </div>}
-            <div ref={reportsRef} className='digit-analyzer__auto-reports'>
-                <BulkReports
-                    records={records}
-                    journal={journal}
-                    accountId={account.id}
-                    currency={account.currency || 'USD'}
-                    balance={null}
-                    isRunning={running || arming}
-                    onReset={resetReports}
-                    reportsOpen={reportsOpen}
-                    onReportsToggle={setReportsOpen}
-                    reportTitle='Next Digit Auto Trader Reports'
-                    emptyMessage={status}
-                    resetMessage={"Clear this auto trader account's local report? Deriv contracts and statements will not be changed."}
-                />
-            </div>
+
         </section>
     );
 };

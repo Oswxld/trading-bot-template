@@ -21,7 +21,11 @@ export const preflightNextDigitAccount = async ({
     }
     const reply = await nextDigitRequest(api, { balance: 1 }, canSend);
     const balance = reply?.balance;
-    if (!balance || String(balance.loginid || balance.account_id) !== String(accountId) ||
+    const reportedId = balance?.loginid || balance?.account_id;
+    // The authenticated Options socket is already bound to the selected
+    // account. Some Deriv balance replies omit loginid; reject conflicting
+    // identities, but do not require an optional field the broker may omit.
+    if (!canSend() || !balance || (reportedId && String(reportedId) !== String(accountId)) ||
         balance.currency !== currency || !Number.isFinite(Number(balance.balance)) ||
         Number(balance.balance) < stake) {
         throw new Error('Broker balance, account or currency could not be verified, or insufficient funds for the first stake.');

@@ -44,7 +44,7 @@ describe('Digit Analyzer feature shell', () => {
         expect(within(reports).getByRole('button', { name: 'Summary' })).toBeInTheDocument();
         expect(within(reports).getByRole('button', { name: 'Transactions' })).toBeInTheDocument();
         expect(within(reports).getByRole('button', { name: 'Journal' })).toBeInTheDocument();
-        expect(screen.getByRole('alert')).toHaveTextContent('Log in with Deriv first.');
+        expect(screen.getByText('Select an available Deriv market before running the auto trader.')).toBeInTheDocument();
     });
 
     it('shows an honest loading state until public market metadata arrives', () => {

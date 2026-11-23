@@ -44,7 +44,10 @@ describe('Digit Analyzer feature shell', () => {
         expect(within(reports).getByRole('button', { name: 'Summary' })).toBeInTheDocument();
         expect(within(reports).getByRole('button', { name: 'Transactions' })).toBeInTheDocument();
         expect(within(reports).getByRole('button', { name: 'Journal' })).toBeInTheDocument();
-        expect(screen.getByText('Select an available Deriv market before running the auto trader.')).toBeInTheDocument();
+        expect(within(reports).getByText('Select an available Deriv market before running the auto trader.')).toBeInTheDocument();
+        fireEvent.click(within(reports).getByRole('button', { name: 'Journal' }));
+        expect(within(reports).getByText('Run requested: validating the selected Deriv account and risk limits.')).toBeInTheDocument();
+        expect(within(reports).getByText('Select an available Deriv market before running the auto trader.')).toBeInTheDocument();
     });
 
     it('shows an honest loading state until public market metadata arrives', () => {

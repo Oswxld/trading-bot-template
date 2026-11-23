@@ -2,7 +2,15 @@ import { useEffect, useRef, useState } from 'react';
 import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import { DerivWSAccountsService } from '@/services/derivws-accounts.service';
 import { OAuthTokenExchangeService } from '@/services/oauth-token-exchange.service';
-import { isAdminTestActive, isAdminTestRequested } from '@/services/admin-test-kit';
+import {
+    getAdminTestAccounts,
+    getAdminTestBalances,
+    isAdminTestActive,
+    isAdminTestRequested,
+    isAdminTestSessionReady,
+    TEST_DEMO_ID,
+    TEST_REAL_ID,
+} from '@/services/admin-test-kit';
 import { acquireBulkRun, releaseBulkRun } from '@/pages/bulk-trader/bulk-request-safety';
 import { makePendingBulkRecord, recoverInterruptedBulkRecords, upsertBulkRecord } from '@/pages/bulk-trader/bulk-trade-records';
 import BulkReports from '@/pages/bulk-trader/bulk-reports';
@@ -11,7 +19,14 @@ import type { NextDigitPrediction } from '../services/next-digit-transition';
 import type { AnalyzerTick } from '../types/digit-analyzer.types';
 
 type AccountMode = 'real' | 'demo' | 'unavailable';
-type Account = { id: string; mode: AccountMode; currency: string; verified: boolean; reason: string };
+type Account = {
+    id: string;
+    mode: AccountMode;
+    currency: string;
+    verified: boolean;
+    simulated: boolean;
+    reason: string;
+};
 type TradeRecord = { contractId: string; digit: number; symbol: string; price: number; profit: number; status: string; at: number };
 type ReportRow = {
     localId: string;
@@ -35,6 +50,7 @@ type JournalRow = { id: number; timestamp: number; message: string };
 type RunState = {
     id: string;
     mode: Exclude<AccountMode, 'unavailable'>;
+    simulated: boolean;
     currency: string;
     symbol: string;
     running: boolean;
@@ -48,7 +64,7 @@ type RunState = {
     limit: number;
     stopLoss: number;
 };
-const emptyAccount: Account = { id: '', mode: 'unavailable', currency: '', verified: false, reason: 'Log in with Deriv to enable trading.' };
+const emptyAccount: Account = { id: '', mode: 'unavailable', currency: '', verified: false, simulated: false, reason: 'Log in with Deriv to enable trading.' };
 const historyKey = (id: string) => `next-digit:history:${id}`;
 const blockedKey = (id: string) => `next-digit:unconfirmed:${id}`;
 const reportsKey = (id: string) => `next-digit:reports:${id}`;
@@ -81,14 +97,41 @@ const storeHistory = (id: string, record: TradeRecord) => {
     } catch { /* Disabled browser storage must never change broker outcomes. */ }
 };
 
-/** Never infer the real/demo mode from a login prefix or a simulated account. */
+/** Broker-backed accounts and explicitly authenticated local simulations are separate. */
 const readAccount = (): Account => {
     if (typeof window === 'undefined') return emptyAccount;
-    if (isAdminTestRequested() || isAdminTestActive() ||
-        (api_base.api as (typeof api_base.api & { isAdminSimulation?: boolean }) | null)?.isAdminSimulation) {
-        return { ...emptyAccount, reason: 'Admin Test Kit simulation is disabled for this live trader. Sign in with Deriv OAuth.' };
-    }
     const id = localStorage.getItem('active_loginid') || '';
+    if (isAdminTestActive()) {
+        // These are the ONLY two simulated IDs. Never decide simulation from
+        // a CR/VRT prefix, a cached balance, or an unverified browser flag.
+        const allowed = id === TEST_DEMO_ID || id === TEST_REAL_ID;
+        const mock = api_base.api as (typeof api_base.api & {
+            isAdminSimulation?: boolean;
+            simulatedAccountId?: string;
+        }) | null;
+        const account = allowed ? getAdminTestAccounts().find(item => item.account_id === id) : null;
+        const verified = Boolean(account && mock?.isAdminSimulation === true &&
+            mock.simulatedAccountId === id && isAdminTestSessionReady(api_base));
+        return {
+            id: allowed ? id : '',
+            mode: account?.account_type ?? 'unavailable',
+            currency: account?.currency ?? '',
+            verified,
+            simulated: true,
+            reason: verified
+                ? 'Admin Test Kit simulated account connected. Orders and balances are simulated; analysis uses real public Deriv ticks.'
+                : 'Connecting to the authenticated Admin Test Kit simulator. No broker orders will be sent.',
+        };
+    }
+    // When a Test Kit login has been requested but not verified, NEVER fall
+    // through to a genuine broker socket or reuse cached Deriv OAuth data.
+    if (isAdminTestRequested()) {
+        return { ...emptyAccount, simulated: true,
+            reason: 'Admin Test Kit session is not authenticated or balance sync is not ready. No trading allowed.' };
+    }
+    if ((api_base.api as (typeof api_base.api & { isAdminSimulation?: boolean }) | null)?.isAdminSimulation) {
+        return { ...emptyAccount, reason: 'Simulated socket is still active. Reconnect to Deriv OAuth.' };
+    }
     const connected = Boolean(id && api_base.is_authorized &&
         api_base.account_id === id &&
         (api_base.account_info as { loginid?: string }).loginid === id &&
@@ -102,7 +145,7 @@ const readAccount = (): Account => {
     const currency = account?.currency || (connected ? liveInfo.currency : '') || '';
     const verified = connected && mode !== 'unavailable' && !!currency;
     return {
-        id, mode, currency, verified,
+        id, mode, currency, verified, simulated: false,
         reason: !id ? 'Log in with Deriv first.' :
             !connected ? 'Waiting for the selected Deriv Options account to authenticate.' :
             mode === 'unavailable' ? 'Account type not verified. Reconnect Deriv OAuth.' :

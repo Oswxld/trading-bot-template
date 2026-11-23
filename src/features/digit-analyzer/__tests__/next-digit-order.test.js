@@ -28,6 +28,16 @@ describe('Deriv next-digit execution adapter', () => {
         expect(request.mock.calls[1][0].payload).toEqual({ balance: 1 });
     });
 
+    it('allows one sequential stake when the authenticated broker omits optional balance loginid', async () => {
+        request
+            .mockResolvedValueOnce({ contracts_for: { available: [{ contract_type: 'DIGITMATCH' }] } })
+            .mockResolvedValueOnce({ balance: { currency: 'USD', balance: 0.5 } });
+        await expect(preflightNextDigitAccount({
+            api, symbol: 'R_100', accountId: 'VRT123',
+            currency: 'USD', stake: 0.5, maxTrades: 5, canSend: always,
+        })).resolves.toBe(0.5);
+    });
+
     it('rejects unavailable real-money balance and mismatched broker identity', async () => {
         request
             .mockResolvedValueOnce({ contracts_for: { available: [{ contract_type: 'DIGITMATCH' }] } })

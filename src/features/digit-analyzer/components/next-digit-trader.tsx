@@ -223,11 +223,21 @@ const NextDigitTrader = ({
             if (runRef.current === run) runRef.current = null;
         }
     };
-    const safeSocket = (id: string, currency: string, api: NonNullable<typeof api_base.api>) => {
+    const safeSocket = (id: string, currency: string, api: NonNullable<typeof api_base.api>,
+        simulated: boolean) => {
         const current = readAccount();
-        return current.verified && current.id === id && current.currency === currency &&
-            api_base.api === api && api_base.account_id === id &&
-            api.connection?.readyState === 1 && !api_base.is_running;
+        if (!current.verified || current.simulated !== simulated ||
+            current.id !== id || current.currency !== currency ||
+            api_base.api !== api || api_base.account_id !== id ||
+            api.connection?.readyState !== 1 || api_base.is_running) return false;
+        const socket = api as typeof api & { isAdminSimulation?: boolean; simulatedAccountId?: string };
+        if (simulated) {
+            return isAdminTestSessionReady(api_base) && socket.isAdminSimulation === true &&
+                socket.simulatedAccountId === id &&
+                (id === TEST_DEMO_ID || id === TEST_REAL_ID);
+        }
+        return !isAdminTestRequested() && !isAdminTestActive() &&
+            socket.isAdminSimulation !== true && api_base.is_authorized;
     };
 
     // The selected account can change without navigation (header switcher).
@@ -236,6 +246,7 @@ const NextDigitTrader = ({
             const next = readAccount();
             setAccount(previous =>
                 previous.id === next.id && previous.mode === next.mode &&
+                previous.simulated === next.simulated &&
                 previous.currency === next.currency && previous.verified === next.verified &&
                 previous.reason === next.reason ? previous : next
             );
@@ -273,7 +284,8 @@ const NextDigitTrader = ({
 
     useEffect(() => {
         const current = runRef.current;
-        if (current && (current.id !== account.id || current.symbol !== symbol || !account.verified)) {
+        if (current && (current.id !== account.id || current.symbol !== symbol ||
+            current.simulated !== account.simulated || !account.verified)) {
             finish(current, 'Account, market or authentication changed. No new purchases will be sent.');
         }
         setHistory(readHistory(account.id));
@@ -283,7 +295,7 @@ const NextDigitTrader = ({
         setSummary({ count: 0, profit: 0 });
         // Account/market changes invalidate running instructions even between ticks.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [account.id, account.verified, symbol]);
+    }, [account.id, account.verified, account.simulated, symbol]);
 
     useEffect(() => {
         mountedRef.current = true;
@@ -343,6 +355,29 @@ const NextDigitTrader = ({
         }
         // Run can arm while the read-only history and tick stream are loading.
         // Purchases remain disabled until a NEW verified live tick and prediction arrive.
+        // A simulated account may need to recreate its local-only mock socket
+        // after a reload. Never use OAuth or a genuine socket for this recovery.
+        if (isAdminTestRequested()) {
+            if (!isAdminTestActive()) {
+                runError('Admin Test Kit authentication or balance synchronization is not ready.');
+                return;
+            }
+            if (!isAdminTestSessionReady(api_base)) {
+                setArming(true);
+                setStatus('Initializing the Admin Test Kit simulated account…');
+                try {
+                    if (!await api_base.ensureAdminTestSession()) {
+                        runError('Simulated account could not connect. Re-enter Admin Test Kit and retry.');
+                        return;
+                    }
+                } catch (error) {
+                    runError('Admin Test Kit initialization failed: ' + messageOf(error));
+                    return;
+                } finally {
+                    if (mountedRef.current) setArming(false);
+                }
+            }
+        }
         const current = readAccount();
         if (!current.verified || current.mode === 'unavailable') {
             runError(current.reason);
@@ -358,14 +393,14 @@ const NextDigitTrader = ({
             return;
         }
         const api = api_base.api;
-        if (!api || !safeSocket(current.id, current.currency, api)) {
+        if (!api || !safeSocket(current.id, current.currency, api, current.simulated)) {
             runError('Selected Deriv account is not connected, or another bot is running.');
             return;
         }
         // Show the real-money authorization dialog directly from the user's
         // click. Browsers can suppress native confirms invoked after awaited
         // broker requests, leaving Run apparently inactive.
-        const accepted = window.confirm(
+        const accepted = current.simulated || window.confirm(
             `ENABLE AUTHENTICATED DERIV AUTO TRADING\n\n` +
             `Account: ${current.id} (${current.mode.toUpperCase()})\n` +
             `Market: ${marketName} (${symbol})\n` +
@@ -380,28 +415,41 @@ const NextDigitTrader = ({
             log(current.id, 'User declined automatic trading authorization.');
             return;
         }
-        log(current.id, 'User confirmed automatic trading for the selected account.');
+        log(current.id, current.simulated
+            ? 'Admin Test Kit paper trading requested. No real broker purchases will be placed.'
+            : 'User confirmed automatic trading for the selected broker account.');
         armingRef.current = true;
         setArming(true);
-        setStatus('Verifying Deriv account, contract availability and available balance…');
+        setStatus(current.simulated
+            ? 'Verifying Admin Test Kit mock contracts and simulated account balance…'
+            : 'Verifying Deriv account, contract availability and available balance…');
         log(current.id, `Preflight: ${current.mode.toUpperCase()} ${current.id}, ${marketName}, maximum ${limit} trades at ${amount.toFixed(2)} ${current.currency}.`);
         try {
-            const token = OAuthTokenExchangeService.getAccessToken();
-            if (!token) throw new Error('Deriv OAuth session is missing. Please sign in again.');
-            // Check directly with Deriv REST; browser display data is insufficient
-            // to authorize real-money purchases.
-            const fresh = await DerivWSAccountsService.fetchAccountsList(token);
-            const verified = fresh.find(item => item.account_id === current.id);
-            if (!verified || verified.account_type !== current.mode || verified.currency !== current.currency) {
-                throw new Error('Selected account type/currency could not be verified with Deriv.');
+            if (current.simulated) {
+                // Admin Test Kit has a Supabase-authenticated local transport.
+                // It must never fetch/require a Deriv OAuth token.
+                if (!isAdminTestSessionReady(api_base) ||
+                    !getAdminTestAccounts().some(row => row.account_id === current.id &&
+                        row.account_type === current.mode && row.currency === current.currency)) {
+                    throw new Error('Admin Test Kit account or simulated socket was not verified.');
+                }
+            } else {
+                const token = OAuthTokenExchangeService.getAccessToken();
+                if (!token) throw new Error('Deriv OAuth session is missing. Please sign in again.');
+                const fresh = await DerivWSAccountsService.fetchAccountsList(token);
+                const verified = fresh.find(item => item.account_id === current.id);
+                if (!verified || verified.account_type !== current.mode ||
+                    verified.currency !== current.currency) {
+                    throw new Error('Selected account type/currency could not be verified with Deriv.');
+                }
             }
             await preflightNextDigitAccount({
                 api, symbol, accountId: current.id, currency: current.currency,
                 stake: amount, maxTrades: limit,
-                canSend: () => safeSocket(current.id, current.currency, api) &&
+                canSend: () => safeSocket(current.id, current.currency, api, current.simulated) &&
                     symbolRef.current === symbol,
             });
-            if (!safeSocket(current.id, current.currency, api) || symbolRef.current !== symbol) {
+            if (!safeSocket(current.id, current.currency, api, current.simulated) || symbolRef.current !== symbol) {
                 throw new Error('Account or market changed during verification. No trading started.');
             }
             if (!safeSocket(current.id, current.currency, api) || symbolRef.current !== symbol) {
@@ -411,7 +459,8 @@ const NextDigitTrader = ({
                 throw new Error('Bulk Trader or another trader is already active on this account.');
             }
             const run: RunState = {
-                id: current.id, mode: current.mode, currency: current.currency,
+                id: current.id, mode: current.mode, simulated: current.simulated,
+                currency: current.currency,
                 symbol, running: true, busy: false, locked: true,
                 lastTickId: latestRef.current?.id || '',
                 count: 0, profit: 0, losses: 0,
@@ -420,8 +469,12 @@ const NextDigitTrader = ({
             runRef.current = run;
             setRunning(true);
             setSummary({ count: 0, profit: 0 });
-            setStatus(`RUNNING on ${current.mode.toUpperCase()} ${current.id}. Waiting for a fresh Deriv tick and a valid next-digit prediction.`);
-            log(current.id, `AUTO TRADE RUNNING. Monitoring ${marketName} for real Deriv ticks. One matching purchase at a time; max ${limit} trades.`);
+            const accountLabel = current.simulated ? `SIMULATED ${current.mode.toUpperCase()}`
+                : current.mode.toUpperCase();
+            setStatus(`RUNNING on ${accountLabel} ${current.id}. Waiting for a fresh LIVE Deriv tick prediction.`);
+            log(current.id, `AUTO TRADE RUNNING. ${current.simulated
+                ? 'Real Deriv public ticks drive predictions; paper orders use Admin Test Kit balances and adjustable win probability. No live broker purchases.'
+                : 'Predictions and purchases use genuine Deriv data and an authenticated broker account.'} Max ${limit} trades.`);
         } catch (error) {
             setStatus(messageOf(error));
             log(current.id, `Run could not start: ${messageOf(error)}`);
@@ -443,10 +496,11 @@ const NextDigitTrader = ({
             latestTick.digit !== prediction.entryDigit ||
             prediction.nextDigit === null ||
             Date.now() - latestTick.epoch * 1000 > 5000 ||
-            symbol !== run.symbol || !account.verified || account.id !== run.id) return;
+            symbol !== run.symbol || !account.verified || account.id !== run.id ||
+            account.simulated !== run.simulated) return;
 
         const api = api_base.api;
-        if (!api || !safeSocket(run.id, run.currency, api)) {
+        if (!api || !safeSocket(run.id, run.currency, api, run.simulated)) {
             finish(run, 'Deriv account/socket changed. Trading halted.');
             return;
         }
@@ -464,7 +518,7 @@ const NextDigitTrader = ({
         log(run.id, `Live signal: digit ${latestTick.digit} → candidate ${candidate}. Requesting a Deriv Matches quote.`);
         setReportsOpen(true);
         setStatus(`Live ${latestTick.digit} → ${candidate}. Requesting a one-tick Matches proposal…`);
-        const canObserve = () => safeSocket(run.id, run.currency, api);
+        const canObserve = () => safeSocket(run.id, run.currency, api, run.simulated);
         // A Deriv quote takes network time. Requiring the SAME latest-tick ID
         // when buying caused nearly every one-second-market order to expire
         // before sending. The frozen signal must instead still be recent, and

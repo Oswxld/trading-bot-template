@@ -530,7 +530,7 @@ const NextDigitTrader = ({
                     onReportsToggle={setReportsOpen}
                     reportTitle='Next Digit Auto Trader Reports'
                     emptyMessage='Auto trader is armed or awaiting the next genuine Deriv tick. Open Journal for run status and broker errors.'
-                    resetMessage='Clear this auto trader account\'s local report? Deriv contracts and statements will not be changed.'
+                    resetMessage={"Clear this auto trader account's local report? Deriv contracts and statements will not be changed."}
                 />
             </div>
         </section>

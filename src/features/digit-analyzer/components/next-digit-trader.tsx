@@ -142,6 +142,7 @@ const NextDigitTrader = ({
     symbolRef.current = symbol;
     const runRef = useRef<RunState | null>(null);
     const armingRef = useRef(false);
+    const reportsRef = useRef<HTMLDivElement>(null);
     const report = (id: string, entry: ReportRow) => {
         if (!id) return;
         const rows = upsertBulkRecord(readReportRows(id), entry, 200) as ReportRow[];
@@ -155,6 +156,19 @@ const NextDigitTrader = ({
         try { sessionStorage.setItem(journalKey(id), JSON.stringify(rows)); } catch { /* storage may be full */ }
         if (mountedRef.current && readAccount().id === id) setJournal(rows);
     };
+
+    useEffect(() => {
+        if (!reportsOpen) return;
+        // Show the three tabs immediately on desktop and small screens without
+        // requiring a second click or hunting below the auto-trade form.
+        if (typeof window.requestAnimationFrame !== 'function') return;
+        const frame = window.requestAnimationFrame(() => {
+            if (typeof reportsRef.current?.scrollIntoView === 'function') {
+                reportsRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+        });
+        return () => window.cancelAnimationFrame(frame);
+    }, [reportsOpen]);
 
     const finish = (run: RunState, reason: string) => {
         run.running = false;
@@ -560,7 +574,7 @@ const NextDigitTrader = ({
                     </li>
                 )}</ul>
             </div>}
-            <div className='digit-analyzer__auto-reports'>
+            <div ref={reportsRef} className='digit-analyzer__auto-reports'>
                 <BulkReports
                     records={records}
                     journal={journal}

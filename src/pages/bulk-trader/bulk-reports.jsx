@@ -224,7 +224,7 @@ const exportCsv = (records, currency) => {
     URL.revokeObjectURL(url);
 };
 
-function BulkReports({ records, journal, accountId, currency, balance, isRunning, onReset, reportsOpen, onReportsToggle, reportTitle = 'Bulk Trader Reports', emptyMessage = 'No bulk trades yet. Select an account and place a trade to see its summary.', resetMessage = 'Reset the bulk trader report for this account? This only clears this website\'s local report. Deriv account statements are not changed.' }) {
+function BulkReports({ records, journal, accountId, currency, balance, isRunning, onReset, reportsOpen, onReportsToggle, reportTitle = 'Bulk Trader Reports', emptyMessage = 'No bulk trades yet. Select an account and place a trade to see its summary.', inline = false, resetMessage = 'Reset the bulk trader report for this account? This only clears this website\'s local report. Deriv account statements are not changed.' }) {
     const [active, setActive] = useState(0);
     const [detail, setDetail] = useState(false);
     const [maximized, setMaximized] = useState(false);
@@ -261,6 +261,15 @@ function BulkReports({ records, journal, accountId, currency, balance, isRunning
                 id='bulk-reports-panel'
                 className={`bulk-reports__panel${maximized ? ' bulk-reports__panel--maximized' : ''}`}
                 aria-label={reportTitle}
+                // The Analysis Tool lives inside a scrolling view. Inline styles
+                // override Bulk Trader's fixed mobile drawer rules regardless of
+                // SCSS import order; ordinary Bulk Trader uses its default layout.
+                style={inline && !maximized ? {
+                    position: 'relative', inset: 'auto', top: 'auto', right: 'auto',
+                    bottom: 'auto', left: 'auto', width: '100%', maxWidth: '100%',
+                    height: 'min(660px, 72vh)', minHeight: '340px', maxHeight: 'none',
+                    zIndex: 1,
+                } : undefined}
             >
                 <header className='bulk-reports__header'>
                     <strong>{reportTitle}</strong>

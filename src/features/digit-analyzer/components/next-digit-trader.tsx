@@ -110,11 +110,15 @@ const readAccount = (): Account => {
             simulatedAccountId?: string;
         }) | null;
         const account = allowed ? getAdminTestAccounts().find(item => item.account_id === id) : null;
-        const verified = Boolean(account && mock?.isAdminSimulation === true &&
+        const mode: AccountMode = id === TEST_DEMO_ID && account?.account_type === 'demo'
+            ? 'demo' : id === TEST_REAL_ID && account?.account_type === 'real'
+                ? 'real' : 'unavailable';
+        const verified = Boolean(mode !== 'unavailable' &&
+            mock?.isAdminSimulation === true &&
             mock.simulatedAccountId === id && isAdminTestSessionReady(api_base));
         return {
             id: allowed ? id : '',
-            mode: account?.account_type ?? 'unavailable',
+            mode,
             currency: account?.currency ?? '',
             verified,
             simulated: true,

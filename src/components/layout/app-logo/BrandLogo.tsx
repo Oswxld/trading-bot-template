@@ -1,6 +1,6 @@
 /**
- * Apex wealth emblem supplied by the client (cropped from the provided logo).
- * Render the brand name as text next to it so it remains legible in the header.
+ * Alphapips temporary wordmark. Replace the AP monogram when the client
+ * supplies the official brand artwork; do not reuse another client's logo.
  */
 type TBrandLogoProps = {
     width?: number;
@@ -14,15 +14,15 @@ export const BrandLogo = ({
     height = 36,
     className = '',
 }: TBrandLogoProps) => (
-    <span className={`apex-brand-logo ${className}`} style={{ width, height }} aria-label='Apex wealth'>
+    <span className={`alphapips-brand-logo ${className}`} style={{ width, height }} aria-label='Alphapips'>
         <img
-            className='apex-brand-logo__mark'
-            src='/apex-wealth-mark.webp'
+            className='alphapips-brand-logo__mark'
+            src='/alphapips-mark.svg'
             alt=''
             width={height}
             height={height}
             decoding='async'
         />
-        <span className='apex-brand-logo__text'>Apex wealth</span>
+        <span className='alphapips-brand-logo__text'>Alphapips</span>
     </span>
 );

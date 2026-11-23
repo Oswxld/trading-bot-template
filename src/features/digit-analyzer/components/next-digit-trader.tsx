@@ -123,7 +123,7 @@ const NextDigitTrader = ({
     const [stake, setStake] = useState('0.50');
     const [maxTrades, setMaxTrades] = useState('5');
     const [stopLoss, setStopLoss] = useState('2.50');
-    const [status, setStatus] = useState('Analysis only. Automatic trading is OFF.');
+    const [status, setStatus] = useState('Analysis only. Automatic trading is OFF. Press Run to see account checks and reports.');
     const [running, setRunning] = useState(false);
     const [arming, setArming] = useState(false);
     const [summary, setSummary] = useState({ count: 0, profit: 0 });
@@ -543,7 +543,7 @@ const NextDigitTrader = ({
                     value={stopLoss} disabled={running || arming} onChange={event => setStopLoss(event.target.value)} /></label>
             </div>
             <div className='digit-analyzer__auto-actions'>
-                <button type='button' onClick={() => void start()} disabled={running || arming || Boolean(blocked)}>
+                <button type='button' onClick={() => void start()} aria-label='Run Auto Trader'>
                     {arming ? 'Verifying Deriv…' : 'Run Auto Trader'}
                 </button>
                 <button type='button' className='digit-analyzer__auto-stop' onClick={stop} disabled={!running}>Stop</button>
@@ -566,6 +566,7 @@ const NextDigitTrader = ({
                     onReset={resetReports}
                     reportsOpen={reportsOpen}
                     onReportsToggle={setReportsOpen}
+                    inline={true}
                     reportTitle='Next Digit Auto Trader Reports'
                     emptyMessage={status}
                     resetMessage={"Clear this auto trader account's local report? Deriv contracts and statements will not be changed."}

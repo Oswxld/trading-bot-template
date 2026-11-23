@@ -32,6 +32,21 @@ describe('Digit Analyzer feature shell', () => {
         });
     });
 
+    it('shows Summary, Transactions and Journal immediately on Run, even when OAuth preflight fails', () => {
+        render(<DigitAnalyzer />);
+        const run = screen.getByRole('button', { name: 'Run Auto Trader' });
+        expect(run).toBeEnabled();
+
+        fireEvent.click(run);
+
+        const reports = screen.getByRole('complementary', { name: 'Next Digit Auto Trader Reports' });
+        expect(reports).toBeInTheDocument();
+        expect(within(reports).getByRole('button', { name: 'Summary' })).toBeInTheDocument();
+        expect(within(reports).getByRole('button', { name: 'Transactions' })).toBeInTheDocument();
+        expect(within(reports).getByRole('button', { name: 'Journal' })).toBeInTheDocument();
+        expect(screen.getByRole('alert')).toHaveTextContent('Log in with Deriv first.');
+    });
+
     it('shows an honest loading state until public market metadata arrives', () => {
         render(<DigitAnalyzer />);
 

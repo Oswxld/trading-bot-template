@@ -452,9 +452,6 @@ const NextDigitTrader = ({
             if (!safeSocket(current.id, current.currency, api, current.simulated) || symbolRef.current !== symbol) {
                 throw new Error('Account or market changed during verification. No trading started.');
             }
-            if (!safeSocket(current.id, current.currency, api) || symbolRef.current !== symbol) {
-                throw new Error('Account or market changed. Trading was not started.');
-            }
             if (!acquireBulkRun(current.id)) {
                 throw new Error('Bulk Trader or another trader is already active on this account.');
             }
@@ -515,9 +512,9 @@ const NextDigitTrader = ({
             prediction: String(candidate),
         }) as ReportRow;
         report(run.id, pending);
-        log(run.id, `Live signal: digit ${latestTick.digit} → candidate ${candidate}. Requesting a Deriv Matches quote.`);
+        log(run.id, `LIVE DERIV SIGNAL: digit ${latestTick.digit} → candidate ${candidate}. Requesting a ${run.simulated ? 'paper Matches' : 'Deriv Matches'} quote.`);
         setReportsOpen(true);
-        setStatus(`Live ${latestTick.digit} → ${candidate}. Requesting a one-tick Matches proposal…`);
+        setStatus(`Live Deriv tick ${latestTick.digit} → ${candidate}. Requesting ${run.simulated ? 'simulated' : 'broker'} one-tick Matches proposal…`);
         const canObserve = () => safeSocket(run.id, run.currency, api, run.simulated);
         // A Deriv quote takes network time. Requiring the SAME latest-tick ID
         // when buying caused nearly every one-second-market order to expire

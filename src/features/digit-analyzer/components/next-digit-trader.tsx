@@ -469,7 +469,7 @@ const NextDigitTrader = ({
                     {running ? 'LIVE AUTO TRADING' : 'AUTO TRADING OFF'}
                 </span>
             </div>
-            <p className='digit-analyzer__auto-account' role='status'>
+            <p className='digit-analyzer__auto-account'>
                 Selected account: <strong>{account.verified
                     ? `${account.id} · ${account.mode.toUpperCase()} · ${account.currency}`
                     : account.reason}</strong>

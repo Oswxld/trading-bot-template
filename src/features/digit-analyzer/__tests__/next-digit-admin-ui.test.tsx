@@ -119,7 +119,7 @@ describe('Auto Trader Admin Test Kit visible Run integration', () => {
             expect(panel).toBeVisible();
             expect(within(panel).getByRole('button', { name: 'Summary' })).toBeVisible();
             expect(within(panel).getByRole('button', { name: 'Journal' })).toBeVisible();
-            await waitFor(() => expect(screen.getByText(new RegExp(`RUNNING on SIMULATED ${type.toUpperCase()}`))).toBeInTheDocument());
+            await waitFor(() => expect(screen.getAllByText(new RegExp(`RUNNING on SIMULATED ${type.toUpperCase()}`)).length).toBeGreaterThan(0));
             expect(preflightNextDigitAccount).toHaveBeenCalledWith(expect.objectContaining({
                 api: api_base.api, symbol: 'R_100', accountId: id, currency: 'USD',
             }));
@@ -148,6 +148,6 @@ describe('Auto Trader Admin Test Kit visible Run integration', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Run Auto Trader' }));
         expect(preflightNextDigitAccount).not.toHaveBeenCalled();
         expect(placeNextDigitMatch).not.toHaveBeenCalled();
-        expect(screen.getByText(/Admin Test Kit simulated account/)).toBeInTheDocument();
+        expect(screen.getByText(/Connecting to the authenticated Admin Test Kit simulator/)).toBeInTheDocument();
     });
 });

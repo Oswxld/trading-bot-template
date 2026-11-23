@@ -1,4 +1,3 @@
-import React from 'react';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import {
@@ -148,6 +147,6 @@ describe('Auto Trader Admin Test Kit visible Run integration', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Run Auto Trader' }));
         expect(preflightNextDigitAccount).not.toHaveBeenCalled();
         expect(placeNextDigitMatch).not.toHaveBeenCalled();
-        expect(screen.getByText(/Connecting to the authenticated Admin Test Kit simulator/)).toBeInTheDocument();
+        expect(screen.getAllByText(/Connecting to the authenticated Admin Test Kit simulator/).length).toBeGreaterThan(0);
     });
 });

@@ -344,12 +344,27 @@ const NextDigitTrader = ({
             return;
         }
         const candidate = prediction.nextDigit;
-        const signalId = latestTick.id;
         run.busy = true;
+        const pending = makePendingBulkRecord({
+            localId: `next-digit:${run.id}:${latestTick.id}:${Date.now()}`,
+            number: run.count + 1,
+            symbol: run.symbol,
+            symbolName: marketName,
+            contractType: 'Matches',
+            prediction: String(candidate),
+        }) as ReportRow;
+        report(run.id, pending);
+        log(run.id, `Live signal: digit ${latestTick.digit} → candidate ${candidate}. Requesting a Deriv Matches quote.`);
+        setReportsOpen(true);
         setStatus(`Live ${latestTick.digit} → ${candidate}. Requesting a one-tick Matches proposal…`);
         const canObserve = () => safeSocket(run.id, run.currency, api);
+        // A Deriv quote takes network time. Requiring the SAME latest-tick ID
+        // when buying caused nearly every one-second-market order to expire
+        // before sending. The frozen signal must instead still be recent, and
+        // the market/account/session must be unchanged. The actual contract
+        // applies to the next tick AFTER Deriv accepts the buy.
         const canBuy = () => run.running && canObserve() && symbolRef.current === run.symbol &&
-            latestRef.current?.id === signalId &&
+            latestRef.current !== null &&
             Date.now() - latestTick.epoch * 1000 <= 5000;
         void (async () => {
             try {
@@ -357,7 +372,23 @@ const NextDigitTrader = ({
                     api, symbol: run.symbol, accountId: run.id,
                     currency: run.currency, digit: candidate, stake: run.stake,
                     canBuy, canObserve,
+                    onProposal: ({ price }: { price: number }) => {
+                        report(run.id, { ...pending, status: 'buying', price });
+                        log(run.id, `Deriv quoted ${price.toFixed(2)} ${run.currency} for Matches ${candidate}. Sending purchase.`);
+                    },
+                    onBought: ({ contractId, price }: { contractId: string; price: number }) => {
+                        report(run.id, { ...pending, status: 'open', contractId, price });
+                        log(run.id, `BUY CONFIRMED: contract #${contractId}; ${price.toFixed(2)} ${run.currency}. Awaiting broker settlement.`);
+                    },
                 });
+                const saved = readReportRows(run.id).find(row => row.localId === pending.localId) ?? pending;
+                report(run.id, {
+                    ...saved, contractId: result.contractId, price: result.price,
+                    profit: result.profit, status: result.status,
+                    entrySpot: result.entrySpot, exitSpot: result.exitSpot,
+                    payout: Math.max(0, result.price + result.profit),
+                });
+                log(run.id, `SETTLED #${result.contractId}: ${result.status.toUpperCase()}, net ${result.profit >= 0 ? '+' : ''}${result.profit.toFixed(2)} ${run.currency} (Deriv-confirmed).`);
                 const record: TradeRecord = { ...result, at: Date.now() };
                 storeHistory(run.id, record);
                 run.count += 1;
@@ -373,11 +404,16 @@ const NextDigitTrader = ({
                 }
             } catch (error) {
                 if (error instanceof Error && 'staleSignal' in error && run.running && canObserve()) {
-                    if (mountedRef.current) setStatus('Signal expired before purchase. Waiting for a new live tick.');
+                    report(run.id, { ...pending, status: 'skipped', reason: error.message });
+                    log(run.id, 'Signal expired before the buy. No purchase submitted; awaiting another live tick.');
+                    if (mountedRef.current) setStatus('Quote arrived after the signal expired. No purchase sent; waiting for the next live tick.');
                     return;
                 }
                 const uncertain = error !== null && typeof error === 'object' &&
                     'unconfirmed' in error && error.unconfirmed === true;
+                const saved = readReportRows(run.id).find(row => row.localId === pending.localId) ?? pending;
+                report(run.id, { ...saved, status: uncertain ? 'unconfirmed' : 'failed', reason: messageOf(error) });
+                log(run.id, `${uncertain ? 'UNCONFIRMED ORDER — MANUAL RECONCILIATION REQUIRED' : 'Trade halted'}: ${messageOf(error)}`);
                 if (uncertain) {
                     try { sessionStorage.setItem(blockedKey(run.id), messageOf(error)); } catch { /* still halt */ }
                     if (mountedRef.current && account.id === run.id) setBlocked(messageOf(error));

@@ -6,6 +6,7 @@ import { calculateDigitOverUnder } from '../services/digit-over-under';
 import { calculateDigitMatchesDiffers } from '../services/digit-matches-differs';
 import { calculateDigitPatternScores } from '../services/digit-pattern-score';
 import { detectDigitPatternLeaders } from '../services/digit-pattern-leaders';
+import { calculateNextDigitPrediction } from '../services/next-digit-transition';
 import { useMarketCatalog } from '../hooks/use-market-catalog';
 import { useLiveTicks } from '../hooks/use-live-ticks';
 import type { AnalyzerSampleSize } from '../types/digit-analyzer.types';
@@ -14,6 +15,8 @@ import AnalyzerHeader from './analyzer-header';
 import CurrentTick from './current-tick';
 import DigitDistribution from './digit-distribution';
 import DigitPatternScores from './digit-pattern-scores';
+import NextDigitPredictionPanel from './next-digit-prediction';
+import NextDigitTrader from './next-digit-trader';
 import OutcomeStatistics from './outcome-statistics';
 import RecentTicks from './recent-ticks';
 import '../styles/digit-analyzer.scss';
@@ -95,6 +98,18 @@ const DigitAnalyzer = () => {
             // Invalid market observations must never produce a green winner.
             // The tick stream owns transport errors and their diagnostics.
             return { scores: null, leaders: null };
+        }
+    }, [connectionState, historyPhase, phase, rollingTicks, selectedSymbol, tickStatus]);
+
+    // The next-digit panel derives its signal solely from the same verified,
+    // single-market Deriv tick window as the existing digit statistics.
+    const nextPrediction = useMemo(() => {
+        if (phase !== 'ready' || connectionState !== 'live' || !selectedSymbol ||
+            historyPhase === 'loading' || tickStatus !== 'streaming') return null;
+        try {
+            return calculateNextDigitPrediction(selectedSymbol, rollingTicks);
+        } catch {
+            return null;
         }
     }, [connectionState, historyPhase, phase, rollingTicks, selectedSymbol, tickStatus]);
 
@@ -195,6 +210,15 @@ const DigitAnalyzer = () => {
                         onSelectedDigitChange={setSelectedDigit}
                     />
                 </div>
+
+                <NextDigitPredictionPanel prediction={nextPrediction} />
+                <NextDigitTrader
+                    symbol={selectedSymbol}
+                    marketName={selectedMarket?.displayName ?? selectedSymbol}
+                    prediction={nextPrediction}
+                    latestTick={latestTick}
+                    tickStatus={tickStatus}
+                />
 
                 <p className='digit-analyzer__disclaimer'>
                     Historical digit frequencies describe past ticks and do not guarantee future outcomes.

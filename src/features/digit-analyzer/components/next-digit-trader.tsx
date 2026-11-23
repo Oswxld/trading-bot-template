@@ -217,7 +217,21 @@ const NextDigitTrader = ({
 
     const stop = () => {
         const current = runRef.current;
-        if (current) finish(current, 'Stopped. Any submitted order may still settle on Deriv; check its statement.');
+        if (current) {
+            log(current.id, 'STOP requested. No new purchases; already purchased contracts still need settlement.');
+            finish(current, 'Stopped. Any submitted order may still settle on Deriv; check its statement.');
+        }
+    };
+
+    const resetReports = () => {
+        if (!account.id || running || arming) return;
+        try {
+            sessionStorage.removeItem(reportsKey(account.id));
+            sessionStorage.removeItem(journalKey(account.id));
+        } catch { /* local history may be unavailable */ }
+        setRecords([]);
+        setJournal([]);
+        setStatus('Local reports cleared. No broker contracts or statements were changed.');
     };
 
     const start = async () => {
@@ -441,6 +455,7 @@ const NextDigitTrader = ({
         sessionStorage.removeItem(blockedKey(account.id));
         setBlocked('');
         setStatus('Statement reconciliation acknowledged. Trading remains OFF until you press Start.');
+        log(account.id, 'User acknowledged Deriv account statement reconciliation. Unconfirmed order block cleared.');
     };
 
     return (
@@ -469,11 +484,14 @@ const NextDigitTrader = ({
                     value={stopLoss} disabled={running || arming} onChange={event => setStopLoss(event.target.value)} /></label>
             </div>
             <div className='digit-analyzer__auto-actions'>
-                <button type='button' onClick={() => void start()} disabled={running || arming || Boolean(blocked) ||
-                    !account.verified || prediction?.status !== 'ready' || tickStatus !== 'streaming'}>
-                    {arming ? 'Verifying Deriv…' : 'Start automatic trading'}
+                <button type='button' onClick={() => void start()} disabled={running || arming || Boolean(blocked)}>
+                    {arming ? 'Verifying Deriv…' : 'Run Auto Trader'}
                 </button>
                 <button type='button' className='digit-analyzer__auto-stop' onClick={stop} disabled={!running}>Stop</button>
+                <button type='button' className='digit-analyzer__auto-show-reports'
+                    onClick={() => setReportsOpen(previous => !previous)}>
+                    {reportsOpen ? 'Hide reports' : 'Show Summary / Transactions / Journal'}
+                </button>
             </div>
             <p role='alert' className='digit-analyzer__auto-status'>{status}</p>
             {blocked && <div className='digit-analyzer__auto-warning'>
@@ -490,7 +508,7 @@ const NextDigitTrader = ({
                 <strong>Confirmed settlements: {summary.count}</strong>
                 <strong>Net P/L: {summary.profit.toFixed(2)} {account.currency}</strong>
             </div>
-            {history.length > 0 && <div className='digit-analyzer__auto-history'>
+            {history.length > 0 && !reportsOpen && <div className='digit-analyzer__auto-history'>
                 <h4>Recent Deriv-confirmed trades · {account.id}</h4>
                 <ul>{history.slice(0, 8).map(row =>
                     <li key={row.contractId}>
@@ -499,6 +517,22 @@ const NextDigitTrader = ({
                     </li>
                 )}</ul>
             </div>}
+            <div className='digit-analyzer__auto-reports'>
+                <BulkReports
+                    records={records}
+                    journal={journal}
+                    accountId={account.id}
+                    currency={account.currency || 'USD'}
+                    balance={null}
+                    isRunning={running || arming}
+                    onReset={resetReports}
+                    reportsOpen={reportsOpen}
+                    onReportsToggle={setReportsOpen}
+                    reportTitle='Next Digit Auto Trader Reports'
+                    emptyMessage='Auto trader is armed or awaiting the next genuine Deriv tick. Open Journal for run status and broker errors.'
+                    resetMessage='Clear this auto trader account\'s local report? Deriv contracts and statements will not be changed.'
+                />
+            </div>
         </section>
     );
 };

@@ -28,7 +28,7 @@ jobs:
       - name: Check TypeScript (legacy repository has known global errors)
         continue-on-error: true
         run: npm run type-check
-      - name: Run next-digit tests
-        run: npm test -- --ci --runInBand --testPathPattern=next-digit
+      - name: Run all Digit Analyzer and next-digit tests
+        run: npm test -- --ci --runInBand --testPathPattern=digit-analyzer
       - name: Compile production bundle WITHOUT deploying
         run: npm run build

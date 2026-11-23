@@ -61,7 +61,6 @@ const readReportRows = (id: string, recover = false): ReportRow[] => {
     } catch { return []; }
 };
 const readJournal = (id: string): JournalRow[] => {
-    if (!id) return [];
     try {
         const result = JSON.parse(sessionStorage.getItem(journalKey(id)) || '[]');
         return Array.isArray(result) ? result.slice(0, 200) : [];
@@ -150,7 +149,6 @@ const NextDigitTrader = ({
         if (mountedRef.current && readAccount().id === id) setRecords(rows);
     };
     const log = (id: string, message: string) => {
-        if (!id) return;
         const entry = { id: ++nextJournalId, timestamp: Date.now(), message };
         const rows = [entry, ...readJournal(id)].slice(0, 200);
         try { sessionStorage.setItem(journalKey(id), JSON.stringify(rows)); } catch { /* storage may be full */ }
@@ -264,7 +262,7 @@ const NextDigitTrader = ({
     };
 
     const resetReports = () => {
-        if (!account.id || running || arming) return;
+        if (running || arming) return;
         try {
             sessionStorage.removeItem(reportsKey(account.id));
             sessionStorage.removeItem(journalKey(account.id));
@@ -277,8 +275,12 @@ const NextDigitTrader = ({
     const start = async () => {
         // Run always opens the familiar reports immediately, including failed preflight.
         setReportsOpen(true);
+        const runError = (message: string) => {
+            setStatus(message);
+            log(readAccount().id, message);
+        };
         if (armingRef.current || runRef.current?.busy || runRef.current?.running) {
-            setStatus('The previous run is still active or reconciling a contract.');
+            runError('The previous run is still active or reconciling a contract.');
             return;
         }
         log(readAccount().id, 'Run requested: validating the selected Deriv account and risk limits.');
@@ -289,18 +291,18 @@ const NextDigitTrader = ({
             !Number.isInteger(limit) || limit < 1 || limit > 50 ||
             !Number.isFinite(maxLoss) || maxLoss <= 0 || maxLoss > 50000 ||
             maxLoss < amount) {
-            setStatus('Enter a stake (0–1000), 1–50 trades and a loss stop at least equal to one stake.');
+            runError('Enter a stake (0–1000), 1–50 trades and a loss stop at least equal to one stake.');
             return;
         }
         if (!symbol) {
-            setStatus('Select an available Deriv market before running the auto trader.');
+            runError('Select an available Deriv market before running the auto trader.');
             return;
         }
         // Run can arm while the read-only history and tick stream are loading.
         // Purchases remain disabled until a NEW verified live tick and prediction arrive.
         const current = readAccount();
         if (!current.verified || current.mode === 'unavailable') {
-            setStatus(current.reason);
+            runError(current.reason);
             return;
         }
         if (readReportRows(current.id).some(row => !row.reconciled && (row.status === 'buying' || row.status === 'unconfirmed')) &&
@@ -308,13 +310,13 @@ const NextDigitTrader = ({
             try { sessionStorage.setItem(blockedKey(current.id), 'An earlier purchase may not have confirmed. Check the Deriv statement before trading again.'); } catch { /* keep blocked in UI */ }
         }
         if (sessionStorage.getItem(blockedKey(current.id))) {
-            setStatus('An unconfirmed purchase requires statement reconciliation first.');
+            runError('An unconfirmed purchase requires statement reconciliation first.');
             setBlocked(sessionStorage.getItem(blockedKey(current.id)) || '');
             return;
         }
         const api = api_base.api;
         if (!api || !safeSocket(current.id, current.currency, api)) {
-            setStatus('Selected Deriv account is not connected, or another bot is running.');
+            runError('Selected Deriv account is not connected, or another bot is running.');
             return;
         }
         // Show the real-money authorization dialog directly from the user's
@@ -586,7 +588,7 @@ const NextDigitTrader = ({
                     reportsOpen={reportsOpen}
                     onReportsToggle={setReportsOpen}
                     reportTitle='Next Digit Auto Trader Reports'
-                    emptyMessage='Auto trader is armed or awaiting the next genuine Deriv tick. Open Journal for run status and broker errors.'
+                    emptyMessage={status}
                     resetMessage={"Clear this auto trader account's local report? Deriv contracts and statements will not be changed."}
                 />
             </div>

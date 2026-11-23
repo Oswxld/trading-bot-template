@@ -191,6 +191,31 @@ const NextDigitTrader = ({
         return () => { clearInterval(timer); window.removeEventListener('storage', refresh); };
     }, []);
 
+    // Some valid OAuth sessions restore the authenticated trading socket
+    // before sessionStorage's account-type list. Populate it from Deriv REST
+    // rather than making Run permanently unavailable or guessing from an ID.
+    useEffect(() => {
+        let canceled = false;
+        let inFlight = false;
+        const hydrateAccount = async () => {
+            if (canceled || inFlight || isAdminTestRequested() || isAdminTestActive()) return;
+            const id = localStorage.getItem('active_loginid') || '';
+            if (!id || !api_base.is_authorized || api_base.account_id !== id ||
+                api_base.api?.connection?.readyState !== 1 || readAccount().verified) return;
+            const token = OAuthTokenExchangeService.getAccessToken();
+            if (!token) return;
+            inFlight = true;
+            try {
+                await DerivWSAccountsService.fetchAccountsList(token);
+                if (!canceled) setAccount(readAccount());
+            } catch { /* Run will display the explicit authentication error. */ }
+            finally { inFlight = false; }
+        };
+        void hydrateAccount();
+        const retry = setInterval(() => { void hydrateAccount(); }, 6000);
+        return () => { canceled = true; clearInterval(retry); };
+    }, []);
+
     useEffect(() => {
         const current = runRef.current;
         if (current && (current.id !== account.id || current.symbol !== symbol || !account.verified)) {

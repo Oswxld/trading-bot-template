@@ -220,14 +220,14 @@ export const clearCSRFToken = (): void => {
 };
 
 /**
- * Exact public OAuth callback registered with Deriv for Apex Wealth.
- * The Vercel apex-to-www redirect is currently enabled, so users visit www,
- * but authorization and code exchange must both use the registered apex URL.
- * Other hosts (including localhost) keep their own origin for development.
+ * Both Alphapips hostnames authenticate against the SAME registered callback.
+ * Keep localhost/preview origins local for development, and do not inherit
+ * the Apex Wealth OAuth redirect from the shared master template.
  */
 export const getOAuthRedirectURI = (): string => {
-    if (['apexwealth.site', 'www.apexwealth.site'].includes(window.location.hostname)) {
-        return 'https://apexwealth.site';
+    const hostname = window.location.hostname.toLowerCase();
+    if (hostname === 'alphapips.site' || hostname === 'www.alphapips.site') {
+        return 'https://alphapips.site';
     }
     return window.location.origin;
 };
@@ -257,7 +257,7 @@ export const generateOAuthURL = async (prompt?: string) => {
             // On Apex Wealth, the public apex URL is the Deriv-registered callback.
             // Vercel currently forwards that URL to www; the browser retains its
             // PKCE/CSRF data on www and gets the same callback query parameters.
-            // OAuth must still advertise the registered (non-www) URI.
+            // Always advertise the exact registered Alphapips callback on either hostname.
             const redirectUrl = getOAuthRedirectURI();
             const scopes = 'trade';
 

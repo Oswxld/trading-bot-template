@@ -4,6 +4,8 @@ import { DerivWSAccountsService } from '@/services/derivws-accounts.service';
 import { OAuthTokenExchangeService } from '@/services/oauth-token-exchange.service';
 import { isAdminTestActive, isAdminTestRequested } from '@/services/admin-test-kit';
 import { acquireBulkRun, releaseBulkRun } from '@/pages/bulk-trader/bulk-request-safety';
+import { makePendingBulkRecord, recoverInterruptedBulkRecords, upsertBulkRecord } from '@/pages/bulk-trader/bulk-trade-records';
+import BulkReports from '@/pages/bulk-trader/bulk-reports';
 import { placeNextDigitMatch, preflightNextDigitAccount } from '../services/next-digit-order';
 import type { NextDigitPrediction } from '../services/next-digit-transition';
 import type { AnalyzerTick } from '../types/digit-analyzer.types';
@@ -11,6 +13,24 @@ import type { AnalyzerTick } from '../types/digit-analyzer.types';
 type AccountMode = 'real' | 'demo' | 'unavailable';
 type Account = { id: string; mode: AccountMode; currency: string; verified: boolean; reason: string };
 type TradeRecord = { contractId: string; digit: number; symbol: string; price: number; profit: number; status: string; at: number };
+type ReportRow = {
+    localId: string;
+    number: number;
+    timestamp: number;
+    contractId: string | null;
+    symbol: string;
+    symbolName: string;
+    contractType: string;
+    prediction: string | null;
+    price: number | null;
+    status: string;
+    profit: number | null;
+    payout: number | null;
+    entrySpot: number | string | null;
+    exitSpot: number | string | null;
+    reason?: string;
+};
+type JournalRow = { id: number; timestamp: number; message: string };
 type RunState = {
     id: string;
     mode: Exclude<AccountMode, 'unavailable'>;
@@ -30,6 +50,23 @@ type RunState = {
 const emptyAccount: Account = { id: '', mode: 'unavailable', currency: '', verified: false, reason: 'Log in with Deriv to enable trading.' };
 const historyKey = (id: string) => `next-digit:history:${id}`;
 const blockedKey = (id: string) => `next-digit:unconfirmed:${id}`;
+const reportsKey = (id: string) => `next-digit:reports:${id}`;
+const journalKey = (id: string) => `next-digit:journal:${id}`;
+const readReportRows = (id: string): ReportRow[] => {
+    if (!id) return [];
+    try {
+        const result = JSON.parse(sessionStorage.getItem(reportsKey(id)) || '[]');
+        return Array.isArray(result) ? recoverInterruptedBulkRecords(result).slice(0, 200) : [];
+    } catch { return []; }
+};
+const readJournal = (id: string): JournalRow[] => {
+    if (!id) return [];
+    try {
+        const result = JSON.parse(sessionStorage.getItem(journalKey(id)) || '[]');
+        return Array.isArray(result) ? result.slice(0, 200) : [];
+    } catch { return []; }
+};
+let nextJournalId = Date.now();
 const messageOf = (error: unknown) => error instanceof Error ? error.message : 'Deriv request could not be completed.';
 const readHistory = (id: string): TradeRecord[] => {
     if (!id) return [];
@@ -57,11 +94,15 @@ const readAccount = (): Account => {
         (api_base.account_info as { loginid?: string }).loginid === id &&
         api_base.api?.connection?.readyState === 1);
     const account = DerivWSAccountsService.getStoredAccounts()?.find(item => item.account_id === id);
-    const mode = account?.account_type === 'real' || account?.account_type === 'demo'
-        ? account.account_type : 'unavailable';
-    const verified = connected && mode !== 'unavailable' && !!account?.currency;
+    const liveInfo = api_base.account_info as { loginid?: string; is_virtual?: number | boolean; currency?: string };
+    const socketMode = connected && liveInfo.is_virtual !== undefined
+        ? (liveInfo.is_virtual === 1 || liveInfo.is_virtual === true ? 'demo' : 'real') : 'unavailable';
+    const mode: AccountMode = account?.account_type === 'real' || account?.account_type === 'demo'
+        ? account.account_type : socketMode;
+    const currency = account?.currency || (connected ? liveInfo.currency : '') || '';
+    const verified = connected && mode !== 'unavailable' && !!currency;
     return {
-        id, mode, currency: account?.currency || '', verified,
+        id, mode, currency, verified,
         reason: !id ? 'Log in with Deriv first.' :
             !connected ? 'Waiting for the selected Deriv Options account to authenticate.' :
             mode === 'unavailable' ? 'Account type not verified. Reconnect Deriv OAuth.' :
@@ -87,6 +128,9 @@ const NextDigitTrader = ({
     const [arming, setArming] = useState(false);
     const [summary, setSummary] = useState({ count: 0, profit: 0 });
     const [history, setHistory] = useState<TradeRecord[]>(() => readHistory(readAccount().id));
+    const [reportsOpen, setReportsOpen] = useState(false);
+    const [records, setRecords] = useState<ReportRow[]>(() => readReportRows(readAccount().id));
+    const [journal, setJournal] = useState<JournalRow[]>(() => readJournal(readAccount().id));
     const [blocked, setBlocked] = useState(() =>
         typeof window !== 'undefined' ? sessionStorage.getItem(blockedKey(readAccount().id)) || '' : ''
     );
@@ -97,6 +141,19 @@ const NextDigitTrader = ({
     symbolRef.current = symbol;
     const runRef = useRef<RunState | null>(null);
     const armingRef = useRef(false);
+    const report = (id: string, entry: ReportRow) => {
+        if (!id) return;
+        const rows = upsertBulkRecord(readReportRows(id), entry, 200) as ReportRow[];
+        try { sessionStorage.setItem(reportsKey(id), JSON.stringify(rows)); } catch { /* storage may be full */ }
+        if (mountedRef.current && readAccount().id === id) setRecords(rows);
+    };
+    const log = (id: string, message: string) => {
+        if (!id) return;
+        const entry = { id: ++nextJournalId, timestamp: Date.now(), message };
+        const rows = [entry, ...readJournal(id)].slice(0, 200);
+        try { sessionStorage.setItem(journalKey(id), JSON.stringify(rows)); } catch { /* storage may be full */ }
+        if (mountedRef.current && readAccount().id === id) setJournal(rows);
+    };
 
     const finish = (run: RunState, reason: string) => {
         run.running = false;
@@ -139,6 +196,8 @@ const NextDigitTrader = ({
             finish(current, 'Account, market or authentication changed. No new purchases will be sent.');
         }
         setHistory(readHistory(account.id));
+        setRecords(readReportRows(account.id));
+        setJournal(readJournal(account.id));
         setBlocked(account.id ? sessionStorage.getItem(blockedKey(account.id)) || '' : '');
         setSummary({ count: 0, profit: 0 });
         // Account/market changes invalidate running instructions even between ticks.

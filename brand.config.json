@@ -1,9 +1,9 @@
 {
     "brand_name": "Alphapips",
-    "brand_domain": "yourbrand.com",
+    "brand_domain": "alphapips.site",
     "brand_hostname": {
-        "staging": "staging.yourbrand.com/dashboard",
-        "production": "yourbrand.com/dashboard"
+        "staging": "staging.alphapips.site/dashboard",
+        "production": "alphapips.site/dashboard"
     },
     "domain_name": "Alphapips",
     "colors": {
@@ -94,10 +94,10 @@
         },
         "hostname": {
             "production": {
-                "com": "bot.yourbrand.com"
+                "com": "alphapips.site"
             },
             "staging": {
-                "com": "staging-bot.yourbrand.com"
+                "com": "staging.alphapips.site"
             }
         },
         "auth2_url": {

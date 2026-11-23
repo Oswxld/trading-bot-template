@@ -38,6 +38,30 @@ describe('Deriv next-digit execution adapter', () => {
         })).rejects.toThrow(/account or currency/);
     });
 
+    it('makes one Deriv purchase, reports its lifecycle and uses verified settlement P/L', async () => {
+        const onProposal = jest.fn();
+        const onBought = jest.fn();
+        request
+            .mockResolvedValueOnce({ proposal: { id: 'quote-123', ask_price: 1 } })
+            .mockResolvedValueOnce({ buy: { contract_id: 871234, buy_price: 1 } })
+            .mockResolvedValueOnce({ proposal_open_contract: {
+                contract_id: 871234, status: 'won', profit: 0.87,
+                entry_spot: 123.45, exit_spot: 123.46,
+            } });
+        const result = await placeNextDigitMatch({
+            api, symbol: 'R_100', accountId: 'VRT123', currency: 'USD',
+            digit: 7, stake: 1, canBuy: always, canObserve: always, onProposal, onBought,
+        });
+        expect(result).toMatchObject({
+            contractId: '871234', digit: 7, status: 'won', profit: 0.87,
+            entrySpot: 123.45, exitSpot: 123.46,
+        });
+        expect(onProposal).toHaveBeenCalledWith({ proposalId: 'quote-123', price: 1 });
+        expect(onBought).toHaveBeenCalledWith(expect.objectContaining({ contractId: '871234', price: 1 }));
+        expect(request.mock.calls.filter(call => call[0].payload.buy)).toHaveLength(1);
+        expect(request.mock.calls.filter(call => call[0].payload.proposal_open_contract)).toHaveLength(1);
+    });
+
     it('never sends a purchase when the account goes inactive before proposal', async () => {
         await expect(placeNextDigitMatch({
             api, symbol: 'R_100', accountId: 'CR123', currency: 'USD',

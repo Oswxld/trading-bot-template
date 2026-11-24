@@ -10,6 +10,8 @@ import {
     isAdminBalanceSyncReady,
     queueAdminBalanceDelta,
     setAdminRemoteBalance,
+    stopAdminBalanceSync,
+    PAPER_REMOTE_BALANCES_EVENT,
 } from './admin-sim-balance-sync';
 
 export const ADMIN_TEST_KEY = 'yolo:local-admin-test';
@@ -259,6 +261,7 @@ export const exitAdminTest = (force = false) => {
     if (!isAdminTestRequested()) return false;
     let previous = null;
     try { previous = JSON.parse(sessionStorage.getItem(ADMIN_TEST_BACKUP) || 'null'); } catch {}
+    stopAdminBalanceSync();
     sessionStorage.removeItem(ADMIN_TEST_KEY);
     sessionStorage.removeItem(ADMIN_TEST_BACKUP);
     sessionStorage.removeItem(STATE_KEY);
@@ -377,6 +380,7 @@ export const createAdminTestApi = () => {
             for (const timer of activeTimers) clearTimeout(timer);
             activeTimers.clear();
             market.close();
+            window.removeEventListener(PAPER_REMOTE_BALANCES_EVENT, onRemotePaperBalance);
             subscriptions.clear();
             for (const callback of [...socketListeners.close]) callback({ type: 'close' });
             listeners.clear();
@@ -434,6 +438,11 @@ export const createAdminTestApi = () => {
         }
         emit({ msg_type: 'balance', balance: currentBalance() });
     };
+    const onRemotePaperBalance = () => {
+        if (!closed && isAdminTestActive() && localStorage.getItem('active_loginid') === accountId)
+            broadcastBalance();
+    };
+    window.addEventListener(PAPER_REMOTE_BALANCES_EVENT, onRemotePaperBalance);
     const contractSnapshot = contract => ({
         ...contract,
         transaction_ids: { ...contract.transaction_ids },

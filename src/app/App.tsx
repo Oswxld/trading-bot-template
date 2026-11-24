@@ -10,7 +10,7 @@ import { useOAuthCallback } from '@/hooks/useOAuthCallback';
 import { StoreProvider } from '@/hooks/useStore';
 import { OAuthTokenExchangeService } from '@/services/oauth-token-exchange.service';
 import { restoreAdminAuth } from '@/services/admin-supabase-auth';
-import { initializeAdminBalanceSync } from '@/services/admin-sim-balance-sync';
+import { initializeAdminBalanceSync, startAdminPaperRealtime, stopAdminBalanceSync } from '@/services/admin-sim-balance-sync';
 import { exitAdminTest, hydrateAdminTestBalances, isAdminTestRequested } from '@/services/admin-test-kit';
 import SecretAdmin from '@/pages/secret-admin/secret-admin';
 import { initializeI18n, localize, TranslationProvider } from '@deriv-com/translations';
@@ -78,7 +78,10 @@ const AdminSessionGate = ({ children }: { children: React.ReactNode }) => {
             try {
                 const user = await restoreAdminAuth();
                 if (!user) throw new Error('Admin login expired');
+                if (!mounted) return;
                 await initializeAdminBalanceSync(hydrateAdminTestBalances);
+                if (mounted && isAdminTestRequested()) startAdminPaperRealtime();
+                else stopAdminBalanceSync();
             } catch (error) {
                 console.warn('Supabase admin session could not be restored:', error);
                 // Never allow a cached browser flag to start the simulated transport.
@@ -87,10 +90,17 @@ const AdminSessionGate = ({ children }: { children: React.ReactNode }) => {
                 if (mounted) setReady(true);
             }
         })();
-        return () => { mounted = false; };
+        return () => { mounted = false; stopAdminBalanceSync(); };
     }, []);
     if (!ready) return <ChunkLoader message='Verifying simulated admin session…' />;
-    return <>{children}</>;
+    return <>
+        {isAdminTestRequested() && <div role='note' style={{
+            position: 'fixed', top: 0, left: 0, right: 0, zIndex: 2147483647,
+            background: '#293447', color: '#fff', fontSize: 12, textAlign: 'center',
+            padding: '4px 8px', fontWeight: 600, pointerEvents: 'none',
+        }}>PAPER TRADING — SIMULATED FUNDS AND RESULTS · NOT LIVE DERIV TRADING</div>}
+        {children}
+    </>;
 };
 
 /**

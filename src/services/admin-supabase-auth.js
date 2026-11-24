@@ -6,6 +6,8 @@ const STORAGE_KEY = 'yolo:supabase-admin-auth:v1';
 let currentSession = null;
 let verifiedUser = null;
 let refreshing = null;
+let sessionEpoch = 0;
+export const ADMIN_AUTH_CLEARED_EVENT = 'paper:auth-cleared';
 
 const getSettings = () => {
     const url = (process.env.PUBLIC_SUPABASE_URL || '').trim().replace(/\/$/, '');
@@ -48,9 +50,11 @@ const storeSession = session => {
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify(currentSession));
 };
 const clearSession = () => {
+    sessionEpoch++;
     currentSession = null;
     verifiedUser = null;
     sessionStorage.removeItem(STORAGE_KEY);
+    if (typeof window !== 'undefined') window.dispatchEvent(new Event(ADMIN_AUTH_CLEARED_EVENT));
 };
 export const getAdminAuthUser = () => verifiedUser;
 /** Accept a server-issued session only after Supabase verifies its access token. */
@@ -88,13 +92,15 @@ export const verifyAdminEmailOtp = async (email, token) => {
 const refreshAccessToken = async () => {
     if (refreshing) return refreshing;
     if (!currentSession?.refresh_token) throw new Error('Admin session expired. Sign in again.');
+    const epoch = sessionEpoch;
     refreshing = requestAuth('token?grant_type=refresh_token', 'POST', {
         refresh_token: currentSession.refresh_token,
     }).then(data => {
+        if (epoch !== sessionEpoch) throw new Error('Paper session changed during token refresh');
         storeSession(data);
         return currentSession.access_token;
     }).catch(error => {
-        clearSession();
+        if (epoch === sessionEpoch) clearSession();
         throw error;
     }).finally(() => { refreshing = null; });
     return refreshing;
@@ -152,6 +158,23 @@ export const adminRpc = async (name, args) => {
         return call(await getAdminAccessToken(true));
     }
 };
+/** Scoped, read-only access to the two simulated Options rows. */
+export const readPaperOptionsBalances = async userId => {
+    const { url, key } = getSettings();
+    const token = await getAdminAccessToken();
+    if (getAdminAuthUser()?.id !== userId) throw new Error('Paper session changed');
+    const endpoint = new URL(url + '/rest/v1/dclone_sim_account_balances');
+    endpoint.searchParams.set('select', 'user_id,account_mode,account_type,balance_cents');
+    endpoint.searchParams.set('user_id', 'eq.' + userId);
+    endpoint.searchParams.set('account_type', 'eq.optionsUsd');
+    const response = await fetch(endpoint.toString(), { headers: { apikey: key, Authorization: 'Bearer ' + token } });
+    const rows = await failWithError(response).then(res => res.json());
+    if (getAdminAuthUser()?.id !== userId) throw new Error('Paper session changed');
+    if (!Array.isArray(rows) || rows.some(row => row.user_id !== userId || row.account_type !== 'optionsUsd'))
+        throw new Error('Invalid paper balance response');
+    return rows;
+};
+export const getPaperRealtimeSettings = () => getSettings();
 export const signOutAdmin = async () => {
     const token = currentSession?.access_token;
     clearSession();

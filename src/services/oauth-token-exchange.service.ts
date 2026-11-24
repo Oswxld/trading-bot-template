@@ -227,6 +227,15 @@ export class OAuthTokenExchangeService {
                         const firstAccount = accounts[0];
                         localStorage.setItem('active_loginid', firstAccount.account_id);
 
+                        // Show only the signed-in user's own broker account identifiers
+                        // in their local browser console. Never log tokens, balances or credentials.
+                        console.info('[Deriv OAuth] Trading accounts:', accounts.map(account => ({
+                            account_id: account.account_id,
+                            account_type: account.account_type,
+                            currency: account.currency,
+                        })));
+                        console.info('[Deriv OAuth] Active trading account:', firstAccount.account_id);
+
                         // Set account type
                         const isDemo =
                             firstAccount.account_id.startsWith('VRT') || firstAccount.account_id.startsWith('VRTC');

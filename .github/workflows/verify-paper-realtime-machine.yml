@@ -12,7 +12,8 @@ jobs:
         with:
           node-version: '22'
       - run: node --test tests/paper-balance-realtime-machine.test.mjs tests/paper-balance-realtime-controller.test.mjs tests/paper-balance-realtime-transport.test.mjs
-      - run: npm ci
+      # Match the repository's existing compatibility workflow (lockfile is out of sync).
+      - run: npm install --no-audit --no-fund --legacy-peer-deps
         env:
           HUSKY: '0'
       - run: npm test -- --runInBand --runTestsByPath src/services/__tests__/admin-sim-balance-sync.test.js

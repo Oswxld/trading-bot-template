@@ -106,6 +106,28 @@ describe('useMarketCatalog integration', () => {
         expect(client.requests).toEqual([{ active_symbols: 'full' }]);
     });
 
+    it('only exposes the five standard Volatility indices in Analysis', async () => {
+        const client = new FakeCatalogClient(async () => ({
+            msg_type: 'active_symbols',
+            active_symbols: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', '1HZ100V', 'BOOM1000', 'R_200'].map(symbol => ({
+                ...sampleCatalog[0],
+                underlying_symbol: symbol,
+                underlying_symbol_name: symbol,
+            })),
+        }));
+        const factory = () => client.asClient();
+        const { result } = renderHook(() => useMarketCatalog(factory));
+        await waitFor(() => expect(result.current.phase).toBe('ready'));
+        expect(result.current.markets.map(market => market.symbol).sort()).toEqual(
+            ['R_10', 'R_100', 'R_25', 'R_50', 'R_75']
+        );
+        const selected = result.current.selectedSymbol;
+        act(() => result.current.selectMarket('1HZ100V'));
+        expect(result.current.selectedSymbol).toBe(selected);
+        act(() => result.current.selectMarket('R_75'));
+        expect(result.current.selectedSymbol).toBe('R_75');
+    });
+
     it('reports an empty catalog when all markets are unavailable', async () => {
         const closed = new FakeCatalogClient(async () => ({
             msg_type: 'active_symbols',

@@ -7,6 +7,9 @@ export type MarketCatalogPhase = 'loading' | 'ready' | 'empty' | 'error';
 
 const createPublicMarketClient = () => new PublicMarketDataClient();
 
+// Analysis-only allowlist. The live catalog still determines availability.
+const ANALYSIS_MARKETS = new Set(['R_10', 'R_25', 'R_50', 'R_75', 'R_100']);
+
 const describeFailure = (error: unknown): string =>
     error instanceof Error ? error.message : 'Unable to load synthetic markets from Deriv.';
 
@@ -50,8 +53,9 @@ export const useMarketCatalog = (clientFactory: () => PublicMarketDataClient = c
 
         void fetchSyntheticMarketCatalog(client).then(catalog => {
             if (!current) return;
-            const selectable = catalog.filter(market => market.isOpen !== false);
-            setMarkets(catalog);
+            const allowedCatalog = catalog.filter(market => ANALYSIS_MARKETS.has(market.symbol));
+            const selectable = allowedCatalog.filter(market => market.isOpen !== false);
+            setMarkets(allowedCatalog);
             setSelectedSymbol(previous =>
                 selectable.some(market => market.symbol === previous)
                     ? previous

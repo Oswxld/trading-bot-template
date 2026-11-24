@@ -1,11 +1,11 @@
 {
-    "brand_name": "MobiletradersHub",
-    "brand_domain": "apexwealth.site",
+    "brand_name": "MobilityTeadersHub",
+    "brand_domain": "mobilityteadershub.vercel.app",
     "brand_hostname": {
-        "staging": "staging.apexwealth.site/dashboard",
-        "production": "apexwealth.site/dashboard"
+        "staging": "mobilityteadershub.vercel.app/dashboard",
+        "production": "mobilityteadershub.vercel.app/dashboard"
     },
-    "domain_name": "MobiletradersHub",
+    "domain_name": "MobilityTeadersHub",
     "colors": {
         "primary": "#3b82f6",
         "secondary": "#64748b",
@@ -79,14 +79,14 @@
         "css_variable_prefix": "--brand"
     },
     "platform": {
-        "name": "MobiletradersHub",
+        "name": "MobilityTeadersHub",
         "logo": {
             "type": "component",
             "component_name": "BrandLogo",
-            "alt_text": "MobiletradersHub",
+            "alt_text": "MobilityTeadersHub",
             "link_url": "/",
             "show_text": false,
-            "text": "MobiletradersHub"
+            "text": "MobilityTeadersHub"
         },
         "footer": {
             "enable_language_settings": false,
@@ -94,10 +94,10 @@
         },
         "hostname": {
             "production": {
-                "com": "apexwealth.site"
+                "com": "mobilityteadershub.vercel.app"
             },
             "staging": {
-                "com": "staging.apexwealth.site"
+                "com": "mobilityteadershub.vercel.app"
             }
         },
         "auth2_url": {

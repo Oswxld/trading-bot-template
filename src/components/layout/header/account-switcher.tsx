@@ -143,7 +143,7 @@ const AccountSwitcher = observer(({ activeAccount }: TAccountSwitcher) => {
                             <Text as='p' size='xs' className='acc-info__account-type'>
                                 {isSimulation ? (
                                     <span title='Simulated funds and results — no live trading'>
-                                        {isVirtual ? 'Simulated demo' : 'Simulated real'}
+                                        {isVirtual ? 'Demo' : 'Real'}
                                     </span>
                                 ) : isVirtual ? (
                                     <Localize i18n_default_text='Demo account' />
@@ -215,7 +215,7 @@ const AccountSwitcher = observer(({ activeAccount }: TAccountSwitcher) => {
                                 })}
                             >
                                 {isSimulation ? (
-                                    account.isVirtual ? 'Simulated demo' : 'Simulated real'
+                                    account.isVirtual ? 'Demo' : 'Real'
                                 ) : account.isVirtual ? (
                                     <Localize i18n_default_text='Demo account' />
                                 ) : (

@@ -72,6 +72,7 @@ export const adoptAdminSession = async session => {
     }
 };
 export const signInAdminPassword = async (email, password) => {
+    clearSession();
     const data = await requestAuth('token?grant_type=password', 'POST', { email, password });
     storeSession(data);
     const user = await requestAuth('user', 'GET', null, currentSession.access_token);
@@ -82,6 +83,7 @@ export const signInAdminPassword = async (email, password) => {
 export const sendAdminEmailOtp = email =>
     requestAuth('otp', 'POST', { email, create_user: false });
 export const verifyAdminEmailOtp = async (email, token) => {
+    clearSession();
     const data = await requestAuth('verify', 'POST', { email, token, type: 'email' });
     storeSession(data);
     const user = await requestAuth('user', 'GET', null, currentSession.access_token);
@@ -140,7 +142,10 @@ export const restoreAdminAuth = async () => {
 /** Execute an authenticated RPC; postgres auth.uid() enforces row ownership. */
 export const adminRpc = async (name, args) => {
     const { url, key } = getSettings();
+    const epoch = sessionEpoch;
+    const owner = getAdminAuthUser()?.id;
     const call = async token => {
+        if (!owner || epoch !== sessionEpoch || getAdminAuthUser()?.id !== owner) throw new Error('Paper session changed');
         const response = await fetch(`${url}/rest/v1/rpc/${name}`, {
             method: 'POST',
             headers: {
@@ -150,11 +155,13 @@ export const adminRpc = async (name, args) => {
             },
             body: JSON.stringify(args),
         });
-        return failWithError(response).then(res => res.json());
+        const result = await failWithError(response).then(res => res.json());
+        if (epoch !== sessionEpoch || getAdminAuthUser()?.id !== owner) throw new Error('Paper session changed');
+        return result;
     };
     try { return await call(await getAdminAccessToken()); }
     catch (error) {
-        if (!/401|JWT|token|expired/i.test(String(error?.message || ''))) throw error;
+        if (epoch !== sessionEpoch || getAdminAuthUser()?.id !== owner || !/401|JWT|token|expired/i.test(String(error?.message || ''))) throw error;
         return call(await getAdminAccessToken(true));
     }
 };

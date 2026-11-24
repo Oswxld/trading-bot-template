@@ -26,6 +26,7 @@ let ownerId = null;
 let generation = 0;
 let controller = null;
 let refreshTask = null;
+let snapshotReading = false;
 export const PAPER_REMOTE_BALANCES_EVENT = 'paper:remote-balances';
 const pendingCount = () => states ? MODES.reduce((sum, mode) =>
     sum + Number(!!states[mode].flight) + Number(!!states[mode].pending), 0) : 0;
@@ -46,6 +47,7 @@ export const stopAdminBalanceSync = () => {
     ownerId = null;
     inFlight = { demo: null, real: null };
     refreshTask = null;
+    snapshotReading = false;
     busyWithSet = false;
     void previous?.stop();
 };
@@ -211,6 +213,7 @@ const flushMode = mode => {
     parseMode(mode);
     if (!isAdminBalanceSyncReady()) return Promise.reject(new Error('Admin balance sync not initialized.'));
     if (inFlight[mode]) return inFlight[mode];
+    if (snapshotReading && refreshTask) return refreshTask.then(() => flushMode(mode));
     const row = states[mode];
     if (!row.flight && !row.pending) return Promise.resolve();
     if (!row.flight) {
@@ -254,9 +257,14 @@ const flushMode = mode => {
 /** Drain both accounts; a failure retains the outbox and propagates. */
 export const flushAdminBalanceSync = async () => {
     if (!isAdminBalanceSyncReady()) throw new Error('Sign in to synchronize balances.');
+    const epoch = generation;
     for (const mode of MODES) {
-        while (states[mode].flight || states[mode].pending) await flushMode(mode);
+        while (states[mode].flight || states[mode].pending) {
+            assertSession(epoch);
+            await flushMode(mode);
+        }
     }
+    assertSession(epoch);
 };
 export const hasPendingAdminBalances = () =>
     !!(states && MODES.some(mode => states[mode].flight || states[mode].pending));
@@ -267,7 +275,7 @@ export const hasPendingAdminBalances = () =>
 export const setAdminRemoteBalance = async (mode, value) => {
     parseMode(mode);
     const cents = centsFrom(value);
-    if (!isAdminBalanceSyncReady() || busyWithSet) throw new Error('Balance editor is busy.');
+    if (!isAdminBalanceSyncReady() || busyWithSet || refreshTask) throw new Error('Balance editor is busy.');
     busyWithSet = true;
     const epoch = generation;
     activity();
@@ -286,11 +294,14 @@ export const setAdminRemoteBalance = async (mode, value) => {
 export const refreshAdminRemoteBalances = async () => {
     if (!isAdminBalanceSyncReady()) throw new Error('Balance sync not ready.');
     if (refreshTask) return refreshTask;
+    if (busyWithSet) throw new Error('Finish the paper balance edit before refreshing.');
     const epoch = generation;
     const instance = controller;
     const task = Promise.resolve().then(async () => {
         // The snapshot RPC initializes rows, so treat it as an outgoing operation.
         await flushAdminBalanceSync();
+        snapshotReading = true;
+        await Promise.allSettled(MODES.map(mode => inFlight[mode]).filter(Boolean));
         if (instance) await instance.waitWritable();
         assertSession(epoch);
         const snapshot = await adminRpc('dclone_sim_snapshot', { p_client_id: clientId });
@@ -299,7 +310,7 @@ export const refreshAdminRemoteBalances = async () => {
         notify();
         return displayed();
     }).finally(() => {
-        if (epoch === generation && refreshTask === task) { refreshTask = null; activity(); }
+        if (epoch === generation && refreshTask === task) { snapshotReading = false; refreshTask = null; activity(); }
     });
     refreshTask = task;
     activity();

@@ -11,4 +11,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: node --test tests/paper-balance-realtime-machine.test.mjs tests/paper-balance-realtime-controller.test.mjs
+      - run: node --test tests/paper-balance-realtime-machine.test.mjs tests/paper-balance-realtime-controller.test.mjs tests/paper-balance-realtime-transport.test.mjs
+      - run: npm ci
+        env:
+          HUSKY: '0'
+      - run: npm test -- --runInBand --runTestsByPath src/services/__tests__/admin-sim-balance-sync.test.js
+      - run: npm run build

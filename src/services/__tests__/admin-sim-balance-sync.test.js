@@ -3,9 +3,19 @@
  * sequences ignored, matching Dwellio's dclone_sim_apply_batch semantics.
  */
 let mockBalanceRpc;
+let mockReadPaperBalances;
+let mockOpenPaperChannel;
 jest.mock('../admin-supabase-auth', () => ({
     getAdminAuthUser: jest.fn(() => ({ id: '123e4567-e89b-42d3-a456-426614174000' })),
     adminRpc: (...args) => mockBalanceRpc(...args),
+    getAdminAccessToken: async () => 'paper-test-token',
+    getPaperRealtimeSettings: () => ({ url: 'https://example.supabase.co', key: 'public-test-key' }),
+    readPaperOptionsBalances: (...args) => mockReadPaperBalances(...args),
+    ADMIN_AUTH_CLEARED_EVENT: 'paper:test-auth-cleared',
+}));
+
+jest.mock('../paperBalanceRealtimeTransport.mjs', () => ({
+    openPaperBalanceChannel: (...args) => mockOpenPaperChannel(...args),
 }));
 
 const CLIENT_ID = '123e4567-e89b-42d3-a456-426614174001';
@@ -15,6 +25,7 @@ describe('Supabase simulated Options balance outbox', () => {
     let cursors;
     let failAfterCommit;
     let sync;
+    let channels;
     beforeEach(() => {
         jest.useFakeTimers();
         jest.resetModules();
@@ -53,9 +64,21 @@ describe('Supabase simulated Options balance outbox', () => {
                 balances: [{ account: 'optionsUsd', cents: remote[mode] }],
             };
         });
+        channels = [];
+        mockReadPaperBalances = jest.fn(async () => Object.entries(remote).map(([account_mode, balance_cents]) => ({
+            user_id: '123e4567-e89b-42d3-a456-426614174000',
+            account_mode, account_type: 'optionsUsd', balance_cents,
+        })));
+        mockOpenPaperChannel = jest.fn(async callbacks => {
+            const channel = { callbacks, close: jest.fn(async () => {}) };
+            channels.push(channel);
+            Promise.resolve().then(callbacks.subscribed);
+            return channel;
+        });
         sync = require('../admin-sim-balance-sync');
     });
     afterEach(() => {
+        sync.stopAdminBalanceSync();
         jest.clearAllTimers();
         jest.useRealTimers();
         delete process.env.PUBLIC_SIM_CLIENT_ID;
@@ -106,5 +129,34 @@ describe('Supabase simulated Options balance outbox', () => {
         expect(calls.map(call => call[1].p_events[0].kind)).toEqual(['adjust', 'set']);
         expect(calls.map(call => call[1].p_events[0].seq)).toEqual([1, 2]);
         expect(sync.hasPendingAdminBalances()).toBe(false);
+    });
+
+    it('receives external paper balance updates, detaches before writing, and resumes only after a full cooldown', async () => {
+        const updates = [];
+        await sync.initializeAdminBalanceSync(value => updates.push(value));
+        sync.startAdminPaperRealtime();
+        await jest.advanceTimersByTimeAsync(0);
+        expect(channels).toHaveLength(1);
+        remote.real = 991000;
+        channels[0].callbacks.changed();
+        await jest.advanceTimersByTimeAsync(0);
+        expect(updates.at(-1).real).toBe(9910);
+        expect(mockBalanceRpc.mock.calls.filter(([name]) => name === 'dclone_sim_apply_batch')).toHaveLength(0);
+        let finishClose;
+        channels[0].close.mockImplementation(() => new Promise(resolve => { finishClose = resolve; }));
+        sync.queueAdminBalanceDelta('real', 100);
+        const writing = sync.flushAdminBalanceSync();
+        await jest.advanceTimersByTimeAsync(0);
+        expect(channels[0].close).toHaveBeenCalledTimes(1);
+        expect(mockBalanceRpc.mock.calls.filter(([name]) => name === 'dclone_sim_apply_batch')).toHaveLength(0);
+        finishClose();
+        await writing;
+        expect(remote.real).toBe(991100);
+        expect(channels).toHaveLength(1);
+        await jest.advanceTimersByTimeAsync(1999);
+        expect(channels).toHaveLength(1);
+        await jest.advanceTimersByTimeAsync(1);
+        expect(channels).toHaveLength(2);
+        expect(updates.at(-1).real).toBe(9911);
     });
 });

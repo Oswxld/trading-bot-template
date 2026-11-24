@@ -1,0 +1,14 @@
+name: Verify isolated paper wallet realtime lifecycle
+on:
+  push:
+    branches: [test/oswaldtest-owner-simulation]
+  workflow_dispatch:
+jobs:
+  lifecycle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test tests/paper-balance-realtime-machine.test.mjs tests/paper-balance-realtime-controller.test.mjs

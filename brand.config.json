@@ -1,11 +1,11 @@
 {
-    "brand_name": "Apex wealth",
+    "brand_name": "MobiletradersHub",
     "brand_domain": "apexwealth.site",
     "brand_hostname": {
         "staging": "staging.apexwealth.site/dashboard",
         "production": "apexwealth.site/dashboard"
     },
-    "domain_name": "Apex wealth",
+    "domain_name": "MobiletradersHub",
     "colors": {
         "primary": "#3b82f6",
         "secondary": "#64748b",
@@ -79,14 +79,14 @@
         "css_variable_prefix": "--brand"
     },
     "platform": {
-        "name": "Apex wealth",
+        "name": "MobiletradersHub",
         "logo": {
             "type": "component",
             "component_name": "BrandLogo",
-            "alt_text": "Apex wealth",
+            "alt_text": "MobiletradersHub",
             "link_url": "/",
             "show_text": false,
-            "text": "Apex wealth"
+            "text": "MobiletradersHub"
         },
         "footer": {
             "enable_language_settings": false,

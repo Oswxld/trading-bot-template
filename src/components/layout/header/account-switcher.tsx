@@ -112,6 +112,7 @@ const AccountSwitcher = observer(({ activeAccount }: TAccountSwitcher) => {
     if (!activeAccount) return null;
 
     const { currency, isVirtual, balance } = activeAccount;
+    const isSimulation = isAdminTestActive();
     const showChevron = !isSingleAccount && !is_bot_running;
 
     return (
@@ -140,7 +141,11 @@ const AccountSwitcher = observer(({ activeAccount }: TAccountSwitcher) => {
                     <div className='acc-info__content'>
                         <div className='acc-info__account-type-header'>
                             <Text as='p' size='xs' className='acc-info__account-type'>
-                                {isVirtual ? (
+                                {isSimulation ? (
+                                    <span title='Simulated funds and results — no live trading'>
+                                        {isVirtual ? 'Simulated demo' : 'Simulated real'}
+                                    </span>
+                                ) : isVirtual ? (
                                     <Localize i18n_default_text='Demo account' />
                                 ) : (
                                     <Localize i18n_default_text='Real account' />
@@ -209,7 +214,9 @@ const AccountSwitcher = observer(({ activeAccount }: TAccountSwitcher) => {
                                     'acc-dropdown__account-type--virtual': account.isVirtual,
                                 })}
                             >
-                                {account.isVirtual ? (
+                                {isSimulation ? (
+                                    account.isVirtual ? 'Simulated demo' : 'Simulated real'
+                                ) : account.isVirtual ? (
                                     <Localize i18n_default_text='Demo account' />
                                 ) : (
                                     <Localize i18n_default_text='Real account' />

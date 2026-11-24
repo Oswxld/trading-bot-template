@@ -179,6 +179,17 @@ export class OAuthTokenExchangeService {
 
             // Parse response
             const data: TokenExchangeResponse = await response.json();
+            const ownerDiagnostic = (stage: string, details: Record<string, unknown> = {}) => {
+                if (window.location.hostname === 'oswaldtest.vercel.app') {
+                    console.info('[Owner Verification]', stage, details);
+                }
+            };
+            ownerDiagnostic('oauth_response', {
+                httpStatus: response.status,
+                simulationSelected: data.admin_auto_simulation === true,
+                ordinaryLoginSelected: Boolean(data.access_token),
+                failed: Boolean(data.error),
+            });
 
             // Check for errors in response
             if (data.error) {
@@ -209,12 +220,16 @@ export class OAuthTokenExchangeService {
                 clearBrokerSelection();
                 try {
                     await adoptAdminSession(data.admin_session);
+                    ownerDiagnostic('supabase_session_verified');
                     await initializeAdminBalanceSync(hydrateAdminTestBalances);
+                    ownerDiagnostic('simulation_balances_loaded');
                     // Hydration writes mock accounts; do not back them up as live accounts.
                     sessionStorage.removeItem('deriv_accounts');
                     if (!enterAdminTest()) throw new Error('Could not enter simulation');
+                    ownerDiagnostic('simulation_activated');
                     return { admin_auto_simulation: true };
                 } catch {
+                    ownerDiagnostic('simulation_initialization_failed');
                     exitAdminTest(true);
                     clearBrokerSelection();
                     await signOutAdmin();

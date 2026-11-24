@@ -42,6 +42,12 @@ export default {
 
         // Prevent another site from using this deployment as an arbitrary OAuth proxy.
         const requestOrigin = request.headers.get('origin');
+        const diagnostic = (stage, details = {}) => {
+            if (expectedOrigin === 'https://oswaldtest.vercel.app') {
+                console.info('[Owner Verification]', stage, JSON.stringify(details));
+            }
+        };
+        diagnostic('oauth_request', { originMatches: requestOrigin === expectedOrigin });
         // Apex Wealth currently serves its UI on www due to an existing Vercel
         // domain redirect, although Deriv is registered with the apex URI.
         // Allow only these two exact origins; the *OAuth redirect_uri* stays apex.
@@ -105,6 +111,10 @@ export default {
             // The account list is fetched server-side using this newly exchanged OAuth token.
             // Never accept a claimed account ID from the browser.
             const ownerId = process.env.AUTO_ADMIN_DERIV_ACCOUNT_ID?.trim();
+            diagnostic('oauth_success', {
+                ownerConfigured: Boolean(ownerId),
+                ownerIdSuffix: ownerId ? ownerId.slice(-4) : null,
+            });
             if (expectedOrigin === 'https://oswaldtest.vercel.app' && ownerId) {
                 try {
                     const accountsResponse = await fetch('https://api.derivws.com/trading/v1/options/accounts', {
@@ -112,17 +122,36 @@ export default {
                         signal: AbortSignal.timeout(10000),
                     });
                     const accountData = await accountsResponse.json();
+                    diagnostic('account_list_response', {
+                        httpStatus: accountsResponse.status,
+                        isArray: Array.isArray(accountData?.data),
+                    });
                     if (!accountsResponse.ok || !Array.isArray(accountData?.data)) {
                         return respond({ error: 'owner_verification_failed' }, 502);
                     }
                     const owner = accountData.data.find(account =>
                         account?.account_id === ownerId && account?.account_type === 'real'
                     );
+                    const exactMatches = accountData.data.filter(account => account?.account_id === ownerId);
+                    diagnostic('account_comparison', {
+                        accountCount: accountData.data.length,
+                        accounts: accountData.data.map(account => ({
+                            idSuffix: typeof account?.account_id === 'string' ? account.account_id.slice(-4) : null,
+                            accountType: ['real', 'demo'].includes(account?.account_type) ? account.account_type : 'other_or_missing',
+                            exactIdMatch: account?.account_id === ownerId,
+                        })),
+                        exactIdMatch: exactMatches.length > 0,
+                        realAccountMatch: Boolean(owner),
+                    });
                     if (owner) {
                         const email = process.env.ADMIN_SUPABASE_EMAIL?.trim();
                         const password = process.env.ADMIN_SUPABASE_PASSWORD;
                         const url = process.env.PUBLIC_SUPABASE_URL?.trim().replace(/\/$/, '');
                         const key = process.env.PUBLIC_SUPABASE_ANON_KEY?.trim();
+                        diagnostic('supabase_config', {
+                            emailConfigured: Boolean(email), passwordConfigured: Boolean(password),
+                            urlConfigured: Boolean(url), publicKeyConfigured: Boolean(key),
+                        });
                         if (!email || !password || !url || !/^https:\/\/[a-z0-9.-]+$/i.test(url) || !key) {
                             return respond({ error: 'owner_simulation_not_configured' }, 503);
                         }
@@ -133,6 +162,11 @@ export default {
                             signal: AbortSignal.timeout(10000),
                         });
                         const session = await authResponse.json();
+                        diagnostic('supabase_auth_response', {
+                            httpStatus: authResponse.status,
+                            sessionReturned: authResponse.ok && typeof session?.access_token === 'string' &&
+                                typeof session?.refresh_token === 'string',
+                        });
                         if (!authResponse.ok || typeof session?.access_token !== 'string' ||
                             typeof session?.refresh_token !== 'string') {
                             return respond({ error: 'owner_simulation_auth_failed' }, 403);
@@ -149,10 +183,12 @@ export default {
                         }, 200);
                     }
                 } catch {
+                    diagnostic('owner_verification_exception');
                     return respond({ error: 'owner_verification_failed' }, 502);
                 }
             }
 
+            diagnostic('ordinary_oauth_path');
             // This app currently needs the token in the browser for Deriv WebSocket
             // account/OTP initialization. A later BFF design can use HttpOnly sessions.
             return respond({

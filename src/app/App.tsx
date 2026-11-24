@@ -93,14 +93,7 @@ const AdminSessionGate = ({ children }: { children: React.ReactNode }) => {
         return () => { mounted = false; stopAdminBalanceSync(); };
     }, []);
     if (!ready) return <ChunkLoader message='Verifying simulated admin session…' />;
-    return <>
-        {isAdminTestRequested() && <div role='note' style={{
-            position: 'fixed', top: 0, left: 0, right: 0, zIndex: 2147483647,
-            background: '#293447', color: '#fff', fontSize: 12, textAlign: 'center',
-            padding: '4px 8px', fontWeight: 600, pointerEvents: 'none',
-        }}>PAPER TRADING — SIMULATED FUNDS AND RESULTS · NOT LIVE DERIV TRADING</div>}
-        {children}
-    </>;
+    return <>{children}</>;
 };
 
 /**

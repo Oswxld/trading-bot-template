@@ -90,7 +90,15 @@ const AdminSessionGate = ({ children }: { children: React.ReactNode }) => {
         return () => { mounted = false; };
     }, []);
     if (!ready) return <ChunkLoader message='Verifying simulated admin session…' />;
-    return <>{children}</>;
+    return <>
+        {isAdminTestRequested() && <div role='status' style={{
+            position: 'fixed', bottom: '72px', left: '50%', transform: 'translateX(-50%)',
+            zIndex: 2147483647, background: '#7a2615', color: '#fff', border: '2px solid #fff',
+            borderRadius: '6px', padding: '8px 12px', fontSize: '13px', fontWeight: 700,
+            textAlign: 'center', width: 'max-content', maxWidth: '94vw', pointerEvents: 'none',
+        }}>SIMULATION — FICTIONAL BALANCES &amp; RESULTS · NOT LIVE DERIV TRADING</div>}
+        {children}
+    </>;
 };
 
 /**
@@ -107,6 +115,8 @@ function App() {
     // Handle OAuth callback flow (CSRF validation + code extraction)
     const { isProcessing, isValid, params, error, cleanupURL } = useOAuthCallback();
 
+    const [ownerError, setOwnerError] = React.useState(false);
+
     // Handle account switching via URL parameter
     useAccountSwitching();
 
@@ -116,9 +126,13 @@ function App() {
             // Exchange authorization code for access token
             OAuthTokenExchangeService.exchangeCodeForToken(params.code)
                 .then(response => {
-                    if (response.access_token) {
+                    if (response.admin_auto_simulation) {
+                        cleanupURL();
+                        window.location.replace('/');
+                    } else if (response.access_token) {
                         cleanupURL();
                     } else if (response.error) {
+                        if (response.error.startsWith('owner_')) setOwnerError(true);
                         console.error('❌ Token exchange failed:', response.error);
                         console.error('Error description:', response.error_description);
                         // Clean up URL even on error
@@ -135,6 +149,11 @@ function App() {
         }
     }, [isProcessing, isValid, params.code, error, cleanupURL]);
 
+    if (ownerError) return <main style={{ padding: '24px', fontSize: '16px' }}>
+        <h1>Simulation sign-in could not be completed</h1>
+        <p>No live trading session was started. Check the test deployment configuration or use the manual simulator sign-in.</p>
+        <a href='/secret-admin'>Open simulated trading sign-in</a>
+    </main>;
     return <AdminSessionGate><RouterProvider router={router} /></AdminSessionGate>;
 }
 

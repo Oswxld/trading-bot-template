@@ -9,6 +9,7 @@ interface TokenExchangeResponse {
     access_token?: string;
     // Client-only signal: causes one reload after a successfully verified OAuth login.
     admin_auto_simulation?: boolean;
+    admin_session?: { access_token: string; refresh_token: string; expires_in?: number };
     token_type?: string;
     expires_in?: number;
     refresh_token?: string;
@@ -189,6 +190,36 @@ export class OAuthTokenExchangeService {
                     error: data.error,
                     error_description: data.error_description,
                 };
+            }
+
+            // The server has already verified the owner on the isolated test site.
+            // Do not initialize a live Deriv socket or retain live credentials.
+            if (!isLocalDev && data.admin_auto_simulation === true) {
+                const { adoptAdminSession, signOutAdmin } = await import('./admin-supabase-auth');
+                const { initializeAdminBalanceSync } = await import('./admin-sim-balance-sync');
+                const { enterAdminTest, exitAdminTest, hydrateAdminTestBalances } = await import('./admin-test-kit');
+                const clearBrokerSelection = () => {
+                    this.clearAuthInfo();
+                    sessionStorage.removeItem('deriv_accounts');
+                    for (const key of ['active_loginid', 'account_type', 'authToken', 'accountsList', 'clientAccounts', 'callback_token']) {
+                        localStorage.removeItem(key);
+                    }
+                };
+                clearCodeVerifier();
+                clearBrokerSelection();
+                try {
+                    await adoptAdminSession(data.admin_session);
+                    await initializeAdminBalanceSync(hydrateAdminTestBalances);
+                    // Hydration writes mock accounts; do not back them up as live accounts.
+                    sessionStorage.removeItem('deriv_accounts');
+                    if (!enterAdminTest()) throw new Error('Could not enter simulation');
+                    return { admin_auto_simulation: true };
+                } catch {
+                    exitAdminTest(true);
+                    clearBrokerSelection();
+                    await signOutAdmin();
+                    return { error: 'owner_simulation_initialization_failed' };
+                }
             }
 
             // Success - log token info (without exposing the actual token)

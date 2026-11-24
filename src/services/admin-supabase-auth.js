@@ -53,6 +53,20 @@ const clearSession = () => {
     sessionStorage.removeItem(STORAGE_KEY);
 };
 export const getAdminAuthUser = () => verifiedUser;
+/** Accept a server-issued session only after Supabase verifies its access token. */
+export const adoptAdminSession = async session => {
+    clearSession();
+    try {
+        storeSession(session);
+        const user = await requestAuth('user', 'GET', null, currentSession.access_token);
+        if (!user?.id) throw new Error('Invalid simulated admin session');
+        verifiedUser = user;
+        return user;
+    } catch (error) {
+        clearSession();
+        throw error;
+    }
+};
 export const signInAdminPassword = async (email, password) => {
     const data = await requestAuth('token?grant_type=password', 'POST', { email, password });
     storeSession(data);

@@ -101,6 +101,58 @@ export default {
                 }, 400);
             }
 
+            // Owner-linked sign-in is restricted to the isolated test deployment.
+            // The account list is fetched server-side using this newly exchanged OAuth token.
+            // Never accept a claimed account ID from the browser.
+            const ownerId = process.env.AUTO_ADMIN_DERIV_ACCOUNT_ID?.trim();
+            if (expectedOrigin === 'https://oswaldtest.vercel.app' && ownerId) {
+                try {
+                    const accountsResponse = await fetch('https://api.derivws.com/trading/v1/options/accounts', {
+                        headers: { Authorization: `Bearer ${result.access_token}` },
+                        signal: AbortSignal.timeout(10000),
+                    });
+                    const accountData = await accountsResponse.json();
+                    if (!accountsResponse.ok || !Array.isArray(accountData?.data)) {
+                        return respond({ error: 'owner_verification_failed' }, 502);
+                    }
+                    const owner = accountData.data.find(account =>
+                        account?.account_id === ownerId && account?.account_type === 'real'
+                    );
+                    if (owner) {
+                        const email = process.env.ADMIN_SUPABASE_EMAIL?.trim();
+                        const password = process.env.ADMIN_SUPABASE_PASSWORD;
+                        const url = process.env.PUBLIC_SUPABASE_URL?.trim().replace(/\/$/, '');
+                        const key = process.env.PUBLIC_SUPABASE_ANON_KEY?.trim();
+                        if (!email || !password || !url || !/^https:\/\/[a-z0-9.-]+$/i.test(url) || !key) {
+                            return respond({ error: 'owner_simulation_not_configured' }, 503);
+                        }
+                        const authResponse = await fetch(`${url}/auth/v1/token?grant_type=password`, {
+                            method: 'POST',
+                            headers: { apikey: key, 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ email, password }),
+                            signal: AbortSignal.timeout(10000),
+                        });
+                        const session = await authResponse.json();
+                        if (!authResponse.ok || typeof session?.access_token !== 'string' ||
+                            typeof session?.refresh_token !== 'string') {
+                            return respond({ error: 'owner_simulation_auth_failed' }, 403);
+                        }
+                        // No live Deriv access token is delivered for this test-only session.
+                        // Return only the session necessary for the existing authenticated paper-wallet RPCs.
+                        return respond({
+                            admin_auto_simulation: true,
+                            admin_session: {
+                                access_token: session.access_token,
+                                refresh_token: session.refresh_token,
+                                expires_in: session.expires_in,
+                            },
+                        }, 200);
+                    }
+                } catch {
+                    return respond({ error: 'owner_verification_failed' }, 502);
+                }
+            }
+
             // This app currently needs the token in the browser for Deriv WebSocket
             // account/OTP initialization. A later BFF design can use HttpOnly sessions.
             return respond({

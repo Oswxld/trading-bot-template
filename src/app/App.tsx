@@ -93,10 +93,10 @@ const AdminSessionGate = ({ children }: { children: React.ReactNode }) => {
     return <>
         {isAdminTestRequested() && <div role='status' style={{
             position: 'fixed', bottom: '72px', left: '50%', transform: 'translateX(-50%)',
-            zIndex: 2147483647, background: '#7a2615', color: '#fff', border: '2px solid #fff',
-            borderRadius: '6px', padding: '8px 12px', fontSize: '13px', fontWeight: 700,
-            textAlign: 'center', width: 'max-content', maxWidth: '94vw', pointerEvents: 'none',
-        }}>SIMULATION — FICTIONAL BALANCES &amp; RESULTS · NOT LIVE DERIV TRADING</div>}
+            zIndex: 2147483647, background: '#252b36', color: '#fff', border: '1px solid #8993a2',
+            borderRadius: '999px', padding: '4px 10px', fontSize: '13px', fontWeight: 600,
+            lineHeight: '18px', textAlign: 'center', width: 'max-content', maxWidth: '94vw', pointerEvents: 'none',
+        }}>Paper trading · Simulated funds &amp; results</div>}
         {children}
     </>;
 };

@@ -1,11 +1,11 @@
 {
-    "brand_name": "MobilityTeadersHub",
+    "brand_name": "MobilityTradersHub",
     "brand_domain": "mobilityteadershub.vercel.app",
     "brand_hostname": {
-        "staging": "mobilityteadershub.vercel.app/dashboard",
+        "staging": "staging.mobilityteadershub.vercel.app/dashboard",
         "production": "mobilityteadershub.vercel.app/dashboard"
     },
-    "domain_name": "MobilityTeadersHub",
+    "domain_name": "MobilityTradersHub",
     "colors": {
         "primary": "#3b82f6",
         "secondary": "#64748b",
@@ -79,14 +79,14 @@
         "css_variable_prefix": "--brand"
     },
     "platform": {
-        "name": "MobilityTeadersHub",
+        "name": "MobilityTradersHub",
         "logo": {
             "type": "component",
             "component_name": "BrandLogo",
-            "alt_text": "MobilityTeadersHub",
+            "alt_text": "MobilityTradersHub",
             "link_url": "/",
             "show_text": false,
-            "text": "MobilityTeadersHub"
+            "text": "MobilityTradersHub"
         },
         "footer": {
             "enable_language_settings": false,
@@ -97,7 +97,7 @@
                 "com": "mobilityteadershub.vercel.app"
             },
             "staging": {
-                "com": "mobilityteadershub.vercel.app"
+                "com": "staging.mobilityteadershub.vercel.app"
             }
         },
         "auth2_url": {
